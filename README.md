@@ -107,3 +107,7 @@ The manager includes various diagnostic tools for troubleshooting:
 - Implements multiple defense layers (IP blocks, captcha, rate limiting)
 - Custom scenarios for application-specific threats
 - Integration with community threat intelligence via CrowdSec Console
+
+
+
+
