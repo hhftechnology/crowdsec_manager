@@ -64,7 +64,8 @@ check_crowdsec_metrics() {
     # Check if curl is installed
     if ! command -v curl &> /dev/null; then
         print_error "curl is not installed. Cannot check metrics."
-        return 1
+        echo ""
+        return 0  # Return success to continue with other checks
     fi
     
     echo -e "${YELLOW}CrowdSec Prometheus metrics (showing first 10 lines)${NC}"
@@ -73,20 +74,24 @@ check_crowdsec_metrics() {
     
     # Use a temporary file to store curl output
     metrics_temp="${TEMP_DIR}/crowdsec_metrics.txt"
-    if curl -s http://localhost:6060/metrics > "$metrics_temp" 2>/dev/null; then
+    if curl -s --connect-timeout 5 http://localhost:6060/metrics > "$metrics_temp" 2>/dev/null; then
         # If curl succeeds, check if there's data and filter it
         if [ -s "$metrics_temp" ]; then
-            grep crowdsec "$metrics_temp" | head -n 10 || echo "No crowdsec metrics found."
+            if grep -q crowdsec "$metrics_temp"; then
+                grep crowdsec "$metrics_temp" | head -n 10
+            else
+                echo "No crowdsec metrics found."
+            fi
         else
             print_warning "No metrics data retrieved from CrowdSec."
         fi
     else
-        # If curl fails, print an error but don’t exit the script
+        # If curl fails, print an error but don't exit the script
         print_error "Failed to retrieve metrics from CrowdSec. Is the metrics endpoint accessible?"
     fi
     
     echo ""
-    return 0
+    return 0  # Always return success to continue with other checks
 }
 
 # Function to check Traefik CrowdSec integration
@@ -170,7 +175,7 @@ run_complete_check() {
     fi
     
     if [ $appsec_enabled -eq 0 ]; then
-        print_error "CrowdSec AppSec not explicitly enabled in configuration files"
+        print_warning "CrowdSec AppSec not explicitly enabled in configuration files"
     fi
     
     if [ $middleware_configured -eq 0 ]; then
@@ -180,23 +185,15 @@ run_complete_check() {
     echo ""
     echo -e "${YELLOW}=== FINAL VERDICT ===${NC}"
     
-# With this improved conditional block:
-if check_container "crowdsec" > /dev/null; then
-    metrics_output=$(curl -s --max-time 5 http://localhost:6060/metrics 2>/dev/null)
-    if echo "$metrics_output" | grep -q "crowdsec"; then
-        if [ $lapi_key_found -eq 1 ] || [ $middleware_configured -eq 1 ]; then
-            print_success "CrowdSec appears to be working correctly."
-        else
-            print_warning "CrowdSec is running but configuration may be incomplete."
-        fi
+    if check_container "crowdsec" > /dev/null && \
+       ([ $lapi_key_found -eq 1 ] || [ $middleware_configured -eq 1 ]); then
+        print_success "CrowdSec appears to be working correctly."
     else
-        print_warning "CrowdSec is running but metrics endpoint may not be working properly."
+        print_warning "CrowdSec may not be functioning properly. Review the diagnostics above."
     fi
-else
-    print_error "CrowdSec may not be functioning properly. Review the diagnostics above."
-fi
     
     echo ""
+    press_enter_to_continue
     return 0
 }
 
