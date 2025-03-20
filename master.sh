@@ -3300,11 +3300,15 @@ check_prerequisites() {
         print_success "Docker is running"
     fi
     
-    if ! docker ps -a | grep -q crowdsec; then
+if ! docker container ls --format '{{.Names}}' | grep -Fx "crowdsec" > /dev/null 2>&1; then
+    # Try alternate method
+    if ! docker ps | awk '{print $NF}' | grep -Fx "crowdsec" > /dev/null 2>&1; then
         print_error "CrowdSec container does not exist. Please ensure it's created."
         print_warning "You may need to run your docker-compose first."
-        exit 1
+        # Make this a warning instead of exit
+        print_warning "Continuing anyway since the container might exist but detection failed."
     fi
+fi
     
     check_container "crowdsec"
     check_container "traefik"
