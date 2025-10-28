@@ -34,7 +34,7 @@ export default function Dashboard() {
 
   const parseDecisionsCount = (decisionsStr: string | undefined): number => {
     if (!decisionsStr) return 0
-    const lines = decisionsStr.split('\n').filter(line => line.trim())
+    const lines = decisionsStr.split('\n').filter((line: string) => line.trim())
     return Math.max(0, lines.length - 2) // Subtract header lines
   }
 
@@ -46,7 +46,7 @@ export default function Dashboard() {
     if (Array.isArray(data.parsed)) return data.parsed.length
     // Fallback to parsing the string
     if (typeof data.bouncers === 'string') {
-      const lines = data.bouncers.split('\n').filter(line => line.trim())
+      const lines = data.bouncers.split('\n').filter((line: string) => line.trim())
       return Math.max(0, lines.length - 2)
     }
     return 0
