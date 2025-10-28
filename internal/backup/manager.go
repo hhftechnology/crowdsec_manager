@@ -63,18 +63,26 @@ func (m *Manager) Create(dryRun bool) (*models.Backup, error) {
 	defer os.RemoveAll(tempDir)
 
 	// Copy items to temp directory
+	copiedItems := 0
 	for _, item := range m.backupItems {
 		sourcePath := filepath.Join(".", item)
 		if _, err := os.Stat(sourcePath); os.IsNotExist(err) {
-			logger.Warn("Source path does not exist", "path", sourcePath)
+			logger.Warn("Source path does not exist, skipping", "path", sourcePath, "item", item)
 			continue
 		}
 
 		destPath := filepath.Join(tempDir, item)
 		if err := m.copyPath(sourcePath, destPath); err != nil {
-			return nil, fmt.Errorf("failed to copy %s: %w", item, err)
+			logger.Warn("Failed to copy item, skipping", "item", item, "error", err)
+			continue
 		}
 		logger.Info("Copied item", "item", item)
+		copiedItems++
+	}
+
+	// Ensure at least one item was successfully copied
+	if copiedItems == 0 {
+		return nil, fmt.Errorf("no backup items were successfully copied")
 	}
 
 	// Create backup info file
@@ -391,26 +399,38 @@ func (m *Manager) createArchive(sourceDir, archivePath string) error {
 	tarWriter := tar.NewWriter(gzipWriter)
 	defer tarWriter.Close()
 
+	// Get the base name of the source directory to use as archive root
+	baseName := filepath.Base(sourceDir)
+
 	return filepath.Walk(sourceDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
 
+		// Create tar header from file info
 		header, err := tar.FileInfoHeader(info, "")
 		if err != nil {
 			return err
 		}
 
-		relPath, err := filepath.Rel(filepath.Dir(sourceDir), path)
+		// Calculate relative path from source directory
+		relPath, err := filepath.Rel(sourceDir, path)
 		if err != nil {
 			return err
 		}
-		header.Name = relPath
+
+		// Preserve the directory structure with base name as root
+		if relPath == "." {
+			header.Name = baseName
+		} else {
+			header.Name = filepath.ToSlash(filepath.Join(baseName, relPath))
+		}
 
 		if err := tarWriter.WriteHeader(header); err != nil {
 			return err
 		}
 
+		// Copy file contents if it's a regular file
 		if !info.IsDir() {
 			file, err := os.Open(path)
 			if err != nil {

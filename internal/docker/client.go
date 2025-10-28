@@ -1,6 +1,7 @@
 package docker
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
+	"github.com/docker/docker/pkg/stdcopy"
 )
 
 // Client wraps the Docker client with helper methods
@@ -114,13 +116,19 @@ func (c *Client) ExecCommand(containerName string, cmd []string) (string, error)
 	}
 	defer attachResp.Close()
 
-	// Read output
-	output, err := io.ReadAll(attachResp.Reader)
-	if err != nil {
-		return "", fmt.Errorf("failed to read exec output: %w", err)
+	// Use stdcopy to properly demultiplex Docker's stream protocol
+	// This removes the 8-byte headers that Docker adds to stdout/stderr
+	var stdout, stderr bytes.Buffer
+	if _, err := stdcopy.StdCopy(&stdout, &stderr, attachResp.Reader); err != nil {
+		return "", fmt.Errorf("failed to demultiplex exec output: %w", err)
 	}
 
-	return string(output), nil
+	// Return stdout output, log stderr if present
+	if stderr.Len() > 0 {
+		return stdout.String(), fmt.Errorf("command stderr: %s", stderr.String())
+	}
+
+	return stdout.String(), nil
 }
 
 // GetContainerLogs retrieves logs from a container
