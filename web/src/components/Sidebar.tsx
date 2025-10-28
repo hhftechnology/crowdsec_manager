@@ -12,6 +12,9 @@ import {
   Clock,
   Settings,
   Activity,
+  Github,
+  MessageCircle,
+  Sliders,
 } from 'lucide-react'
 import { Separator } from './ui/separator'
 
@@ -27,6 +30,7 @@ const navigation = [
   { name: 'Stack Update', href: '/update', icon: RefreshCw },
   { name: 'Cron Jobs', href: '/cron', icon: Clock },
   { name: 'Services', href: '/services', icon: Settings },
+  { name: 'Configuration', href: '/configuration', icon: Sliders },
 ]
 
 export default function Sidebar() {
@@ -63,6 +67,28 @@ export default function Sidebar() {
           })}
         </ul>
       </nav>
+      <Separator />
+      <div className="p-4 space-y-2">
+        <p className="text-xs text-muted-foreground font-semibold mb-2">Developer Links</p>
+        <a
+          href="https://github.com/hhftechnology/crowdsec-manager"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-accent rounded-md transition-colors"
+        >
+          <Github className="h-4 w-4" />
+          <span>GitHub</span>
+        </a>
+        <a
+          href="https://discord.gg/xCtMFeUKf9"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-accent rounded-md transition-colors"
+        >
+          <MessageCircle className="h-4 w-4" />
+          <span>Discord</span>
+        </a>
+      </div>
     </div>
   )
 }

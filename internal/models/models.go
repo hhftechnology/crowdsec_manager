@@ -185,3 +185,8 @@ type ServiceAction struct {
 	Service string `json:"service" binding:"required"`
 	Action  string `json:"action" binding:"required"` // start, stop, restart
 }
+
+// ConfigPathRequest represents a configuration path update request
+type ConfigPathRequest struct {
+	DynamicConfigPath string `json:"dynamic_config_path" binding:"required"`
+}

@@ -14,6 +14,7 @@ import Backup from './pages/Backup'
 import Update from './pages/Update'
 import Cron from './pages/Cron'
 import Services from './pages/Services'
+import Configuration from './pages/Configuration'
 
 function App() {
   return (
@@ -31,6 +32,7 @@ function App() {
           <Route path="/update" element={<Update />} />
           <Route path="/cron" element={<Cron />} />
           <Route path="/services" element={<Services />} />
+          <Route path="/configuration" element={<Configuration />} />
         </Routes>
       </Layout>
       <Toaster position="top-right" richColors />

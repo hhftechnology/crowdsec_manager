@@ -66,13 +66,32 @@ export default function Scenarios() {
     setupMutation.mutate({ scenarios: validScenarios })
   }
 
-  const parseScenariosList = (scenariosStr: string | undefined): string[] => {
+  const parseScenariosList = (scenariosStr: string | undefined): any[] => {
     if (!scenariosStr) return []
-    const lines = scenariosStr.split('\n').filter(line => line.trim() && !line.includes('─') && !line.includes('NAME'))
-    return lines.map(line => {
-      const parts = line.split(/\s+/).filter(p => p && p !== '│')
-      return parts[0] || ''
-    }).filter(name => name && name !== 'NAME')
+
+    try {
+      // Try parsing as JSON first
+      const parsed = JSON.parse(scenariosStr)
+      if (Array.isArray(parsed)) {
+        return parsed
+      }
+    } catch {
+      // If JSON parsing fails, parse as text table
+      const lines = scenariosStr.split('\n').filter(line => line.trim() && !line.includes('─') && !line.includes('NAME'))
+      return lines.map(line => {
+        const parts = line.split(/\s+/).filter(p => p && p !== '│')
+        if (parts.length >= 4) {
+          return {
+            name: parts[0] || '',
+            status: parts[1] || '',
+            version: parts[2] || '',
+            local_path: parts[3] || ''
+          }
+        }
+        return null
+      }).filter(item => item && item.name)
+    }
+    return []
   }
 
   const scenarioNames = parseScenariosList(scenariosList?.scenarios)
@@ -104,11 +123,32 @@ export default function Scenarios() {
               <div className="h-12 bg-muted animate-pulse rounded" />
             </div>
           ) : scenarioNames.length > 0 ? (
-            <div className="flex flex-wrap gap-2">
-              {scenarioNames.map((name, index) => (
-                <Badge key={index} variant="secondary" className="font-mono">
-                  {name}
-                </Badge>
+            <div className="space-y-2">
+              {scenarioNames.map((scenario, index) => (
+                <div key={index} className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent/50 transition-colors">
+                  <div className="flex-1">
+                    <p className="font-mono font-medium text-sm">
+                      {typeof scenario === 'string' ? scenario : scenario.name}
+                    </p>
+                    {typeof scenario === 'object' && scenario.status && (
+                      <div className="flex items-center gap-2 mt-1">
+                        <Badge variant="outline" className="text-xs">
+                          {scenario.status}
+                        </Badge>
+                        {scenario.version && (
+                          <span className="text-xs text-muted-foreground">
+                            v{scenario.version}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  {typeof scenario === 'object' && scenario.local_path && (
+                    <span className="text-xs text-muted-foreground font-mono ml-4">
+                      {scenario.local_path}
+                    </span>
+                  )}
+                </div>
               ))}
             </div>
           ) : (

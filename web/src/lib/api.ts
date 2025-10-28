@@ -173,6 +173,14 @@ export interface EnrollRequest {
   enrollment_key: string
 }
 
+export interface ConfigPathRequest {
+  dynamic_config_path: string
+}
+
+export interface ConfigPathResponse {
+  dynamic_config_path: string
+}
+
 // =============================================================================
 // 1. HEALTH & DIAGNOSTICS (2 endpoints)
 // =============================================================================
@@ -373,6 +381,12 @@ export const traefikAPI = {
 
   getConfig: () =>
     api.get<ApiResponse<{ static: string; dynamic: string }>>('/traefik/config'),
+
+  getConfigPath: () =>
+    api.get<ApiResponse<ConfigPathResponse>>('/traefik/config-path'),
+
+  setConfigPath: (data: ConfigPathRequest) =>
+    api.post<ApiResponse>('/traefik/config-path', data),
 }
 
 // Export default API object with all endpoints organized

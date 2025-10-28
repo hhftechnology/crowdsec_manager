@@ -128,5 +128,7 @@ func RegisterServicesRoutes(router *gin.RouterGroup, dockerClient *docker.Client
 	{
 		traefik.GET("/integration", handlers.CheckTraefikIntegration(dockerClient))
 		traefik.GET("/config", handlers.GetTraefikConfig())
+		traefik.GET("/config-path", handlers.GetTraefikConfigPath())
+		traefik.POST("/config-path", handlers.SetTraefikConfigPath())
 	}
 }

@@ -802,19 +802,23 @@ func GetCaptchaStatus(dockerClient *docker.Client) gin.HandlerFunc {
 			"cat", "/etc/traefik/captcha.env",
 		})
 
-		status := gin.H{
-			"configured": err == nil && output != "",
-			"provider":   "",
-		}
+		configured := false
+		provider := ""
 
-		if err == nil && output != "" {
+		if err == nil && strings.TrimSpace(output) != "" {
+			configured = true
 			lines := strings.Split(output, "\n")
 			for _, line := range lines {
 				if strings.HasPrefix(line, "CAPTCHA_PROVIDER=") {
-					status["provider"] = strings.TrimPrefix(line, "CAPTCHA_PROVIDER=")
+					provider = strings.TrimSpace(strings.TrimPrefix(line, "CAPTCHA_PROVIDER="))
 					break
 				}
 			}
+		}
+
+		status := gin.H{
+			"configured": configured,
+			"provider":   provider,
 		}
 
 		c.JSON(http.StatusOK, models.Response{
@@ -926,6 +930,8 @@ func StreamLogs(dockerClient *docker.Client) gin.HandlerFunc {
 		CheckOrigin: func(r *http.Request) bool {
 			return true
 		},
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
 	}
 
 	return func(c *gin.Context) {
@@ -939,13 +945,45 @@ func StreamLogs(dockerClient *docker.Client) gin.HandlerFunc {
 		}
 		defer ws.Close()
 
+		// Set up ping/pong handlers
+		ws.SetReadDeadline(time.Now().Add(60 * time.Second))
+		ws.SetPongHandler(func(string) error {
+			ws.SetReadDeadline(time.Now().Add(60 * time.Second))
+			return nil
+		})
+
+		// Start ping ticker
+		pingTicker := time.NewTicker(30 * time.Second)
+		defer pingTicker.Stop()
+
 		// Stream logs in real-time
-		ticker := time.NewTicker(time.Second)
-		defer ticker.Stop()
+		logTicker := time.NewTicker(time.Second)
+		defer logTicker.Stop()
+
+		done := make(chan struct{})
+
+		// Read messages from client (to detect disconnection)
+		go func() {
+			defer close(done)
+			for {
+				_, _, err := ws.ReadMessage()
+				if err != nil {
+					logger.Debug("WebSocket read error", "error", err)
+					return
+				}
+			}
+		}()
 
 		for {
 			select {
-			case <-ticker.C:
+			case <-done:
+				return
+			case <-pingTicker.C:
+				if err := ws.WriteControl(websocket.PingMessage, []byte{}, time.Now().Add(10*time.Second)); err != nil {
+					logger.Debug("WebSocket ping error", "error", err)
+					return
+				}
+			case <-logTicker.C:
 				logs, err := dockerClient.GetContainerLogs(service, "10")
 				if err != nil {
 					ws.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("Error: %v", err)))
@@ -953,6 +991,7 @@ func StreamLogs(dockerClient *docker.Client) gin.HandlerFunc {
 				}
 
 				if err := ws.WriteMessage(websocket.TextMessage, []byte(logs)); err != nil {
+					logger.Debug("WebSocket write error", "error", err)
 					return
 				}
 			}
@@ -1279,7 +1318,7 @@ func VerifyServices(dockerClient *docker.Client) gin.HandlerFunc {
 		for _, service := range services {
 			isRunning, err := dockerClient.IsContainerRunning(service)
 			result := gin.H{
-				"service": service,
+				"name":    service,
 				"running": isRunning,
 			}
 			if err != nil {
@@ -1514,6 +1553,46 @@ func GetTraefikConfig() gin.HandlerFunc {
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
 			Data:    config,
+		})
+	}
+}
+
+// Global variable to store dynamic config path (in production, use a config file or database)
+var dynamicConfigPath = "/etc/traefik/dynamic_config.yml"
+
+// GetTraefikConfigPath retrieves the current dynamic config path
+func GetTraefikConfigPath() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		logger.Info("Getting Traefik config path")
+
+		c.JSON(http.StatusOK, models.Response{
+			Success: true,
+			Data:    gin.H{"dynamic_config_path": dynamicConfigPath},
+		})
+	}
+}
+
+// SetTraefikConfigPath sets the dynamic config path
+func SetTraefikConfigPath() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req models.ConfigPathRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, models.Response{
+				Success: false,
+				Error:   "Invalid request: " + err.Error(),
+			})
+			return
+		}
+
+		logger.Info("Setting Traefik config path", "path", req.DynamicConfigPath)
+
+		// Update the global path
+		dynamicConfigPath = req.DynamicConfigPath
+
+		c.JSON(http.StatusOK, models.Response{
+			Success: true,
+			Message: "Dynamic config path updated successfully",
+			Data:    gin.H{"dynamic_config_path": dynamicConfigPath},
 		})
 	}
 }
