@@ -1,0 +1,132 @@
+package api
+
+import (
+	"crowdsec-manager/internal/api/handlers"
+	"crowdsec-manager/internal/backup"
+	"crowdsec-manager/internal/docker"
+
+	"github.com/gin-gonic/gin"
+)
+
+// RegisterHealthRoutes registers health check routes
+func RegisterHealthRoutes(router *gin.RouterGroup, dockerClient *docker.Client) {
+	health := router.Group("/health")
+	{
+		health.GET("/stack", handlers.CheckStackHealth(dockerClient))
+		health.GET("/complete", handlers.RunCompleteDiagnostics(dockerClient))
+	}
+}
+
+// RegisterIPRoutes registers IP management routes
+func RegisterIPRoutes(router *gin.RouterGroup, dockerClient *docker.Client) {
+	ip := router.Group("/ip")
+	{
+		ip.GET("/public", handlers.GetPublicIP())
+		ip.GET("/blocked/:ip", handlers.IsIPBlocked(dockerClient))
+		ip.GET("/security/:ip", handlers.CheckIPSecurity(dockerClient))
+		ip.POST("/unban", handlers.UnbanIP(dockerClient))
+	}
+}
+
+// RegisterWhitelistRoutes registers whitelist management routes
+func RegisterWhitelistRoutes(router *gin.RouterGroup, dockerClient *docker.Client) {
+	whitelist := router.Group("/whitelist")
+	{
+		whitelist.GET("/view", handlers.ViewWhitelist(dockerClient))
+		whitelist.POST("/current", handlers.WhitelistCurrentIP(dockerClient))
+		whitelist.POST("/manual", handlers.WhitelistManualIP(dockerClient))
+		whitelist.POST("/cidr", handlers.WhitelistCIDR(dockerClient))
+		whitelist.POST("/crowdsec", handlers.AddToCrowdSecWhitelist(dockerClient))
+		whitelist.POST("/traefik", handlers.AddToTraefikWhitelist(dockerClient))
+		whitelist.POST("/comprehensive", handlers.SetupComprehensiveWhitelist(dockerClient))
+	}
+}
+
+// RegisterScenarioRoutes registers scenario management routes
+func RegisterScenarioRoutes(router *gin.RouterGroup, dockerClient *docker.Client) {
+	scenarios := router.Group("/scenarios")
+	{
+		scenarios.POST("/setup", handlers.SetupCustomScenarios(dockerClient))
+		scenarios.GET("/list", handlers.ListScenarios(dockerClient))
+	}
+}
+
+// RegisterCaptchaRoutes registers captcha setup routes
+func RegisterCaptchaRoutes(router *gin.RouterGroup, dockerClient *docker.Client) {
+	captcha := router.Group("/captcha")
+	{
+		captcha.POST("/setup", handlers.SetupCaptcha(dockerClient))
+		captcha.GET("/status", handlers.GetCaptchaStatus(dockerClient))
+	}
+}
+
+// RegisterLogRoutes registers log viewing routes
+func RegisterLogRoutes(router *gin.RouterGroup, dockerClient *docker.Client) {
+	logs := router.Group("/logs")
+	{
+		logs.GET("/crowdsec", handlers.GetCrowdSecLogs(dockerClient))
+		logs.GET("/traefik", handlers.GetTraefikLogs(dockerClient))
+		logs.GET("/traefik/advanced", handlers.AnalyzeTraefikLogsAdvanced(dockerClient))
+		logs.GET("/:service", handlers.GetServiceLogs(dockerClient))
+		logs.GET("/stream/:service", handlers.StreamLogs(dockerClient))
+	}
+}
+
+// RegisterBackupRoutes registers backup management routes
+func RegisterBackupRoutes(router *gin.RouterGroup, backupMgr *backup.Manager, dockerClient *docker.Client) {
+	backupRoutes := router.Group("/backup")
+	{
+		backupRoutes.GET("/list", handlers.ListBackups(backupMgr))
+		backupRoutes.POST("/create", handlers.CreateBackup(backupMgr))
+		backupRoutes.POST("/restore", handlers.RestoreBackup(backupMgr))
+		backupRoutes.DELETE("/:id", handlers.DeleteBackup(backupMgr))
+		backupRoutes.POST("/cleanup", handlers.CleanupOldBackups(backupMgr))
+		backupRoutes.GET("/latest", handlers.GetLatestBackup(backupMgr))
+	}
+}
+
+// RegisterUpdateRoutes registers stack update routes
+func RegisterUpdateRoutes(router *gin.RouterGroup, dockerClient *docker.Client) {
+	update := router.Group("/update")
+	{
+		update.GET("/current-tags", handlers.GetCurrentTags())
+		update.POST("/with-crowdsec", handlers.UpdateWithCrowdSec(dockerClient))
+		update.POST("/without-crowdsec", handlers.UpdateWithoutCrowdSec(dockerClient))
+	}
+}
+
+// RegisterCronRoutes registers cron job management routes
+func RegisterCronRoutes(router *gin.RouterGroup) {
+	cron := router.Group("/cron")
+	{
+		cron.POST("/setup", handlers.SetupCronJob())
+		cron.GET("/list", handlers.ListCronJobs())
+		cron.DELETE("/:id", handlers.DeleteCronJob())
+	}
+}
+
+// RegisterServicesRoutes registers service management routes
+func RegisterServicesRoutes(router *gin.RouterGroup, dockerClient *docker.Client) {
+	services := router.Group("/services")
+	{
+		services.GET("/verify", handlers.VerifyServices(dockerClient))
+		services.POST("/shutdown", handlers.GracefulShutdown(dockerClient))
+		services.POST("/action", handlers.ServiceAction(dockerClient))
+	}
+
+	// CrowdSec specific
+	crowdsec := router.Group("/crowdsec")
+	{
+		crowdsec.GET("/bouncers", handlers.GetBouncers(dockerClient))
+		crowdsec.GET("/decisions", handlers.GetDecisions(dockerClient))
+		crowdsec.GET("/metrics", handlers.GetMetrics(dockerClient))
+		crowdsec.POST("/enroll", handlers.EnrollCrowdSec(dockerClient))
+	}
+
+	// Traefik specific
+	traefik := router.Group("/traefik")
+	{
+		traefik.GET("/integration", handlers.CheckTraefikIntegration(dockerClient))
+		traefik.GET("/config", handlers.GetTraefikConfig())
+	}
+}

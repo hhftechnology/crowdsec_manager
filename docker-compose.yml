@@ -1,0 +1,129 @@
+version: '3.8'
+
+services:
+  # CrowdSec Manager - Web UI and API
+  crowdsec-manager:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: crowdsec-manager
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - ENVIRONMENT=production
+      - LOG_LEVEL=info
+      - LOG_FILE=/app/logs/crowdsec-manager.log
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - COMPOSE_FILE=/app/docker-compose.yml
+      - PANGOLIN_DIR=/app
+      - CONFIG_DIR=/app/config
+      - TRAEFIK_CONFIG_PATH=/app/config/traefik/dynamic_config.yml
+      - BACKUP_DIR=/app/backups
+      - RETENTION_DAYS=60
+      - INCLUDE_CROWDSEC=true
+    volumes:
+      # Docker socket for container management
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Configuration files
+      - ./config:/app/config
+      # Docker compose file
+      - ./docker-compose.yml:/app/docker-compose.yml:ro
+      # Backups
+      - ./backups:/app/backups
+      # Logs
+      - ./logs:/app/logs
+    networks:
+      - crowdsec-network
+    depends_on:
+      - crowdsec
+      - traefik
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.crowdsec-manager.rule=Host(`manager.localhost`)"
+      - "traefik.http.routers.crowdsec-manager.entrypoints=web"
+      - "traefik.http.services.crowdsec-manager.loadbalancer.server.port=8080"
+
+  # Pangolin service
+  pangolin:
+    image: fosrl/pangolin:latest
+    container_name: pangolin
+    restart: unless-stopped
+    networks:
+      - crowdsec-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.pangolin.rule=Host(`pangolin.localhost`)"
+      - "traefik.http.routers.pangolin.entrypoints=web"
+
+  # Gerbil service
+  gerbil:
+    image: fosrl/gerbil:latest
+    container_name: gerbil
+    restart: unless-stopped
+    networks:
+      - crowdsec-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.gerbil.rule=Host(`gerbil.localhost`)"
+      - "traefik.http.routers.gerbil.entrypoints=web"
+
+  # CrowdSec Security Engine
+  crowdsec:
+    image: crowdsecurity/crowdsec:latest
+    container_name: crowdsec
+    restart: unless-stopped
+    environment:
+      - GID=${GID-1000}
+      - COLLECTIONS=crowdsecurity/linux crowdsecurity/traefik
+    volumes:
+      - ./config/crowdsec/acquis.yaml:/etc/crowdsec/acquis.yaml:ro
+      - crowdsec-db:/var/lib/crowdsec/data/
+      - crowdsec-config:/etc/crowdsec/
+      - traefik-logs:/var/log/traefik:ro
+    networks:
+      - crowdsec-network
+    labels:
+      - "traefik.enable=false"
+
+  # Traefik Reverse Proxy
+  traefik:
+    image: traefik:latest
+    container_name: traefik
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8081:8080"  # Traefik dashboard
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.file.directory=/etc/traefik/conf"
+      - "--providers.file.watch=true"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--accesslog=true"
+      - "--accesslog.filepath=/var/log/traefik/access.log"
+      - "--log.level=INFO"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./config/traefik:/etc/traefik/conf:ro
+      - traefik-logs:/var/log/traefik
+    networks:
+      - crowdsec-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.traefik.rule=Host(`traefik.localhost`)"
+      - "traefik.http.routers.traefik.entrypoints=web"
+      - "traefik.http.routers.traefik.service=api@internal"
+
+networks:
+  crowdsec-network:
+    driver: bridge
+
+volumes:
+  crowdsec-db:
+  crowdsec-config:
+  traefik-logs:
