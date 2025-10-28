@@ -13,7 +13,6 @@ import { Database, Download, Trash2, RefreshCw, Plus, AlertTriangle } from 'luci
 export default function Backup() {
   const queryClient = useQueryClient()
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
-  const [selectedBackup, setSelectedBackup] = useState<Backup | null>(null)
 
   const { data: backups, isLoading } = useQuery({
     queryKey: ['backups'],
@@ -39,7 +38,6 @@ export default function Backup() {
     mutationFn: (data: RestoreRequest) => api.backup.restore(data),
     onSuccess: () => {
       toast.success('Backup restored successfully')
-      setSelectedBackup(null)
       queryClient.invalidateQueries({ queryKey: ['backups'] })
     },
     onError: () => {
@@ -207,7 +205,6 @@ export default function Backup() {
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => setSelectedBackup(backup)}
                             >
                               <Download className="h-4 w-4" />
                             </Button>
