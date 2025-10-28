@@ -21,8 +21,16 @@ type Config struct {
 	ComposeFile        string
 	PangolinDir        string
 	ConfigDir          string
-	TraefikConfigPath  string
-	CrowdsecConfigPath string
+
+	// Database
+	DatabasePath       string
+
+	// File paths (from environment or database)
+	TraefikDynamicConfig string
+	TraefikStaticConfig  string
+	TraefikAccessLog     string
+	TraefikErrorLog      string
+	CrowdSecAcquisFile   string
 
 	// Backup configuration
 	BackupDir     string
@@ -52,8 +60,14 @@ func Load() (*Config, error) {
 		ComposeFile:        getEnv("COMPOSE_FILE", "./docker-compose.yml"),
 		PangolinDir:        getEnv("PANGOLIN_DIR", "."),
 		ConfigDir:          getEnv("CONFIG_DIR", "./config"),
-		TraefikConfigPath:  getEnv("TRAEFIK_CONFIG_PATH", "./config/traefik/dynamic_config.yml"),
-		CrowdsecConfigPath: getEnv("CROWDSEC_CONFIG_PATH", "/etc/crowdsec"),
+
+		DatabasePath:       getEnv("DATABASE_PATH", "./data/settings.db"),
+
+		TraefikDynamicConfig: getEnv("TRAEFIK_DYNAMIC_CONFIG", "/etc/traefik/conf/dynamic_config.yml"),
+		TraefikStaticConfig:  getEnv("TRAEFIK_STATIC_CONFIG", "/etc/traefik/traefik.yml"),
+		TraefikAccessLog:     getEnv("TRAEFIK_ACCESS_LOG", "/var/log/traefik/access.log"),
+		TraefikErrorLog:      getEnv("TRAEFIK_ERROR_LOG", "/var/log/traefik/traefik.log"),
+		CrowdSecAcquisFile:   getEnv("CROWDSEC_ACQUIS_FILE", "/etc/crowdsec/acquis.yaml"),
 
 		BackupDir:     getEnv("BACKUP_DIR", "./backups"),
 		RetentionDays: getEnvAsInt("RETENTION_DAYS", 60),

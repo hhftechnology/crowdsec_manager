@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"crowdsec-manager/internal/backup"
+	"crowdsec-manager/internal/database"
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
 	"crowdsec-manager/internal/models"
@@ -89,7 +91,7 @@ func CheckStackHealth(dockerClient *docker.Client) gin.HandlerFunc {
 }
 
 // RunCompleteDiagnostics runs a complete system diagnostic
-func RunCompleteDiagnostics(dockerClient *docker.Client) gin.HandlerFunc {
+func RunCompleteDiagnostics(dockerClient *docker.Client, db *database.Database) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		logger.Info("Running complete diagnostics")
 
@@ -136,15 +138,21 @@ func RunCompleteDiagnostics(dockerClient *docker.Client) gin.HandlerFunc {
 		var bouncers []models.Bouncer
 		bouncerOutput, err := dockerClient.ExecCommand("crowdsec", []string{"cscli", "bouncers", "list", "-o", "json"})
 		if err == nil {
-			// Parse bouncer JSON output (simplified)
-			logger.Debug("Bouncers retrieved", "output", bouncerOutput)
+			// Parse bouncer JSON output
+			if err := json.Unmarshal([]byte(bouncerOutput), &bouncers); err != nil {
+				logger.Warn("Failed to parse bouncers JSON", "error", err)
+			}
+			logger.Debug("Bouncers retrieved", "count", len(bouncers))
 		}
 
 		// Get decisions
 		var decisions []models.Decision
 		decisionOutput, err := dockerClient.ExecCommand("crowdsec", []string{"cscli", "decisions", "list", "-o", "json"})
 		if err == nil {
-			logger.Debug("Decisions retrieved", "output", decisionOutput)
+			if err := json.Unmarshal([]byte(decisionOutput), &decisions); err != nil {
+				logger.Warn("Failed to parse decisions JSON", "error", err)
+			}
+			logger.Debug("Decisions retrieved", "count", len(decisions))
 		}
 
 		// Check Traefik integration
@@ -155,11 +163,29 @@ func RunCompleteDiagnostics(dockerClient *docker.Client) gin.HandlerFunc {
 			AppsecEnabled:        false,
 		}
 
+		// Get dynamic config path from database
+		dynamicConfigPath := "/etc/traefik/conf/dynamic_config.yml"
+		if db != nil {
+			if path, err := db.GetTraefikDynamicConfigPath(); err == nil {
+				dynamicConfigPath = path
+			}
+		}
+
 		// Check for Traefik middleware configuration
-		configExists, err := dockerClient.FileExists("traefik", "/etc/traefik/dynamic_config.yml")
-		if err == nil && configExists {
+		configContent, err := dockerClient.ExecCommand("traefik", []string{"cat", dynamicConfigPath})
+		if err == nil && configContent != "" {
 			traefikIntegration.MiddlewareConfigured = true
-			traefikIntegration.ConfigFiles = append(traefikIntegration.ConfigFiles, "dynamic_config.yml")
+			traefikIntegration.ConfigFiles = append(traefikIntegration.ConfigFiles, dynamicConfigPath)
+
+			// Check for LAPI key (bouncer plugin configuration)
+			if strings.Contains(configContent, "crowdsec") || strings.Contains(configContent, "bouncer") {
+				traefikIntegration.LapiKeyFound = true
+			}
+
+			// Check for AppSec
+			if strings.Contains(configContent, "appsec") || strings.Contains(configContent, "appSec") {
+				traefikIntegration.AppsecEnabled = true
+			}
 		}
 
 		result := models.DiagnosticResult{
@@ -854,24 +880,39 @@ func GetCrowdSecLogs(dockerClient *docker.Client) gin.HandlerFunc {
 	}
 }
 
-// GetTraefikLogs retrieves Traefik logs
-func GetTraefikLogs(dockerClient *docker.Client) gin.HandlerFunc {
+// GetTraefikLogs retrieves Traefik logs from the access log file
+func GetTraefikLogs(dockerClient *docker.Client, db *database.Database) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tail := c.DefaultQuery("tail", "100")
-		logger.Info("Getting Traefik logs", "tail", tail)
+		logType := c.DefaultQuery("type", "access") // access or error
+		logger.Info("Getting Traefik logs", "tail", tail, "type", logType)
 
-		logs, err := dockerClient.GetContainerLogs("traefik", tail)
+		settings, _ := db.GetSettings()
+		var logPath string
+		if logType == "error" {
+			logPath = settings.TraefikErrorLog
+		} else {
+			logPath = settings.TraefikAccessLog
+		}
+
+		// Read log file from traefik container
+		logs, err := dockerClient.ExecCommand("traefik", []string{"tail", "-n", tail, logPath})
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, models.Response{
-				Success: false,
-				Error:   fmt.Sprintf("Failed to get logs: %v", err),
-			})
-			return
+			// Fallback to container logs if file reading fails
+			logger.Warn("Failed to read log file, falling back to container logs", "error", err)
+			logs, err = dockerClient.GetContainerLogs("traefik", tail)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, models.Response{
+					Success: false,
+					Error:   fmt.Sprintf("Failed to get logs: %v", err),
+				})
+				return
+			}
 		}
 
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
-			Data:    gin.H{"logs": logs},
+			Data:    gin.H{"logs": logs, "path": logPath},
 		})
 	}
 }
@@ -1416,9 +1457,22 @@ func GetBouncers(dockerClient *docker.Client) gin.HandlerFunc {
 			return
 		}
 
+		// Parse the JSON to ensure it's valid and return as structured data
+		var bouncers []models.Bouncer
+		if err := json.Unmarshal([]byte(output), &bouncers); err != nil {
+			// If JSON parsing fails, return raw output
+			logger.Warn("Failed to parse bouncers JSON, returning raw output", "error", err)
+			c.JSON(http.StatusOK, models.Response{
+				Success: true,
+				Data:    gin.H{"bouncers": output},
+			})
+			return
+		}
+
+		// Return properly formatted data
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
-			Data:    gin.H{"bouncers": output},
+			Data:    gin.H{"bouncers": output, "count": len(bouncers), "parsed": bouncers},
 		})
 	}
 }
@@ -1505,7 +1559,7 @@ func EnrollCrowdSec(dockerClient *docker.Client) gin.HandlerFunc {
 }
 
 // CheckTraefikIntegration checks Traefik-CrowdSec integration
-func CheckTraefikIntegration(dockerClient *docker.Client) gin.HandlerFunc {
+func CheckTraefikIntegration(dockerClient *docker.Client, db *database.Database) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		logger.Info("Checking Traefik integration")
 
@@ -1516,19 +1570,30 @@ func CheckTraefikIntegration(dockerClient *docker.Client) gin.HandlerFunc {
 			AppsecEnabled:        false,
 		}
 
-		// Check dynamic config
-		configExists, err := dockerClient.FileExists("traefik", "/etc/traefik/dynamic_config.yml")
-		if err == nil && configExists {
-			integration.MiddlewareConfigured = true
-			integration.ConfigFiles = append(integration.ConfigFiles, "dynamic_config.yml")
+		// Get dynamic config path from database
+		dynamicConfigPath := "/etc/traefik/conf/dynamic_config.yml"
+		if db != nil {
+			if path, err := db.GetTraefikDynamicConfigPath(); err == nil {
+				dynamicConfigPath = path
+			}
+		}
 
-			// Check config content
-			config, err := dockerClient.ExecCommand("traefik", []string{
-				"cat", "/etc/traefik/dynamic_config.yml",
-			})
-			if err == nil {
-				integration.LapiKeyFound = strings.Contains(config, "crowdsec")
-				integration.AppsecEnabled = strings.Contains(config, "appsec")
+		// Check config content
+		config, err := dockerClient.ExecCommand("traefik", []string{
+			"cat", dynamicConfigPath,
+		})
+		if err == nil && config != "" {
+			integration.MiddlewareConfigured = true
+			integration.ConfigFiles = append(integration.ConfigFiles, dynamicConfigPath)
+
+			// Check for LAPI key (bouncer plugin configuration)
+			if strings.Contains(config, "crowdsec") || strings.Contains(config, "bouncer") {
+				integration.LapiKeyFound = true
+			}
+
+			// Check for AppSec
+			if strings.Contains(config, "appsec") || strings.Contains(config, "appSec") {
+				integration.AppsecEnabled = true
 			}
 		}
 
@@ -1557,23 +1622,35 @@ func GetTraefikConfig() gin.HandlerFunc {
 	}
 }
 
-// Global variable to store dynamic config path (in production, use a config file or database)
-var dynamicConfigPath = "/etc/traefik/dynamic_config.yml"
-
 // GetTraefikConfigPath retrieves the current dynamic config path
-func GetTraefikConfigPath() gin.HandlerFunc {
+func GetTraefikConfigPath(db *database.Database) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		logger.Info("Getting Traefik config path")
 
+		settings, err := db.GetSettings()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to get settings: %v", err),
+			})
+			return
+		}
+
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
-			Data:    gin.H{"dynamic_config_path": dynamicConfigPath},
+			Data: gin.H{
+				"dynamic_config_path": settings.TraefikDynamicConfig,
+				"static_config_path":  settings.TraefikStaticConfig,
+				"access_log_path":     settings.TraefikAccessLog,
+				"error_log_path":      settings.TraefikErrorLog,
+				"crowdsec_acquis":     settings.CrowdSecAcquisFile,
+			},
 		})
 	}
 }
 
 // SetTraefikConfigPath sets the dynamic config path
-func SetTraefikConfigPath() gin.HandlerFunc {
+func SetTraefikConfigPath(db *database.Database) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req models.ConfigPathRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -1586,13 +1663,100 @@ func SetTraefikConfigPath() gin.HandlerFunc {
 
 		logger.Info("Setting Traefik config path", "path", req.DynamicConfigPath)
 
-		// Update the global path
-		dynamicConfigPath = req.DynamicConfigPath
+		// Update database
+		err := db.SetTraefikDynamicConfigPath(req.DynamicConfigPath)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to update config path: %v", err),
+			})
+			return
+		}
 
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
 			Message: "Dynamic config path updated successfully",
-			Data:    gin.H{"dynamic_config_path": dynamicConfigPath},
+			Data:    gin.H{"dynamic_config_path": req.DynamicConfigPath},
+		})
+	}
+}
+
+// UpdateSettings updates all file path settings
+func UpdateSettings(db *database.Database) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req database.Settings
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, models.Response{
+				Success: false,
+				Error:   "Invalid request: " + err.Error(),
+			})
+			return
+		}
+
+		logger.Info("Updating settings")
+
+		err := db.UpdateSettings(&req)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to update settings: %v", err),
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, models.Response{
+			Success: true,
+			Message: "Settings updated successfully",
+			Data:    req,
+		})
+	}
+}
+
+// GetFileContent reads a file from a Docker container
+func GetFileContent(dockerClient *docker.Client, db *database.Database) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		container := c.Param("container")
+		fileType := c.Param("fileType")
+
+		logger.Info("Getting file content", "container", container, "fileType", fileType)
+
+		settings, _ := db.GetSettings()
+
+		var filePath string
+		switch fileType {
+		case "dynamic_config":
+			filePath = settings.TraefikDynamicConfig
+		case "static_config":
+			filePath = settings.TraefikStaticConfig
+		case "access_log":
+			filePath = settings.TraefikAccessLog
+		case "error_log":
+			filePath = settings.TraefikErrorLog
+		case "crowdsec_acquis":
+			filePath = settings.CrowdSecAcquisFile
+		default:
+			c.JSON(http.StatusBadRequest, models.Response{
+				Success: false,
+				Error:   "Invalid file type",
+			})
+			return
+		}
+
+		content, err := dockerClient.ExecCommand(container, []string{"cat", filePath})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to read file: %v", err),
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, models.Response{
+			Success: true,
+			Data: gin.H{
+				"path":    filePath,
+				"content": content,
+			},
 		})
 	}
 }

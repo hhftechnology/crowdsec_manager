@@ -3,17 +3,18 @@ package api
 import (
 	"crowdsec-manager/internal/api/handlers"
 	"crowdsec-manager/internal/backup"
+	"crowdsec-manager/internal/database"
 	"crowdsec-manager/internal/docker"
 
 	"github.com/gin-gonic/gin"
 )
 
 // RegisterHealthRoutes registers health check routes
-func RegisterHealthRoutes(router *gin.RouterGroup, dockerClient *docker.Client) {
+func RegisterHealthRoutes(router *gin.RouterGroup, dockerClient *docker.Client, db *database.Database) {
 	health := router.Group("/health")
 	{
 		health.GET("/stack", handlers.CheckStackHealth(dockerClient))
-		health.GET("/complete", handlers.RunCompleteDiagnostics(dockerClient))
+		health.GET("/complete", handlers.RunCompleteDiagnostics(dockerClient, db))
 	}
 }
 
@@ -61,11 +62,11 @@ func RegisterCaptchaRoutes(router *gin.RouterGroup, dockerClient *docker.Client)
 }
 
 // RegisterLogRoutes registers log viewing routes
-func RegisterLogRoutes(router *gin.RouterGroup, dockerClient *docker.Client) {
+func RegisterLogRoutes(router *gin.RouterGroup, dockerClient *docker.Client, db *database.Database) {
 	logs := router.Group("/logs")
 	{
 		logs.GET("/crowdsec", handlers.GetCrowdSecLogs(dockerClient))
-		logs.GET("/traefik", handlers.GetTraefikLogs(dockerClient))
+		logs.GET("/traefik", handlers.GetTraefikLogs(dockerClient, db))
 		logs.GET("/traefik/advanced", handlers.AnalyzeTraefikLogsAdvanced(dockerClient))
 		logs.GET("/:service", handlers.GetServiceLogs(dockerClient))
 		logs.GET("/stream/:service", handlers.StreamLogs(dockerClient))
@@ -106,7 +107,7 @@ func RegisterCronRoutes(router *gin.RouterGroup) {
 }
 
 // RegisterServicesRoutes registers service management routes
-func RegisterServicesRoutes(router *gin.RouterGroup, dockerClient *docker.Client) {
+func RegisterServicesRoutes(router *gin.RouterGroup, dockerClient *docker.Client, db *database.Database) {
 	services := router.Group("/services")
 	{
 		services.GET("/verify", handlers.VerifyServices(dockerClient))
@@ -126,9 +127,24 @@ func RegisterServicesRoutes(router *gin.RouterGroup, dockerClient *docker.Client
 	// Traefik specific
 	traefik := router.Group("/traefik")
 	{
-		traefik.GET("/integration", handlers.CheckTraefikIntegration(dockerClient))
+		traefik.GET("/integration", handlers.CheckTraefikIntegration(dockerClient, db))
 		traefik.GET("/config", handlers.GetTraefikConfig())
-		traefik.GET("/config-path", handlers.GetTraefikConfigPath())
-		traefik.POST("/config-path", handlers.SetTraefikConfigPath())
+		traefik.GET("/config-path", handlers.GetTraefikConfigPath(db))
+		traefik.POST("/config-path", handlers.SetTraefikConfigPath(db))
+	}
+
+	// Configuration/Settings
+	config := router.Group("/config")
+	{
+		config.GET("/settings", func(c *gin.Context) {
+			settings, err := db.GetSettings()
+			if err != nil {
+				c.JSON(500, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(200, gin.H{"success": true, "data": settings})
+		})
+		config.PUT("/settings", handlers.UpdateSettings(db))
+		config.GET("/files/:container/:fileType", handlers.GetFileContent(dockerClient, db))
 	}
 }

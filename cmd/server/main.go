@@ -16,6 +16,7 @@ import (
 	"crowdsec-manager/internal/api"
 	"crowdsec-manager/internal/backup"
 	"crowdsec-manager/internal/config"
+	"crowdsec-manager/internal/database"
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
 )
@@ -29,6 +30,14 @@ func main() {
 
 	// Initialize logger
 	logger.Init(cfg.LogLevel, cfg.LogFile)
+
+	// Initialize database
+	db, err := database.New(cfg.DatabasePath)
+	if err != nil {
+		logger.Fatal("Failed to initialize database", "error", err)
+	}
+	defer db.Close()
+	logger.Info("Database initialized", "path", cfg.DatabasePath)
 
 	// Initialize Docker client
 	dockerClient, err := docker.NewClient()
@@ -72,16 +81,16 @@ func main() {
 	// API routes
 	apiGroup := router.Group("/api")
 	{
-		api.RegisterHealthRoutes(apiGroup, dockerClient)
+		api.RegisterHealthRoutes(apiGroup, dockerClient, db)
 		api.RegisterIPRoutes(apiGroup, dockerClient)
 		api.RegisterWhitelistRoutes(apiGroup, dockerClient)
 		api.RegisterScenarioRoutes(apiGroup, dockerClient)
 		api.RegisterCaptchaRoutes(apiGroup, dockerClient)
-		api.RegisterLogRoutes(apiGroup, dockerClient)
+		api.RegisterLogRoutes(apiGroup, dockerClient, db)
 		api.RegisterBackupRoutes(apiGroup, backupManager, dockerClient)
 		api.RegisterUpdateRoutes(apiGroup, dockerClient)
 		api.RegisterCronRoutes(apiGroup)
-		api.RegisterServicesRoutes(apiGroup, dockerClient)
+		api.RegisterServicesRoutes(apiGroup, dockerClient, db)
 	}
 
 	// Serve static files (built frontend)

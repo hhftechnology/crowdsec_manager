@@ -19,7 +19,15 @@ services:
       - COMPOSE_FILE=/app/docker-compose.yml
       - PANGOLIN_DIR=/app
       - CONFIG_DIR=/app/config
-      - TRAEFIK_CONFIG_PATH=/app/config/traefik/dynamic_config.yml
+      - DATABASE_PATH=/app/data/settings.db
+      # Traefik Configuration Paths
+      - TRAEFIK_DYNAMIC_CONFIG=/etc/traefik/conf/dynamic_config.yml
+      - TRAEFIK_STATIC_CONFIG=/etc/traefik/traefik.yml
+      - TRAEFIK_ACCESS_LOG=/var/log/traefik/access.log
+      - TRAEFIK_ERROR_LOG=/var/log/traefik/traefik.log
+      # CrowdSec Configuration Paths
+      - CROWDSEC_ACQUIS_FILE=/etc/crowdsec/acquis.yaml
+      # Backup Configuration
       - BACKUP_DIR=/app/backups
       - RETENTION_DAYS=60
       - INCLUDE_CROWDSEC=true
@@ -34,6 +42,10 @@ services:
       - ./backups:/app/backups
       # Logs
       - ./logs:/app/logs
+      # Database for settings
+      - ./data:/app/data
+      # Traefik logs (read-only access)
+      - traefik-logs:/var/log/traefik:ro
     networks:
       - crowdsec-network
     depends_on:
