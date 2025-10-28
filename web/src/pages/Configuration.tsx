@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import api, { ConfigPathRequest } from '@/lib/api'
+import api, { ConfigPathRequest, ConfigPathResponse } from '@/lib/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -12,18 +12,20 @@ export default function Configuration() {
   const queryClient = useQueryClient()
   const [configPath, setConfigPath] = useState('')
 
-  const { data: pathData, isLoading } = useQuery({
+  const { data: pathData, isLoading } = useQuery<ConfigPathResponse | undefined>({
     queryKey: ['traefik-config-path'],
     queryFn: async () => {
       const response = await api.traefik.getConfigPath()
       return response.data.data
     },
-    onSuccess: (data: any) => {
-      if (data?.dynamic_config_path) {
-        setConfigPath(data.dynamic_config_path)
-      }
-    },
   })
+
+  // Update local state when data is loaded
+  useEffect(() => {
+    if (pathData?.dynamic_config_path) {
+      setConfigPath(pathData.dynamic_config_path)
+    }
+  }, [pathData])
 
   const updatePathMutation = useMutation({
     mutationFn: (data: ConfigPathRequest) => api.traefik.setConfigPath(data),
