@@ -86,24 +86,42 @@ export default function Captcha() {
             <div className="h-24 bg-muted animate-pulse rounded" />
           ) : (
             <div className="space-y-4">
+              {/* Implementation Status Warning */}
+              {!statusData?.implemented && (
+                <div className="flex items-center gap-3 p-4 border border-yellow-500/50 bg-yellow-500/10 rounded-lg">
+                  <XCircle className="h-5 w-5 text-yellow-500 flex-shrink-0" />
+                  <div>
+                    <p className="font-medium text-yellow-700 dark:text-yellow-400">
+                      Captcha Middleware Not Implemented
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Configuration can be saved, but captcha protection is not yet active in Traefik
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Configuration Status */}
               <div className="flex items-center justify-between p-4 border rounded-lg">
                 <div>
                   <p className="font-medium">Configuration Status</p>
                   <p className="text-sm text-muted-foreground">
-                    {statusData?.configured ? 'Captcha is configured' : 'Captcha is not configured'}
+                    {statusData?.configSaved
+                      ? 'Configuration saved (not active)'
+                      : 'Captcha is not configured'}
                   </p>
                 </div>
-                {statusData?.configured ? (
-                  <CheckCircle2 className="h-5 w-5 text-green-500" />
+                {statusData?.configSaved ? (
+                  <Badge variant="outline" className="text-yellow-600">Saved</Badge>
                 ) : (
                   <XCircle className="h-5 w-5 text-muted-foreground" />
                 )}
               </div>
 
-              {statusData?.configured && statusData.provider && (
+              {statusData?.configSaved && statusData.provider && (
                 <div className="flex items-center justify-between p-4 border rounded-lg">
                   <div>
-                    <p className="font-medium">Current Provider</p>
+                    <p className="font-medium">Saved Provider</p>
                     <p className="text-sm text-muted-foreground capitalize">
                       {statusData.provider}
                     </p>

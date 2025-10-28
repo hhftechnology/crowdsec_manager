@@ -479,6 +479,9 @@ func WhitelistManualIP(dockerClient *docker.Client) gin.HandlerFunc {
 
 		logger.Info("Whitelisting manual IP", "ip", req.IP)
 
+		var errors []string
+		var successMessages []string
+
 		if req.AddToCrowdSec {
 			// Get current whitelist
 			currentWL, err := dockerClient.ExecCommand("crowdsec", []string{
@@ -503,26 +506,58 @@ whitelist:
 				"sh", "-c", fmt.Sprintf("echo '%s' > /etc/crowdsec/parsers/s02-enrich/mywhitelists.yaml", whitelistContent),
 			})
 			if err != nil {
-				logger.Error("Failed to update CrowdSec whitelist", "error", err)
+				errMsg := fmt.Sprintf("Failed to add IP to CrowdSec whitelist: %v", err)
+				logger.Error(errMsg, "error", err)
+				errors = append(errors, errMsg)
 			} else {
-				_, _ = dockerClient.ExecCommand("crowdsec", []string{"cscli", "parsers", "reload"})
+				// Reload parsers to apply changes
+				if _, reloadErr := dockerClient.ExecCommand("crowdsec", []string{"cscli", "parsers", "reload"}); reloadErr != nil {
+					logger.Warn("Failed to reload CrowdSec parsers", "error", reloadErr)
+					successMessages = append(successMessages, "Added to CrowdSec whitelist (reload failed, restart CrowdSec to apply)")
+				} else {
+					successMessages = append(successMessages, "Added to CrowdSec whitelist")
+				}
 			}
 		}
 
 		if req.AddToTraefik {
 			// Update Traefik dynamic config
-			// This is a simplified version - real implementation should parse YAML properly
 			_, err := dockerClient.ExecCommand("traefik", []string{
 				"sh", "-c", fmt.Sprintf(`sed -i '/sourceRange:/a\        - %s' /etc/traefik/dynamic_config.yml`, req.IP),
 			})
 			if err != nil {
-				logger.Error("Failed to update Traefik whitelist", "error", err)
+				errMsg := fmt.Sprintf("Failed to add IP to Traefik whitelist: %v", err)
+				logger.Error(errMsg, "error", err)
+				errors = append(errors, errMsg)
+			} else {
+				successMessages = append(successMessages, "Added to Traefik whitelist")
 			}
 		}
 
+		// Return appropriate response based on results
+		if len(errors) > 0 && len(successMessages) == 0 {
+			// All operations failed
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to whitelist IP %s: %s", req.IP, strings.Join(errors, "; ")),
+			})
+			return
+		}
+
+		if len(errors) > 0 {
+			// Partial success
+			c.JSON(http.StatusOK, models.Response{
+				Success: true,
+				Message: fmt.Sprintf("IP %s partially whitelisted. Success: %s. Errors: %s",
+					req.IP, strings.Join(successMessages, ", "), strings.Join(errors, "; ")),
+			})
+			return
+		}
+
+		// Complete success
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
-			Message: fmt.Sprintf("IP %s has been whitelisted", req.IP),
+			Message: fmt.Sprintf("IP %s has been whitelisted: %s", req.IP, strings.Join(successMessages, ", ")),
 		})
 	}
 }
@@ -824,15 +859,20 @@ func GetCaptchaStatus(dockerClient *docker.Client) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		logger.Info("Getting captcha status")
 
+		// Note: Captcha configuration storage exists but actual captcha middleware
+		// is not yet implemented in Traefik. This endpoint checks if config is saved
+		// but does not guarantee captcha is actively protecting endpoints.
+
 		output, err := dockerClient.ExecCommand("traefik", []string{
 			"cat", "/etc/traefik/captcha.env",
 		})
 
 		configured := false
+		configSaved := false
 		provider := ""
 
 		if err == nil && strings.TrimSpace(output) != "" {
-			configured = true
+			configSaved = true
 			lines := strings.Split(output, "\n")
 			for _, line := range lines {
 				if strings.HasPrefix(line, "CAPTCHA_PROVIDER=") {
@@ -843,8 +883,10 @@ func GetCaptchaStatus(dockerClient *docker.Client) gin.HandlerFunc {
 		}
 
 		status := gin.H{
-			"configured": configured,
-			"provider":   provider,
+			"configured":  configured,  // Always false until middleware is implemented
+			"configSaved": configSaved, // True if config file exists
+			"provider":    provider,
+			"implemented": false, // Indicates captcha middleware is not yet implemented
 		}
 
 		c.JSON(http.StatusOK, models.Response{
