@@ -22,8 +22,8 @@ FROM golang:1.23-alpine AS backend-builder
 
 WORKDIR /app
 
-# Install build dependencies
-RUN apk add --no-cache git
+# Install build dependencies (CGO required for go-sqlite3)
+RUN apk add --no-cache git gcc musl-dev sqlite-dev
 
 # Copy go mod files
 COPY go.mod go.sum ./
@@ -35,8 +35,8 @@ RUN go mod download
 COPY cmd/ cmd/
 COPY internal/ internal/
 
-# Build binary
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o crowdsec-manager ./cmd/server
+# Build binary (CGO_ENABLED=1 required for go-sqlite3)
+RUN CGO_ENABLED=1 GOOS=linux go build -o crowdsec-manager ./cmd/server
 
 # Stage 3: Final runtime image
 FROM alpine:latest
