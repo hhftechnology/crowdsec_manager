@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tantml:react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import api, { ServiceActionRequest, EnrollRequest } from '@/lib/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -27,11 +27,11 @@ export default function Services() {
 
   const actionMutation = useMutation({
     mutationFn: (data: ServiceActionRequest) => api.services.action(data),
-    onSuccess: (_, variables) => {
+    onSuccess: (_data: unknown, variables: ServiceActionRequest) => {
       toast.success(`Service ${variables.action} command sent successfully`)
       queryClient.invalidateQueries({ queryKey: ['services'] })
     },
-    onError: (_, variables) => {
+    onError: (_error: unknown, variables: ServiceActionRequest) => {
       toast.error(`Failed to ${variables.action} service`)
     },
   })
@@ -49,7 +49,7 @@ export default function Services() {
 
   const enrollMutation = useMutation({
     mutationFn: (data: EnrollRequest) => api.crowdsec.enroll(data),
-    onSuccess: (response) => {
+    onSuccess: (response: { data: { data?: { output?: string } } }) => {
       toast.success('Enrollment completed successfully')
       setEnrollmentKey('')
       setIsEnrollDialogOpen(false)

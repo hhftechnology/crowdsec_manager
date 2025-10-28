@@ -7,7 +7,6 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import { Select } from '@/components/ui/select'
 import { CheckCircle2, XCircle, Shield } from 'lucide-react'
 
 export default function Captcha() {
