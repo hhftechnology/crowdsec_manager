@@ -106,6 +106,7 @@ services:
     image: docker.io/traefik:v3.5
     network_mode: service:gerbil
     restart: unless-stopped
+    stop_grace_period: 60s
     volumes:
       - ./config/traefik:/etc/traefik:ro
       - ./config/letsencrypt:/letsencrypt

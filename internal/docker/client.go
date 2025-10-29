@@ -98,10 +98,14 @@ func (c *Client) ExecCommand(containerName string, cmd []string) (string, error)
 	}
 
 	// Create exec instance
+	// Tty: false ensures proper stream multiplexing without TTY control characters
+	// Env variables disable terminal formatting that can corrupt JSON output
 	execConfig := container.ExecOptions{
 		AttachStdout: true,
 		AttachStderr: true,
+		Tty:          false,
 		Cmd:          cmd,
+		Env:          []string{"TERM=dumb", "NO_COLOR=1"},
 	}
 
 	execIDResp, err := c.cli.ContainerExecCreate(c.ctx, containerID, execConfig)
@@ -125,10 +129,28 @@ func (c *Client) ExecCommand(containerName string, cmd []string) (string, error)
 
 	// Return stdout output, log stderr if present
 	if stderr.Len() > 0 {
-		return stdout.String(), fmt.Errorf("command stderr: %s", stderr.String())
+		return stripControlCharacters(stdout.String()), fmt.Errorf("command stderr: %s", stderr.String())
 	}
 
-	return stdout.String(), nil
+	return stripControlCharacters(stdout.String()), nil
+}
+
+// stripControlCharacters removes control characters from output as a defensive measure
+// This ensures clean JSON output even if control characters leak through
+func stripControlCharacters(s string) string {
+	// Build a new string without control characters
+	var result strings.Builder
+	result.Grow(len(s))
+
+	for _, r := range s {
+		// Keep printable characters and common whitespace
+		// Remove control characters (< 32) except newline, carriage return, and tab
+		if r >= 32 || r == '\n' || r == '\r' || r == '\t' {
+			result.WriteRune(r)
+		}
+	}
+
+	return result.String()
 }
 
 // GetContainerLogs retrieves logs from a container
@@ -160,27 +182,35 @@ func (c *Client) GetContainerLogs(containerName string, tail string) (string, er
 
 // RestartContainer restarts a container
 func (c *Client) RestartContainer(name string) error {
+	return c.RestartContainerWithTimeout(name, 30)
+}
+
+// RestartContainerWithTimeout restarts a container with a custom timeout
+func (c *Client) RestartContainerWithTimeout(name string, timeoutSecs int) error {
 	containerID, err := c.GetContainerID(name)
 	if err != nil {
 		return err
 	}
 
-	timeout := 30
 	return c.cli.ContainerRestart(c.ctx, containerID, container.StopOptions{
-		Timeout: &timeout,
+		Timeout: &timeoutSecs,
 	})
 }
 
 // StopContainer stops a container
 func (c *Client) StopContainer(name string) error {
+	return c.StopContainerWithTimeout(name, 30)
+}
+
+// StopContainerWithTimeout stops a container with a custom timeout
+func (c *Client) StopContainerWithTimeout(name string, timeoutSecs int) error {
 	containerID, err := c.GetContainerID(name)
 	if err != nil {
 		return err
 	}
 
-	timeout := 30
 	return c.cli.ContainerStop(c.ctx, containerID, container.StopOptions{
-		Timeout: &timeout,
+		Timeout: &timeoutSecs,
 	})
 }
 

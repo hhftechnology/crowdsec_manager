@@ -101,6 +101,7 @@ services:
     image: traefik:latest
     container_name: traefik
     restart: unless-stopped
+    stop_grace_period: 60s
     ports:
       - "80:80"
       - "443:443"
@@ -113,6 +114,8 @@ services:
       - "--providers.file.watch=true"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
+      - "--entrypoints.web.transport.lifecycle.gracetimeout=60s"
+      - "--entrypoints.websecure.transport.lifecycle.gracetimeout=60s"
       - "--accesslog=true"
       - "--accesslog.filepath=/var/log/traefik/access.log"
       - "--log.level=DEBUG"

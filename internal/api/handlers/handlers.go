@@ -140,9 +140,15 @@ func RunCompleteDiagnostics(dockerClient *docker.Client, db *database.Database) 
 		if err == nil {
 			// Parse bouncer JSON output
 			if err := json.Unmarshal([]byte(bouncerOutput), &bouncers); err != nil {
-				logger.Warn("Failed to parse bouncers JSON", "error", err)
+				logger.Warn("Failed to parse bouncers JSON",
+					"error", err,
+					"output_length", len(bouncerOutput),
+					"output_preview", truncateString(bouncerOutput, 100))
+			} else {
+				logger.Debug("Bouncers retrieved successfully", "count", len(bouncers))
 			}
-			logger.Debug("Bouncers retrieved", "count", len(bouncers))
+		} else {
+			logger.Warn("Failed to execute bouncers command", "error", err)
 		}
 
 		// Get decisions
@@ -150,9 +156,15 @@ func RunCompleteDiagnostics(dockerClient *docker.Client, db *database.Database) 
 		decisionOutput, err := dockerClient.ExecCommand("crowdsec", []string{"cscli", "decisions", "list", "-o", "json"})
 		if err == nil {
 			if err := json.Unmarshal([]byte(decisionOutput), &decisions); err != nil {
-				logger.Warn("Failed to parse decisions JSON", "error", err)
+				logger.Warn("Failed to parse decisions JSON",
+					"error", err,
+					"output_length", len(decisionOutput),
+					"output_preview", truncateString(decisionOutput, 100))
+			} else {
+				logger.Debug("Decisions retrieved successfully", "count", len(decisions))
 			}
-			logger.Debug("Decisions retrieved", "count", len(decisions))
+		} else {
+			logger.Warn("Failed to execute decisions command", "error", err)
 		}
 
 		// Check Traefik integration
@@ -1067,9 +1079,21 @@ func StreamLogs(dockerClient *docker.Client) gin.HandlerFunc {
 					return
 				}
 			case <-logTicker.C:
+				// Check if container is running before attempting to get logs
+				isRunning, err := dockerClient.IsContainerRunning(service)
+				if err != nil {
+					ws.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("Error checking container status: %v", err)))
+					continue
+				}
+
+				if !isRunning {
+					ws.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("Container '%s' is not running (restarting or stopped)", service)))
+					continue
+				}
+
 				logs, err := dockerClient.GetContainerLogs(service, "10")
 				if err != nil {
-					ws.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("Error: %v", err)))
+					ws.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("Error fetching logs: %v", err)))
 					continue
 				}
 
@@ -1282,8 +1306,15 @@ func UpdateWithCrowdSec(dockerClient *docker.Client) gin.HandlerFunc {
 
 		for _, service := range services {
 			logger.Info("Restarting service", "service", service)
-			if err := dockerClient.RestartContainer(service); err != nil {
-				logger.Error("Failed to restart service", "service", service, "error", err)
+			// Use longer timeout for Traefik
+			if service == "traefik" {
+				if err := dockerClient.RestartContainerWithTimeout(service, 60); err != nil {
+					logger.Error("Failed to restart service", "service", service, "error", err)
+				}
+			} else {
+				if err := dockerClient.RestartContainer(service); err != nil {
+					logger.Error("Failed to restart service", "service", service, "error", err)
+				}
 			}
 		}
 
@@ -1312,8 +1343,15 @@ func UpdateWithoutCrowdSec(dockerClient *docker.Client) gin.HandlerFunc {
 
 		for _, service := range services {
 			logger.Info("Restarting service", "service", service)
-			if err := dockerClient.RestartContainer(service); err != nil {
-				logger.Error("Failed to restart service", "service", service, "error", err)
+			// Use longer timeout for Traefik
+			if service == "traefik" {
+				if err := dockerClient.RestartContainerWithTimeout(service, 60); err != nil {
+					logger.Error("Failed to restart service", "service", service, "error", err)
+				}
+			} else {
+				if err := dockerClient.RestartContainer(service); err != nil {
+					logger.Error("Failed to restart service", "service", service, "error", err)
+				}
 			}
 		}
 
@@ -1426,8 +1464,15 @@ func GracefulShutdown(dockerClient *docker.Client) gin.HandlerFunc {
 
 		for _, service := range services {
 			logger.Info("Stopping service", "service", service)
-			if err := dockerClient.StopContainer(service); err != nil {
-				logger.Error("Failed to stop service", "service", service, "error", err)
+			// Use longer timeout for Traefik
+			if service == "traefik" {
+				if err := dockerClient.StopContainerWithTimeout(service, 60); err != nil {
+					logger.Error("Failed to stop service", "service", service, "error", err)
+				}
+			} else {
+				if err := dockerClient.StopContainer(service); err != nil {
+					logger.Error("Failed to stop service", "service", service, "error", err)
+				}
 			}
 		}
 
@@ -1452,14 +1497,20 @@ func ServiceAction(dockerClient *docker.Client) gin.HandlerFunc {
 
 		logger.Info("Performing service action", "service", req.Service, "action", req.Action)
 
+		// Use longer timeout for Traefik to allow graceful shutdown
+		timeout := 30
+		if req.Service == "traefik" {
+			timeout = 60
+		}
+
 		var err error
 		switch req.Action {
 		case "start":
 			err = dockerClient.StartContainer(req.Service)
 		case "stop":
-			err = dockerClient.StopContainer(req.Service)
+			err = dockerClient.StopContainerWithTimeout(req.Service, timeout)
 		case "restart":
-			err = dockerClient.RestartContainer(req.Service)
+			err = dockerClient.RestartContainerWithTimeout(req.Service, timeout)
 		default:
 			c.JSON(http.StatusBadRequest, models.Response{
 				Success: false,
@@ -1502,19 +1553,24 @@ func GetBouncers(dockerClient *docker.Client) gin.HandlerFunc {
 		// Parse the JSON to ensure it's valid and return as structured data
 		var bouncers []models.Bouncer
 		if err := json.Unmarshal([]byte(output), &bouncers); err != nil {
-			// If JSON parsing fails, return raw output
-			logger.Warn("Failed to parse bouncers JSON, returning raw output", "error", err)
-			c.JSON(http.StatusOK, models.Response{
-				Success: true,
-				Data:    gin.H{"bouncers": output},
+			// If JSON parsing fails, log details and return error
+			logger.Warn("Failed to parse bouncers JSON",
+				"error", err,
+				"output_length", len(output),
+				"output_preview", truncateString(output, 100))
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to parse bouncers JSON: %v", err),
 			})
 			return
 		}
 
+		logger.Debug("Bouncers API retrieved successfully", "count", len(bouncers))
+
 		// Return properly formatted data
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
-			Data:    gin.H{"bouncers": output, "count": len(bouncers), "parsed": bouncers},
+			Data:    gin.H{"bouncers": bouncers, "count": len(bouncers)},
 		})
 	}
 }
@@ -1535,9 +1591,26 @@ func GetDecisions(dockerClient *docker.Client) gin.HandlerFunc {
 			return
 		}
 
+		// Parse the JSON to ensure it's valid and return as structured data
+		var decisions []models.Decision
+		if err := json.Unmarshal([]byte(output), &decisions); err != nil {
+			// If JSON parsing fails, log details and return error
+			logger.Warn("Failed to parse decisions JSON",
+				"error", err,
+				"output_length", len(output),
+				"output_preview", truncateString(output, 100))
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to parse decisions JSON: %v", err),
+			})
+			return
+		}
+
+		logger.Debug("Decisions API retrieved successfully", "count", len(decisions))
+
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
-			Data:    gin.H{"decisions": output},
+			Data:    gin.H{"decisions": decisions, "count": len(decisions)},
 		})
 	}
 }
@@ -1921,4 +1994,16 @@ func analyzeLogs(logs string) models.LogStats {
 	}
 
 	return stats
+}
+
+// =============================================================================
+// HELPER FUNCTIONS
+// =============================================================================
+
+// truncateString truncates a string to a maximum length for logging
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "... (truncated)"
 }
