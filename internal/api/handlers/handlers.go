@@ -866,39 +866,115 @@ CAPTCHA_SECRET_KEY=%s
 	}
 }
 
+// detectCaptchaInConfig checks if captcha is configured in dynamic_config.yml and profiles.yaml
+func detectCaptchaInConfig(configContent string) (enabled bool, provider string, hasHTMLPath bool) {
+	enabled = false
+	provider = ""
+	hasHTMLPath = false
+
+	// Check for captcha configuration in middleware
+	if strings.Contains(configContent, "captchaProvider:") {
+		enabled = true
+
+		// Detect provider type
+		if strings.Contains(configContent, "captchaProvider: turnstile") ||
+		   strings.Contains(configContent, "captchaProvider: \"turnstile\"") ||
+		   strings.Contains(configContent, "captchaProvider: 'turnstile'") {
+			provider = "turnstile"
+		} else if strings.Contains(configContent, "captchaProvider: recaptcha") ||
+		          strings.Contains(configContent, "captchaProvider: \"recaptcha\"") ||
+		          strings.Contains(configContent, "captchaProvider: 'recaptcha'") {
+			provider = "recaptcha"
+		} else if strings.Contains(configContent, "captchaProvider: hcaptcha") ||
+		          strings.Contains(configContent, "captchaProvider: \"hcaptcha\"") ||
+		          strings.Contains(configContent, "captchaProvider: 'hcaptcha'") {
+			provider = "hcaptcha"
+		}
+	}
+
+	// Check if captcha HTML file path is configured
+	if strings.Contains(configContent, "captchaHTMLFilePath:") {
+		hasHTMLPath = true
+	}
+
+	// Also check for captcha site key and secret key as indicators
+	if strings.Contains(configContent, "captchaSiteKey:") &&
+	   strings.Contains(configContent, "captchaSecretKey:") {
+		enabled = true
+	}
+
+	return enabled, provider, hasHTMLPath
+}
+
 // GetCaptchaStatus retrieves the current captcha configuration status
-func GetCaptchaStatus(dockerClient *docker.Client) gin.HandlerFunc {
+func GetCaptchaStatus(dockerClient *docker.Client, db *database.Database) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		logger.Info("Getting captcha status")
 
-		// Note: Captcha configuration storage exists but actual captcha middleware
-		// is not yet implemented in Traefik. This endpoint checks if config is saved
-		// but does not guarantee captcha is actively protecting endpoints.
-
+		// Check if captcha.env exists (saved configuration)
 		output, err := dockerClient.ExecCommand("traefik", []string{
 			"cat", "/etc/traefik/captcha.env",
 		})
 
-		configured := false
 		configSaved := false
-		provider := ""
+		savedProvider := ""
 
 		if err == nil && strings.TrimSpace(output) != "" {
 			configSaved = true
 			lines := strings.Split(output, "\n")
 			for _, line := range lines {
 				if strings.HasPrefix(line, "CAPTCHA_PROVIDER=") {
-					provider = strings.TrimSpace(strings.TrimPrefix(line, "CAPTCHA_PROVIDER="))
+					savedProvider = strings.TrimSpace(strings.TrimPrefix(line, "CAPTCHA_PROVIDER="))
 					break
 				}
 			}
 		}
 
+		// Get dynamic config path from database
+		dynamicConfigPath := "/etc/traefik/conf/dynamic_config.yml"
+		if db != nil {
+			if path, err := db.GetTraefikDynamicConfigPath(); err == nil {
+				dynamicConfigPath = path
+			}
+		}
+
+		// Check dynamic_config.yml for actual captcha configuration
+		configContent, err := dockerClient.ExecCommand("traefik", []string{
+			"cat", dynamicConfigPath,
+		})
+
+		configured := false
+		detectedProvider := ""
+		hasHTMLPath := false
+
+		if err == nil && configContent != "" {
+			configured, detectedProvider, hasHTMLPath = detectCaptchaInConfig(configContent)
+		}
+
+		// Check if captcha.html exists
+		captchaHTMLExists := false
+		_, htmlErr := dockerClient.ExecCommand("traefik", []string{
+			"test", "-f", "/etc/traefik/conf/captcha.html",
+		})
+		if htmlErr == nil {
+			captchaHTMLExists = true
+		}
+
+		// Determine final provider (prefer detected over saved)
+		finalProvider := detectedProvider
+		if finalProvider == "" {
+			finalProvider = savedProvider
+		}
+
 		status := gin.H{
-			"configured":  configured,  // Always false until middleware is implemented
-			"configSaved": configSaved, // True if config file exists
-			"provider":    provider,
-			"implemented": false, // Indicates captcha middleware is not yet implemented
+			"configured":         configured,         // True if captcha is in dynamic_config.yml
+			"configSaved":        configSaved,        // True if captcha.env exists
+			"provider":           finalProvider,      // Detected or saved provider
+			"detectedProvider":   detectedProvider,   // Provider from dynamic_config.yml
+			"savedProvider":      savedProvider,      // Provider from captcha.env
+			"captchaHTMLExists":  captchaHTMLExists,  // True if captcha.html exists
+			"hasHTMLPath":        hasHTMLPath,        // True if captchaHTMLFilePath is configured
+			"implemented":        configured && captchaHTMLExists, // Fully implemented if both exist
 		}
 
 		c.JSON(http.StatusOK, models.Response{
@@ -1683,6 +1759,9 @@ func CheckTraefikIntegration(dockerClient *docker.Client, db *database.Database)
 			ConfigFiles:          []string{},
 			LapiKeyFound:         false,
 			AppsecEnabled:        false,
+			CaptchaEnabled:       false,
+			CaptchaProvider:      "",
+			CaptchaHTMLExists:    false,
 		}
 
 		// Get dynamic config path from database
@@ -1709,6 +1788,19 @@ func CheckTraefikIntegration(dockerClient *docker.Client, db *database.Database)
 			// Check for AppSec
 			if strings.Contains(config, "appsec") || strings.Contains(config, "appSec") {
 				integration.AppsecEnabled = true
+			}
+
+			// Check for Captcha
+			captchaEnabled, captchaProvider, _ := detectCaptchaInConfig(config)
+			integration.CaptchaEnabled = captchaEnabled
+			integration.CaptchaProvider = captchaProvider
+
+			// Check if captcha.html exists
+			_, htmlErr := dockerClient.ExecCommand("traefik", []string{
+				"test", "-f", "/etc/traefik/conf/captcha.html",
+			})
+			if htmlErr == nil {
+				integration.CaptchaHTMLExists = true
 			}
 		}
 

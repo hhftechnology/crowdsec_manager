@@ -53,11 +53,11 @@ func RegisterScenarioRoutes(router *gin.RouterGroup, dockerClient *docker.Client
 }
 
 // RegisterCaptchaRoutes registers captcha setup routes
-func RegisterCaptchaRoutes(router *gin.RouterGroup, dockerClient *docker.Client) {
+func RegisterCaptchaRoutes(router *gin.RouterGroup, dockerClient *docker.Client, db *database.Database) {
 	captcha := router.Group("/captcha")
 	{
 		captcha.POST("/setup", handlers.SetupCaptcha(dockerClient))
-		captcha.GET("/status", handlers.GetCaptchaStatus(dockerClient))
+		captcha.GET("/status", handlers.GetCaptchaStatus(dockerClient, db))
 	}
 }
 

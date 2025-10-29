@@ -134,6 +134,13 @@ export interface CaptchaSetupRequest {
   secret_key: string
 }
 
+export interface CaptchaStatus {
+  configured: boolean
+  configSaved: boolean
+  provider: string
+  implemented: boolean
+}
+
 export interface CronJobRequest {
   schedule: string
   task: string
@@ -259,7 +266,7 @@ export const captchaAPI = {
     api.post<ApiResponse>('/captcha/setup', data),
 
   getStatus: () =>
-    api.get<ApiResponse<{ configured: boolean; provider: string }>>('/captcha/status'),
+    api.get<ApiResponse<CaptchaStatus>>('/captcha/status'),
 }
 
 // =============================================================================

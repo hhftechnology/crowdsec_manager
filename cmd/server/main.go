@@ -85,7 +85,7 @@ func main() {
 		api.RegisterIPRoutes(apiGroup, dockerClient)
 		api.RegisterWhitelistRoutes(apiGroup, dockerClient)
 		api.RegisterScenarioRoutes(apiGroup, dockerClient)
-		api.RegisterCaptchaRoutes(apiGroup, dockerClient)
+		api.RegisterCaptchaRoutes(apiGroup, dockerClient, db)
 		api.RegisterLogRoutes(apiGroup, dockerClient, db)
 		api.RegisterBackupRoutes(apiGroup, backupManager, dockerClient)
 		api.RegisterUpdateRoutes(apiGroup, dockerClient)

@@ -164,6 +164,9 @@ type TraefikIntegration struct {
 	ConfigFiles          []string `json:"config_files"`
 	LapiKeyFound         bool     `json:"lapi_key_found"`
 	AppsecEnabled        bool     `json:"appsec_enabled"`
+	CaptchaEnabled       bool     `json:"captcha_enabled"`
+	CaptchaProvider      string   `json:"captcha_provider,omitempty"`
+	CaptchaHTMLExists    bool     `json:"captcha_html_exists"`
 }
 
 // DiagnosticResult represents complete diagnostic results

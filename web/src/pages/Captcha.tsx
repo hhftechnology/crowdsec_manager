@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import { CheckCircle2, XCircle, Shield } from 'lucide-react'
+import { XCircle, Shield } from 'lucide-react'
 
 export default function Captcha() {
   const queryClient = useQueryClient()
@@ -86,49 +86,110 @@ export default function Captcha() {
             <div className="h-24 bg-muted animate-pulse rounded" />
           ) : (
             <div className="space-y-4">
-              {/* Implementation Status Warning */}
-              {!statusData?.implemented && (
+              {/* Implementation Status - Fully Active */}
+              {statusData?.implemented && (
+                <div className="flex items-center gap-3 p-4 border border-green-500/50 bg-green-500/10 rounded-lg">
+                  <Shield className="h-5 w-5 text-green-500 flex-shrink-0" />
+                  <div>
+                    <p className="font-medium text-green-700 dark:text-green-400">
+                      Captcha Protection Active
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Captcha is configured in dynamic_config.yml and HTML file exists
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Implementation Status Warning - Partially Configured */}
+              {!statusData?.implemented && (statusData?.configured || statusData?.configSaved) && (
                 <div className="flex items-center gap-3 p-4 border border-yellow-500/50 bg-yellow-500/10 rounded-lg">
                   <XCircle className="h-5 w-5 text-yellow-500 flex-shrink-0" />
                   <div>
                     <p className="font-medium text-yellow-700 dark:text-yellow-400">
-                      Captcha Middleware Not Implemented
+                      Captcha Partially Configured
                     </p>
                     <p className="text-sm text-muted-foreground">
-                      Configuration can be saved, but captcha protection is not yet active in Traefik
+                      {!statusData?.configured && 'Captcha not detected in dynamic_config.yml. '}
+                      {!statusData?.captchaHTMLExists && 'Captcha HTML file missing. '}
+                      Restart Traefik and CrowdSec after adding captcha.html to activate protection.
                     </p>
                   </div>
                 </div>
               )}
 
-              {/* Configuration Status */}
+              {/* Not Configured */}
+              {!statusData?.implemented && !statusData?.configured && !statusData?.configSaved && (
+                <div className="flex items-center gap-3 p-4 border border-muted bg-muted/30 rounded-lg">
+                  <XCircle className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                  <div>
+                    <p className="font-medium">Captcha Not Configured</p>
+                    <p className="text-sm text-muted-foreground">
+                      No captcha configuration detected
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Detected in dynamic_config.yml */}
               <div className="flex items-center justify-between p-4 border rounded-lg">
                 <div>
-                  <p className="font-medium">Configuration Status</p>
+                  <p className="font-medium">Dynamic Config Status</p>
                   <p className="text-sm text-muted-foreground">
-                    {statusData?.configSaved
-                      ? 'Configuration saved (not active)'
-                      : 'Captcha is not configured'}
+                    {statusData?.configured
+                      ? 'Captcha detected in dynamic_config.yml'
+                      : 'Captcha not found in dynamic_config.yml'}
                   </p>
                 </div>
-                {statusData?.configSaved ? (
-                  <Badge variant="outline" className="text-yellow-600">Saved</Badge>
+                {statusData?.configured ? (
+                  <Badge variant="default" className="bg-green-600">Active</Badge>
                 ) : (
-                  <XCircle className="h-5 w-5 text-muted-foreground" />
+                  <Badge variant="outline">Not Found</Badge>
                 )}
               </div>
 
-              {statusData?.configSaved && statusData.provider && (
+              {/* Detected Provider */}
+              {statusData?.detectedProvider && (
                 <div className="flex items-center justify-between p-4 border rounded-lg">
                   <div>
-                    <p className="font-medium">Saved Provider</p>
+                    <p className="font-medium">Detected Provider</p>
                     <p className="text-sm text-muted-foreground capitalize">
-                      {statusData.provider}
+                      {statusData.detectedProvider} (from dynamic_config.yml)
                     </p>
                   </div>
-                  <Badge variant="secondary">{statusData.provider}</Badge>
+                  <Badge variant="secondary">{statusData.detectedProvider}</Badge>
                 </div>
               )}
+
+              {/* Saved Configuration */}
+              {statusData?.configSaved && (
+                <div className="flex items-center justify-between p-4 border rounded-lg">
+                  <div>
+                    <p className="font-medium">Saved Configuration</p>
+                    <p className="text-sm text-muted-foreground">
+                      {statusData.savedProvider && `Provider: ${statusData.savedProvider}`}
+                    </p>
+                  </div>
+                  <Badge variant="outline">Saved</Badge>
+                </div>
+              )}
+
+              {/* HTML File Status */}
+              <div className="flex items-center justify-between p-4 border rounded-lg">
+                <div>
+                  <p className="font-medium">Captcha HTML File</p>
+                  <p className="text-sm text-muted-foreground">
+                    {statusData?.captchaHTMLExists
+                      ? 'captcha.html found at /etc/traefik/conf/'
+                      : 'captcha.html not found - required for captcha to work'}
+                  </p>
+                </div>
+                {statusData?.captchaHTMLExists ? (
+                  <Badge variant="default" className="bg-green-600">Exists</Badge>
+                ) : (
+                  <Badge variant="destructive">Missing</Badge>
+                )}
+              </div>
             </div>
           )}
         </CardContent>
