@@ -45,6 +45,7 @@ type Bouncer struct {
 	LastPull  time.Time `json:"last_pull"`
 	Type      string    `json:"type"`
 	Version   string    `json:"version"`
+	Status    string    `json:"status"`
 }
 
 // IPInfo represents IP address information

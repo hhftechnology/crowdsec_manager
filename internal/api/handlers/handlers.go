@@ -145,6 +145,19 @@ func RunCompleteDiagnostics(dockerClient *docker.Client, db *database.Database) 
 					"output_length", len(bouncerOutput),
 					"output_preview", truncateString(bouncerOutput, 100))
 			} else {
+				// Compute status for each bouncer
+				for i := range bouncers {
+					if bouncers[i].Valid {
+						bouncers[i].Status = "connected"
+					} else {
+						bouncers[i].Status = "disconnected"
+					}
+
+					// Check if last pull was recent (within 5 minutes)
+					if time.Since(bouncers[i].LastPull) > 5*time.Minute {
+						bouncers[i].Status = "stale"
+					}
+				}
 				logger.Debug("Bouncers retrieved successfully", "count", len(bouncers))
 			}
 		} else {
@@ -175,27 +188,50 @@ func RunCompleteDiagnostics(dockerClient *docker.Client, db *database.Database) 
 			AppsecEnabled:        false,
 		}
 
-		// Get dynamic config path from database
-		dynamicConfigPath := "/etc/traefik/conf/dynamic_config.yml"
+		// Check multiple possible config files
+		configPaths := []string{
+			"/etc/traefik/conf/dynamic_config.yml",
+			"/etc/traefik/conf/traefik_config.yml",
+		}
+
+		// Get dynamic config path from database if available
 		if db != nil {
 			if path, err := db.GetTraefikDynamicConfigPath(); err == nil {
-				dynamicConfigPath = path
+				// Prepend database path to the beginning of the list
+				configPaths = append([]string{path}, configPaths...)
+			}
+		}
+
+		var configContent string
+		var foundConfigPath string
+
+		// Try each path until we find one that works
+		for _, path := range configPaths {
+			output, err := dockerClient.ExecCommand("traefik", []string{"cat", path})
+			if err == nil && output != "" {
+				configContent = output
+				foundConfigPath = path
+				break
 			}
 		}
 
 		// Check for Traefik middleware configuration
-		configContent, err := dockerClient.ExecCommand("traefik", []string{"cat", dynamicConfigPath})
-		if err == nil && configContent != "" {
+		if configContent != "" {
 			traefikIntegration.MiddlewareConfigured = true
-			traefikIntegration.ConfigFiles = append(traefikIntegration.ConfigFiles, dynamicConfigPath)
+			traefikIntegration.ConfigFiles = append(traefikIntegration.ConfigFiles, foundConfigPath)
+
+			// Better detection logic - use case-insensitive matching
+			configLower := strings.ToLower(configContent)
 
 			// Check for LAPI key (bouncer plugin configuration)
-			if strings.Contains(configContent, "crowdsec") || strings.Contains(configContent, "bouncer") {
+			if strings.Contains(configLower, "crowdsec-bouncer-traefik-plugin") ||
+				strings.Contains(configLower, "crowdseclapikey") ||
+				strings.Contains(configLower, "crowdsec") {
 				traefikIntegration.LapiKeyFound = true
 			}
 
 			// Check for AppSec
-			if strings.Contains(configContent, "appsec") || strings.Contains(configContent, "appSec") {
+			if strings.Contains(configLower, "appsec") {
 				traefikIntegration.AppsecEnabled = true
 			}
 		}
@@ -816,9 +852,20 @@ func ListScenarios(dockerClient *docker.Client) gin.HandlerFunc {
 			return
 		}
 
+		// Parse the JSON properly
+		var scenariosData map[string]interface{}
+		if err := json.Unmarshal([]byte(output), &scenariosData); err != nil {
+			logger.Warn("Failed to parse scenarios JSON", "error", err)
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to parse scenarios: %v", err),
+			})
+			return
+		}
+
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
-			Data:    gin.H{"scenarios": output},
+			Data:    scenariosData,
 		})
 	}
 }
@@ -1352,18 +1399,48 @@ func GetLatestBackup(backupMgr *backup.Manager) gin.HandlerFunc {
 // 8. UPDATE
 // =============================================================================
 
-// GetCurrentTags retrieves current Docker image tags
-func GetCurrentTags() gin.HandlerFunc {
+// GetCurrentTags retrieves current Docker image tags from running containers
+func GetCurrentTags(dockerClient *docker.Client) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		logger.Info("Getting current image tags")
 
-		// In a real implementation, this would parse docker-compose.yml
-		// or inspect running containers to get their image tags
 		tags := models.ImageTags{
 			Pangolin: "latest",
 			Gerbil:   "latest",
 			Traefik:  "latest",
 			CrowdSec: "latest",
+		}
+
+		// Container name to field mapping
+		containerMapping := map[string]*string{
+			"pangolin": &tags.Pangolin,
+			"gerbil":   &tags.Gerbil,
+			"traefik":  &tags.Traefik,
+			"crowdsec": &tags.CrowdSec,
+		}
+
+		// Inspect each container to get its actual image tag
+		for containerName, tagField := range containerMapping {
+			inspect, err := dockerClient.InspectContainer(containerName)
+			if err != nil {
+				logger.Warn("Failed to inspect container", "name", containerName, "error", err)
+				continue
+			}
+
+			// Extract tag from image string
+			// Image format examples:
+			// - "docker.io/fosrl/pangolin:latest"
+			// - "docker.io/traefik:v3.5"
+			// - "crowdsecurity/crowdsec:latest"
+			imageParts := strings.Split(inspect.Config.Image, ":")
+			if len(imageParts) >= 2 {
+				// Get the last part after the last colon (the tag)
+				*tagField = imageParts[len(imageParts)-1]
+			} else {
+				logger.Warn("Could not parse image tag", "name", containerName, "image", inspect.Config.Image)
+			}
+
+			logger.Debug("Retrieved image tag", "container", containerName, "tag", *tagField)
 		}
 
 		c.JSON(http.StatusOK, models.Response{
@@ -1652,6 +1729,20 @@ func GetBouncers(dockerClient *docker.Client) gin.HandlerFunc {
 			return
 		}
 
+		// Compute status for each bouncer
+		for i := range bouncers {
+			if bouncers[i].Valid {
+				bouncers[i].Status = "connected"
+			} else {
+				bouncers[i].Status = "disconnected"
+			}
+
+			// Check if last pull was recent (within 5 minutes)
+			if time.Since(bouncers[i].LastPull) > 5*time.Minute {
+				bouncers[i].Status = "stale"
+			}
+		}
+
 		logger.Debug("Bouncers API retrieved successfully", "count", len(bouncers))
 
 		// Return properly formatted data
@@ -1775,45 +1866,79 @@ func CheckTraefikIntegration(dockerClient *docker.Client, db *database.Database)
 			CaptchaHTMLExists:    false,
 		}
 
-		// Get dynamic config path from database
-		dynamicConfigPath := "/etc/traefik/conf/dynamic_config.yml"
+		// Check multiple possible config files
+		configPaths := []string{
+			"/etc/traefik/conf/dynamic_config.yml",
+			"/etc/traefik/conf/traefik_config.yml",
+		}
+
+		// Get dynamic config path from database if available
 		if db != nil {
 			if path, err := db.GetTraefikDynamicConfigPath(); err == nil {
-				dynamicConfigPath = path
+				// Prepend database path to the beginning of the list
+				configPaths = append([]string{path}, configPaths...)
 			}
 		}
 
-		// Check config content
-		config, err := dockerClient.ExecCommand("traefik", []string{
-			"cat", dynamicConfigPath,
-		})
-		if err == nil && config != "" {
-			integration.MiddlewareConfigured = true
-			integration.ConfigFiles = append(integration.ConfigFiles, dynamicConfigPath)
+		var config string
+		var configPath string
 
-			// Check for LAPI key (bouncer plugin configuration)
-			if strings.Contains(config, "crowdsec") || strings.Contains(config, "bouncer") {
-				integration.LapiKeyFound = true
+		// Try each path until we find one that works
+		for _, path := range configPaths {
+			output, err := dockerClient.ExecCommand("traefik", []string{"cat", path})
+			if err == nil && output != "" {
+				config = output
+				configPath = path
+				break
 			}
+		}
 
-			// Check for AppSec
-			if strings.Contains(config, "appsec") || strings.Contains(config, "appSec") {
-				integration.AppsecEnabled = true
-			}
-
-			// Check for Captcha
-			captchaEnabled, captchaProvider, _ := detectCaptchaInConfig(config)
-			integration.CaptchaEnabled = captchaEnabled
-			integration.CaptchaProvider = captchaProvider
-
-			// Check if captcha.html exists
-			_, htmlErr := dockerClient.ExecCommand("traefik", []string{
-				"test", "-f", "/etc/traefik/conf/captcha.html",
+		if config == "" {
+			// No config found, return empty integration
+			c.JSON(http.StatusOK, models.Response{
+				Success: true,
+				Data:    integration,
+				Message: "No Traefik config files found",
 			})
-			if htmlErr == nil {
-				integration.CaptchaHTMLExists = true
-			}
+			return
 		}
+
+		// Config found - proceed with checks
+		integration.MiddlewareConfigured = true
+		integration.ConfigFiles = append(integration.ConfigFiles, configPath)
+
+		// Better detection logic - use case-insensitive matching
+		configLower := strings.ToLower(config)
+
+		// Check for CrowdSec bouncer plugin
+		if strings.Contains(configLower, "crowdsec-bouncer-traefik-plugin") ||
+			strings.Contains(configLower, "crowdseclapikey") ||
+			strings.Contains(configLower, "crowdsec") {
+			integration.LapiKeyFound = true
+		}
+
+		// Check for AppSec
+		if strings.Contains(configLower, "appsec") {
+			integration.AppsecEnabled = true
+		}
+
+		// Check for Captcha
+		captchaEnabled, captchaProvider, _ := detectCaptchaInConfig(config)
+		integration.CaptchaEnabled = captchaEnabled
+		integration.CaptchaProvider = captchaProvider
+
+		// Check if captcha.html exists
+		_, htmlErr := dockerClient.ExecCommand("traefik", []string{
+			"test", "-f", "/etc/traefik/conf/captcha.html",
+		})
+		if htmlErr == nil {
+			integration.CaptchaHTMLExists = true
+		}
+
+		logger.Info("Traefik integration check complete",
+			"middleware", integration.MiddlewareConfigured,
+			"lapi_key", integration.LapiKeyFound,
+			"appsec", integration.AppsecEnabled)
 
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
