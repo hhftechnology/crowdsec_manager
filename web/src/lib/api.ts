@@ -138,6 +138,10 @@ export interface CaptchaStatus {
   configured: boolean
   configSaved: boolean
   provider: string
+  detectedProvider: string
+  savedProvider: string
+  captchaHTMLExists: boolean
+  hasHTMLPath: boolean
   implemented: boolean
 }
 
@@ -157,6 +161,9 @@ export interface TraefikIntegration {
   config_files: string[]
   lapi_key_found: boolean
   appsec_enabled: boolean
+  captcha_enabled: boolean
+  captcha_provider?: string
+  captcha_html_exists: boolean
 }
 
 export interface DiagnosticResult {
