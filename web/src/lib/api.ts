@@ -137,9 +137,9 @@ export interface CaptchaSetupRequest {
 export interface CaptchaStatus {
   configured: boolean
   configSaved: boolean
-  provider: string
-  detectedProvider: string
-  savedProvider: string
+  provider?: string
+  detectedProvider?: string
+  savedProvider?: string
   captchaHTMLExists: boolean
   hasHTMLPath: boolean
   implemented: boolean

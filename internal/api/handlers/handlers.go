@@ -966,6 +966,17 @@ func GetCaptchaStatus(dockerClient *docker.Client, db *database.Database) gin.Ha
 			finalProvider = savedProvider
 		}
 
+		// Ensure all string fields are never nil (use empty string instead)
+		if finalProvider == "" {
+			finalProvider = ""
+		}
+		if detectedProvider == "" {
+			detectedProvider = ""
+		}
+		if savedProvider == "" {
+			savedProvider = ""
+		}
+
 		status := gin.H{
 			"configured":         configured,         // True if captcha is in dynamic_config.yml
 			"configSaved":        configSaved,        // True if captcha.env exists
