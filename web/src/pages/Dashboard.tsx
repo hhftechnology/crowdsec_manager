@@ -32,28 +32,9 @@ export default function Dashboard() {
     refetchInterval: 30000, // Refresh every 30 seconds
   })
 
-  const parseDecisionsCount = (decisionsStr: string | undefined): number => {
-    if (!decisionsStr) return 0
-    const lines = decisionsStr.split('\n').filter((line: string) => line.trim())
-    return Math.max(0, lines.length - 2) // Subtract header lines
-  }
 
-  const parseBouncersCount = (data: any): number => {
-    if (!data) return 0
-    // If the API returns a count field, use it
-    if (typeof data.count === 'number') return data.count
-    // If parsed array is available, use its length
-    if (Array.isArray(data.parsed)) return data.parsed.length
-    // Fallback to parsing the string
-    if (typeof data.bouncers === 'string') {
-      const lines = data.bouncers.split('\n').filter((line: string) => line.trim())
-      return Math.max(0, lines.length - 2)
-    }
-    return 0
-  }
-
-  const decisionsCount = parseDecisionsCount(decisionsData?.decisions)
-  const bouncersCount = parseBouncersCount(bouncersData)
+  const decisionsCount = decisionsData?.count ?? 0
+  const bouncersCount = bouncersData?.count ?? 0
 
   return (
     <div className="space-y-6">

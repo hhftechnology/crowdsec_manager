@@ -373,10 +373,10 @@ export const servicesAPI = {
 
 export const crowdsecAPI = {
   getBouncers: () =>
-    api.get<ApiResponse<{ bouncers: string }>>('/crowdsec/bouncers'),
+     api.get<ApiResponse<{ bouncers: Bouncer[]; count: number }>>('/crowdsec/bouncers'),
 
   getDecisions: () =>
-    api.get<ApiResponse<{ decisions: string }>>('/crowdsec/decisions'),
+    api.get<ApiResponse<{ decisions: Decision[]; count: number }>>('/crowdsec/decisions'),
 
   getMetrics: () =>
     api.get<ApiResponse<{ metrics: string }>>('/crowdsec/metrics'),
