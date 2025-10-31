@@ -15,11 +15,10 @@ export default function Scenarios() {
     { name: '', description: '', content: '' }
   ])
 
-  const { data: scenariosList, isLoading, error } = useQuery({
+  const { data: scenariosList, isLoading } = useQuery({
     queryKey: ['scenarios'],
     queryFn: async () => {
       const response = await api.scenarios.list()
-      console.log('API Response:', response.data)
       return response.data.data
     },
   })
@@ -67,99 +66,52 @@ export default function Scenarios() {
     setupMutation.mutate({ scenarios: validScenarios })
   }
 
-  const parseScenariosList = (scenariosData: any): any[] => {
-    console.log('Parsing scenarios data:', scenariosData, 'Type:', typeof scenariosData)
-    
-    // Handle null/undefined
-    if (!scenariosData) {
-      console.log('No scenarios data provided')
-      return []
+  // FIXED: Properly handle both string and already-parsed JSON response
+  const parseScenariosList = (data: any): any[] => {
+    if (!data) return []
+
+    // If scenarios is already an array (properly parsed JSON from backend)
+    if (Array.isArray(data.scenarios)) {
+      return data.scenarios
     }
 
-    // If it's already an array, return it
-    if (Array.isArray(scenariosData)) {
-      console.log('Scenarios data is already an array')
-      return scenariosData
-    }
-
-    // Ensure we have a string
-    let scenariosStr: string
-    if (typeof scenariosData === 'string') {
-      scenariosStr = scenariosData
-    } else if (typeof scenariosData === 'object') {
-      // If it's an object, try to stringify it
-      scenariosStr = JSON.stringify(scenariosData)
-    } else {
-      console.error('Unexpected scenarios data type:', typeof scenariosData)
-      return []
-    }
-
-    // Empty string check
-    if (!scenariosStr.trim()) {
-      console.log('Scenarios string is empty')
-      return []
-    }
-
-    try {
-      // Try parsing as JSON first
-      const parsed = JSON.parse(scenariosStr)
-      if (Array.isArray(parsed)) {
-        console.log('Successfully parsed JSON array with', parsed.length, 'scenarios')
-        return parsed
-      }
-      console.log('Parsed JSON but not an array:', parsed)
-    } catch (e) {
-      console.log('JSON parsing failed, attempting text table parsing:', e)
-      
-      // If JSON parsing fails, parse as text table (human-readable format)
-      const lines = scenariosStr.split('\n').filter(line => {
-        const trimmed = line.trim()
-        return trimmed && 
-               !trimmed.includes('─') && 
-               !trimmed.includes('═') &&
-               !trimmed.includes('SCENARIOS') &&
-               !trimmed.includes('Name') &&
-               !trimmed.match(/^(Status|Version|Local Path)/i) &&
-               !trimmed.includes('📦')
-      })
-      
-      console.log('Filtered lines:', lines.length)
-      
-      const parsed = lines.map(line => {
-        // Remove table borders and emojis, then split by whitespace
-        const cleanLine = line.replace(/[│✔️]/g, '').trim()
-        const parts = cleanLine.split(/\s+/)
-        
-        // Expected format: name status version local_path
-        // Example: crowdsecurity/apache_log4j2_cve-2021-44228 enabled 0.6 /etc/crowdsec/scenarios/...
-        if (parts.length >= 4) {
-          return {
-            name: parts[0] || '',
-            status: parts[1] || '',
-            version: parts[2] || '',
-            local_path: parts.slice(3).join(' ') || ''
-          }
+    // If scenarios is a string, try to parse it
+    if (typeof data.scenarios === 'string') {
+      try {
+        // Try parsing as JSON first
+        const parsed = JSON.parse(data.scenarios)
+        if (Array.isArray(parsed)) {
+          return parsed
         }
-        return null
-      }).filter(item => item && item.name)
-      
-      console.log('Parsed', parsed.length, 'scenarios from text table')
-      return parsed
+      } catch {
+        // If JSON parsing fails, parse as text table
+        const scenariosStr = data.scenarios
+        const lines = scenariosStr.split('\n').filter(line => 
+          line.trim() && 
+          !line.includes('─') && 
+          !line.includes('SCENARIOS') &&
+          !line.includes('Name') &&
+          !line.includes('📦')
+        )
+        return lines.map(line => {
+          const parts = line.split(/\s{2,}/).filter(p => p && p !== '│')
+          if (parts.length >= 2) {
+            return {
+              name: parts[0]?.trim() || '',
+              status: parts[1]?.includes('enabled') ? 'enabled' : parts[1]?.trim(),
+              version: parts[2]?.trim() || '',
+              local_path: parts[3]?.trim() || ''
+            }
+          }
+          return null
+        }).filter(item => item && item.name)
+      }
     }
-    
+
     return []
   }
 
-  // Add error logging
-  if (error) {
-    console.error('Query error:', error)
-  }
-
-  // Log the scenarios list data
-  console.log('scenariosList:', scenariosList)
-
-  const scenarioNames = parseScenariosList(scenariosList?.scenarios)
-  console.log('Parsed scenario names:', scenarioNames)
+  const scenarioNames = parseScenariosList(scenariosList)
 
   return (
     <div className="space-y-6">
@@ -187,10 +139,6 @@ export default function Scenarios() {
               <div className="h-12 bg-muted animate-pulse rounded" />
               <div className="h-12 bg-muted animate-pulse rounded" />
             </div>
-          ) : error ? (
-            <p className="text-destructive text-center py-8">
-              Error loading scenarios: {error instanceof Error ? error.message : 'Unknown error'}
-            </p>
           ) : scenarioNames.length > 0 ? (
             <div className="space-y-2">
               {scenarioNames.map((scenario, index) => (
@@ -213,7 +161,7 @@ export default function Scenarios() {
                     )}
                   </div>
                   {typeof scenario === 'object' && scenario.local_path && (
-                    <span className="text-xs text-muted-foreground font-mono ml-4 truncate max-w-md">
+                    <span className="text-xs text-muted-foreground font-mono ml-4">
                       {scenario.local_path}
                     </span>
                   )}

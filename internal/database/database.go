@@ -54,8 +54,8 @@ func (d *Database) initSchema() error {
 	schema := `
 	CREATE TABLE IF NOT EXISTS settings (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		traefik_dynamic_config TEXT NOT NULL DEFAULT '/etc/traefik/conf/dynamic_config.yml',
-		traefik_static_config TEXT NOT NULL DEFAULT '/etc/traefik/traefik.yml',
+		traefik_dynamic_config TEXT NOT NULL DEFAULT '/etc/traefik/dynamic_config.yml',
+		traefik_static_config TEXT NOT NULL DEFAULT '/etc/traefik/traefik_config.yml',
 		traefik_access_log TEXT NOT NULL DEFAULT '/var/log/traefik/access.log',
 		traefik_error_log TEXT NOT NULL DEFAULT '/var/log/traefik/traefik.log',
 		crowdsec_acquis_file TEXT NOT NULL DEFAULT '/etc/crowdsec/acquis.yaml'
@@ -63,7 +63,7 @@ func (d *Database) initSchema() error {
 
 	-- Insert default settings if not exists
 	INSERT OR IGNORE INTO settings (id, traefik_dynamic_config, traefik_static_config, traefik_access_log, traefik_error_log, crowdsec_acquis_file)
-	VALUES (1, '/etc/traefik/conf/dynamic_config.yml', '/etc/traefik/traefik.yml', '/var/log/traefik/access.log', '/var/log/traefik/traefik.log', '/etc/crowdsec/acquis.yaml');
+	VALUES (1, '/etc/traefik/dynamic_config.yml', '/etc/traefik/traefik_config.yml', '/var/log/traefik/access.log', '/var/log/traefik/traefik.log', '/etc/crowdsec/acquis.yaml');
 	`
 
 	_, err := d.db.Exec(schema)
@@ -84,8 +84,8 @@ func (d *Database) GetSettings() (*Settings, error) {
 		// Return defaults
 		return &Settings{
 			ID:                   1,
-			TraefikDynamicConfig: "/etc/traefik/conf/dynamic_config.yml",
-			TraefikStaticConfig:  "/etc/traefik/traefik.yml",
+			TraefikDynamicConfig: "/etc/traefik/dynamic_config.yml",
+			TraefikStaticConfig:  "/etc/traefik/traefik_config.yml",
 			TraefikAccessLog:     "/var/log/traefik/access.log",
 			TraefikErrorLog:      "/var/log/traefik/traefik.log",
 			CrowdSecAcquisFile:   "/etc/crowdsec/acquis.yaml",
@@ -114,7 +114,7 @@ func (d *Database) UpdateSettings(settings *Settings) error {
 func (d *Database) GetTraefikDynamicConfigPath() (string, error) {
 	settings, err := d.GetSettings()
 	if err != nil {
-		return "/etc/traefik/conf/dynamic_config.yml", err
+		return "/etc/traefik/dynamic_config.yml", err
 	}
 	return settings.TraefikDynamicConfig, nil
 }

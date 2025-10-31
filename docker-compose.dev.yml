@@ -110,7 +110,7 @@ services:
       - "--api.insecure=true"
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
-      - "--providers.file.directory=/etc/traefik/conf"
+      - "--providers.file.directory=/etc/traefik"
       - "--providers.file.watch=true"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
@@ -121,7 +121,7 @@ services:
       - "--log.level=DEBUG"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ./config/traefik:/etc/traefik/conf:ro
+      - ./config/traefik:/etc/traefik:ro
       - traefik-logs:/var/log/traefik
     networks:
       - crowdsec-network

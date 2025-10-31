@@ -32,9 +32,37 @@ export default function Dashboard() {
     refetchInterval: 30000, // Refresh every 30 seconds
   })
 
+  // FIXED: Properly handle the structured JSON response from the API
+  const parseDecisionsCount = (data: any): number => {
+    if (!data) return 0
+    // If the API returns a count field, use it (preferred)
+    if (typeof data.count === 'number') return data.count
+    // If decisions array is available, use its length
+    if (Array.isArray(data.decisions)) return data.decisions.length
+    // Fallback to parsing the string (legacy support)
+    if (typeof data.decisions === 'string') {
+      const lines = data.decisions.split('\n').filter((line: string) => line.trim())
+      return Math.max(0, lines.length - 2)
+    }
+    return 0
+  }
 
-  const decisionsCount = decisionsData?.count ?? 0
-  const bouncersCount = bouncersData?.count ?? 0
+  const parseBouncersCount = (data: any): number => {
+    if (!data) return 0
+    // If the API returns a count field, use it
+    if (typeof data.count === 'number') return data.count
+    // If bouncers array is available, use its length
+    if (Array.isArray(data.bouncers)) return data.bouncers.length
+    // Fallback to parsing the string
+    if (typeof data.bouncers === 'string') {
+      const lines = data.bouncers.split('\n').filter((line: string) => line.trim())
+      return Math.max(0, lines.length - 2)
+    }
+    return 0
+  }
+
+  const decisionsCount = parseDecisionsCount(decisionsData)
+  const bouncersCount = parseBouncersCount(bouncersData)
 
   return (
     <div className="space-y-6">

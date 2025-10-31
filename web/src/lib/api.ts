@@ -261,7 +261,7 @@ export const scenariosAPI = {
     api.post<ApiResponse>('/scenarios/setup', data),
 
   list: () =>
-    api.get<ApiResponse<{ scenarios: string }>>('/scenarios/list'),
+    api.get<ApiResponse<{ scenarios: any[] | string }>>('/scenarios/list'),
 }
 
 // =============================================================================

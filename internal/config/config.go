@@ -63,8 +63,8 @@ func Load() (*Config, error) {
 
 		DatabasePath:       getEnv("DATABASE_PATH", "./data/settings.db"),
 
-		TraefikDynamicConfig: getEnv("TRAEFIK_DYNAMIC_CONFIG", "/etc/traefik/conf/dynamic_config.yml"),
-		TraefikStaticConfig:  getEnv("TRAEFIK_STATIC_CONFIG", "/etc/traefik/traefik.yml"),
+		TraefikDynamicConfig: getEnv("TRAEFIK_DYNAMIC_CONFIG", "/etc/traefik/dynamic_config.yml"),
+		TraefikStaticConfig:  getEnv("TRAEFIK_STATIC_CONFIG", "/etc/traefik/traefik_config.yml"),
 		TraefikAccessLog:     getEnv("TRAEFIK_ACCESS_LOG", "/var/log/traefik/access.log"),
 		TraefikErrorLog:      getEnv("TRAEFIK_ERROR_LOG", "/var/log/traefik/traefik.log"),
 		CrowdSecAcquisFile:   getEnv("CROWDSEC_ACQUIS_FILE", "/etc/crowdsec/acquis.yaml"),

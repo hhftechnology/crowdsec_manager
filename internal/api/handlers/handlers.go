@@ -190,8 +190,8 @@ func RunCompleteDiagnostics(dockerClient *docker.Client, db *database.Database) 
 
 		// Check multiple possible config files
 		configPaths := []string{
-			"/etc/traefik/conf/dynamic_config.yml",
-			"/etc/traefik/conf/traefik_config.yml",
+			"/etc/traefik/dynamic_config.yml",
+			"/etc/traefik/traefik_config.yml",
 		}
 
 		// Get dynamic config path from database if available
@@ -994,7 +994,7 @@ func GetCaptchaStatus(dockerClient *docker.Client, db *database.Database) gin.Ha
 		}
 
 		// Get dynamic config path from database
-		dynamicConfigPath := "/etc/traefik/conf/dynamic_config.yml"
+		dynamicConfigPath := "/etc/traefik/dynamic_config.yml"
 		if db != nil {
 			if path, err := db.GetTraefikDynamicConfigPath(); err == nil {
 				dynamicConfigPath = path
@@ -1017,7 +1017,7 @@ func GetCaptchaStatus(dockerClient *docker.Client, db *database.Database) gin.Ha
 		// Check if captcha.html exists
 		captchaHTMLExists := false
 		_, htmlErr := dockerClient.ExecCommand("traefik", []string{
-			"test", "-f", "/etc/traefik/conf/captcha.html",
+			"test", "-f", "/etc/traefik/captcha.html",
 		})
 		if htmlErr == nil {
 			captchaHTMLExists = true
@@ -1884,8 +1884,8 @@ func CheckTraefikIntegration(dockerClient *docker.Client, db *database.Database)
 
 		// Check multiple possible config files
 		configPaths := []string{
-			"/etc/traefik/conf/dynamic_config.yml",
-			"/etc/traefik/conf/traefik_config.yml",
+			"/etc/traefik/dynamic_config.yml",
+			"/etc/traefik/traefik_config.yml",
 		}
 
 		// Get dynamic config path from database if available
@@ -1945,7 +1945,7 @@ func CheckTraefikIntegration(dockerClient *docker.Client, db *database.Database)
 
 		// Check if captcha.html exists
 		_, htmlErr := dockerClient.ExecCommand("traefik", []string{
-			"test", "-f", "/etc/traefik/conf/captcha.html",
+			"test", "-f", "/etc/traefik/captcha.html",
 		})
 		if htmlErr == nil {
 			integration.CaptchaHTMLExists = true
@@ -1970,7 +1970,7 @@ func GetTraefikConfig() gin.HandlerFunc {
 
 		// In a real implementation, read from config file
 		config := gin.H{
-			"static":  "traefik.yml content",
+			"static":  "traefik_config.yml content",
 			"dynamic": "dynamic_config.yml content",
 		}
 
