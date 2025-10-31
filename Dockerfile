@@ -52,7 +52,7 @@ COPY --from=backend-builder /app/crowdsec-manager .
 # Copy frontend build from frontend-builder
 COPY --from=frontend-builder /app/web/dist ./web/dist
 
-# Create necessary directories with proper permissions
+# Create necessary directories
 RUN mkdir -p /app/backups /app/logs /app/config /app/data
 
 # Expose port
@@ -62,21 +62,7 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:8080/health || exit 1
 
-# Create default user (1000:1000)
-RUN addgroup -g 1000 appuser && \
-    adduser -D -u 1000 -G appuser appuser && \
-    chown -R appuser:appuser /app
+# Run as root user (no USER directive)
+# This allows write access to mounted volumes
 
-# Copy entrypoint script
-COPY docker-entrypoint.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
-
-# Install su-exec for safe privilege dropping
-RUN apk add --no-cache su-exec
-
-# Don't set USER - let entrypoint handle it
-# This allows the entrypoint to fix permissions before dropping privileges
-
-# Use entrypoint script
-ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["./crowdsec-manager"]

@@ -120,7 +120,6 @@ services:
     restart: unless-stopped
     expose:
       - "8080"
-    user: "988:988"
     environment:
       - PORT=8080
       - ENVIRONMENT=production
@@ -140,9 +139,9 @@ services:
       - RETENTION_DAYS=60
       - INCLUDE_CROWDSEC=true
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/run/docker.sock:/var/run/docker.sock
       - ./config:/app/config
-      - ./docker-compose.yml:/app/docker-compose.yml:ro
+      - ./docker-compose.yml:/app/docker-compose.yml
       - ./backups:/app/backups
       - ./config/traefik/logs:/app/logs
       - ./data:/app/data

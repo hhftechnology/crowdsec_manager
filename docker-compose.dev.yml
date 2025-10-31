@@ -29,14 +29,14 @@ services:
       - INCLUDE_CROWDSEC=true
     volumes:
       # Docker socket
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/run/docker.sock:/var/run/docker.sock
       # Source code for hot reload
       - ./cmd:/app/cmd
       - ./internal:/app/internal
       - ./web:/app/web
       # Configuration
       - ./config:/app/config
-      - ./docker-compose.yml:/app/docker-compose.yml:ro
+      - ./docker-compose.yml:/app/docker-compose.yml
       # Backups
       - ./backups:/app/backups
       # Logs
