@@ -76,16 +76,29 @@ export default function Scenarios() {
         return parsed
       }
     } catch {
-      // If JSON parsing fails, parse as text table
-      const lines = scenariosStr.split('\n').filter(line => line.trim() && !line.includes('─') && !line.includes('NAME'))
+      // If JSON parsing fails, parse as text table (human-readable format)
+      const lines = scenariosStr.split('\n').filter(line => 
+        line.trim() && 
+        !line.includes('─') && 
+        !line.includes('SCENARIOS') &&
+        !line.includes('Name') &&
+        !line.includes('Status') &&
+        !line.includes('📦')
+      )
+      
       return lines.map(line => {
-        const parts = line.split(/\s+/).filter(p => p && p !== '│')
+        // Remove table borders and emojis, then split by whitespace
+        const cleanLine = line.replace(/[│✔️]/g, '').trim()
+        const parts = cleanLine.split(/\s+/)
+        
+        // Expected format: name status version local_path
+        // Example: crowdsecurity/apache_log4j2_cve-2021-44228 enabled 0.6 /etc/crowdsec/scenarios/...
         if (parts.length >= 4) {
           return {
             name: parts[0] || '',
             status: parts[1] || '',
             version: parts[2] || '',
-            local_path: parts[3] || ''
+            local_path: parts.slice(3).join(' ') || ''
           }
         }
         return null
@@ -144,7 +157,7 @@ export default function Scenarios() {
                     )}
                   </div>
                   {typeof scenario === 'object' && scenario.local_path && (
-                    <span className="text-xs text-muted-foreground font-mono ml-4">
+                    <span className="text-xs text-muted-foreground font-mono ml-4 truncate max-w-md">
                       {scenario.local_path}
                     </span>
                   )}
@@ -153,7 +166,7 @@ export default function Scenarios() {
             </div>
           ) : (
             <p className="text-muted-foreground text-center py-8">
-              No custom scenarios installed
+              No scenarios installed
             </p>
           )}
         </CardContent>
