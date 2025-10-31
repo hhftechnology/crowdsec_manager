@@ -11,6 +11,7 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
+	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
 )
@@ -313,4 +314,91 @@ func (c *Client) FileExists(containerName, path string) (bool, error) {
 	}
 
 	return true, nil
+}
+
+// ValidateImageTag validates if an image tag exists in the registry
+func (c *Client) ValidateImageTag(imageName, tag string) error {
+	// Construct full image reference
+	fullImage := imageName + ":" + tag
+
+	// Try to inspect the image from registry
+	// This will validate against Docker Hub or any configured registry
+	_, _, err := c.cli.ImageInspectWithRaw(c.ctx, fullImage)
+	if err == nil {
+		// Image exists locally, that's good enough
+		return nil
+	}
+
+	// Image doesn't exist locally, try to get info from registry
+	// Use DistributionInspect which queries the registry without pulling
+	_, err = c.cli.DistributionInspect(c.ctx, fullImage, "")
+	if err != nil {
+		return fmt.Errorf("tag '%s' not found for image '%s': %w", tag, imageName, err)
+	}
+
+	return nil
+}
+
+// PullImage pulls a Docker image from the registry
+func (c *Client) PullImage(imageName, tag string) error {
+	fullImage := imageName + ":" + tag
+
+	reader, err := c.cli.ImagePull(c.ctx, fullImage, image.PullOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to pull image %s: %w", fullImage, err)
+	}
+	defer reader.Close()
+
+	// Read the response to ensure the pull completes
+	_, err = io.Copy(io.Discard, reader)
+	if err != nil {
+		return fmt.Errorf("error reading pull response for %s: %w", fullImage, err)
+	}
+
+	return nil
+}
+
+// RecreateContainer stops, removes, and recreates a container with a new image
+func (c *Client) RecreateContainer(name string) error {
+	containerID, err := c.GetContainerID(name)
+	if err != nil {
+		return err
+	}
+
+	// Get container configuration before stopping
+	inspect, err := c.cli.ContainerInspect(c.ctx, containerID)
+	if err != nil {
+		return fmt.Errorf("failed to inspect container: %w", err)
+	}
+
+	// Stop the container
+	timeout := 30
+	if err := c.cli.ContainerStop(c.ctx, containerID, container.StopOptions{Timeout: &timeout}); err != nil {
+		return fmt.Errorf("failed to stop container: %w", err)
+	}
+
+	// Remove the container
+	if err := c.cli.ContainerRemove(c.ctx, containerID, container.RemoveOptions{}); err != nil {
+		return fmt.Errorf("failed to remove container: %w", err)
+	}
+
+	// Create new container with same configuration but new image
+	resp, err := c.cli.ContainerCreate(
+		c.ctx,
+		inspect.Config,
+		inspect.HostConfig,
+		nil,
+		nil,
+		name,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create container: %w", err)
+	}
+
+	// Start the new container
+	if err := c.cli.ContainerStart(c.ctx, resp.ID, container.StartOptions{}); err != nil {
+		return fmt.Errorf("failed to start container: %w", err)
+	}
+
+	return nil
 }

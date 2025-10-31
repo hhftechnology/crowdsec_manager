@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -1478,26 +1479,106 @@ func UpdateWithCrowdSec(dockerClient *docker.Client) gin.HandlerFunc {
 			return
 		}
 
-		logger.Info("Updating stack with CrowdSec")
+		logger.Info("Updating stack with CrowdSec", "request", req)
 
-		// Pull latest images and restart containers
-		// This is a simplified version
-		services := []string{"pangolin", "gerbil", "traefik", "crowdsec"}
+		// Get compose file path from environment
+		composeFile := os.Getenv("COMPOSE_FILE")
+		if composeFile == "" {
+			composeFile = "./docker-compose.yml"
+		}
 
-		for _, service := range services {
-			logger.Info("Restarting service", "service", service)
-			// Use longer timeout for Traefik
-			if service == "traefik" {
-				if err := dockerClient.RestartContainerWithTimeout(service, 60); err != nil {
-					logger.Error("Failed to restart service", "service", service, "error", err)
-				}
-			} else {
-				if err := dockerClient.RestartContainer(service); err != nil {
-					logger.Error("Failed to restart service", "service", service, "error", err)
-				}
+		// Map of service names to their image names and requested tags
+		serviceUpdates := map[string]struct {
+			imageName string
+			tag       string
+		}{
+			"pangolin": {"fosrl/pangolin", req.PangolinTag},
+			"gerbil":   {"fosrl/gerbil", req.GerbilTag},
+			"traefik":  {"traefik", req.TraefikTag},
+			"crowdsec": {"crowdsecurity/crowdsec", req.CrowdSecTag},
+		}
+
+		// Step 1: Validate all tags against registries
+		logger.Info("Validating image tags against registries")
+		for serviceName, update := range serviceUpdates {
+			if update.tag == "" {
+				logger.Debug("Skipping validation for service (no tag provided)", "service", serviceName)
+				continue
+			}
+
+			logger.Info("Validating tag", "service", serviceName, "image", update.imageName, "tag", update.tag)
+			if err := dockerClient.ValidateImageTag(update.imageName, update.tag); err != nil {
+				c.JSON(http.StatusBadRequest, models.Response{
+					Success: false,
+					Error:   fmt.Sprintf("Invalid tag for %s: %v", serviceName, err),
+				})
+				return
 			}
 		}
 
+		// Step 2: Update docker-compose.yml file
+		logger.Info("Updating docker-compose.yml file")
+		composeTags := make(map[string]string)
+		for serviceName, update := range serviceUpdates {
+			if update.tag != "" {
+				composeTags[serviceName] = update.tag
+			}
+		}
+
+		if len(composeTags) > 0 {
+			if err := docker.UpdateComposeFileTags(composeFile, composeTags); err != nil {
+				logger.Error("Failed to update compose file", "error", err)
+				c.JSON(http.StatusInternalServerError, models.Response{
+					Success: false,
+					Error:   "Failed to update docker-compose.yml: " + err.Error(),
+				})
+				return
+			}
+			logger.Info("Successfully updated docker-compose.yml")
+		}
+
+		// Step 3: Pull new images
+		logger.Info("Pulling new images")
+		for serviceName, update := range serviceUpdates {
+			if update.tag == "" {
+				continue
+			}
+
+			logger.Info("Pulling image", "service", serviceName, "image", update.imageName, "tag", update.tag)
+			if err := dockerClient.PullImage(update.imageName, update.tag); err != nil {
+				logger.Error("Failed to pull image", "service", serviceName, "error", err)
+				c.JSON(http.StatusInternalServerError, models.Response{
+					Success: false,
+					Error:   fmt.Sprintf("Failed to pull image for %s: %v", serviceName, err),
+				})
+				return
+			}
+		}
+
+		// Step 4: Recreate containers with new images
+		logger.Info("Recreating containers")
+		services := []string{"pangolin", "gerbil", "traefik", "crowdsec"}
+
+		for _, service := range services {
+			// Only recreate if a tag was provided for this service
+			update, exists := serviceUpdates[service]
+			if !exists || update.tag == "" {
+				logger.Debug("Skipping container recreation (no update)", "service", service)
+				continue
+			}
+
+			logger.Info("Recreating container", "service", service)
+			if err := dockerClient.RecreateContainer(service); err != nil {
+				logger.Error("Failed to recreate container", "service", service, "error", err)
+				c.JSON(http.StatusInternalServerError, models.Response{
+					Success: false,
+					Error:   fmt.Sprintf("Failed to recreate container %s: %v", service, err),
+				})
+				return
+			}
+		}
+
+		logger.Info("Stack updated successfully with CrowdSec")
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
 			Message: "Stack updated successfully with CrowdSec",
@@ -1517,24 +1598,105 @@ func UpdateWithoutCrowdSec(dockerClient *docker.Client) gin.HandlerFunc {
 			return
 		}
 
-		logger.Info("Updating stack without CrowdSec")
+		logger.Info("Updating stack without CrowdSec", "request", req)
 
-		services := []string{"pangolin", "gerbil", "traefik"}
+		// Get compose file path from environment
+		composeFile := os.Getenv("COMPOSE_FILE")
+		if composeFile == "" {
+			composeFile = "./docker-compose.yml"
+		}
 
-		for _, service := range services {
-			logger.Info("Restarting service", "service", service)
-			// Use longer timeout for Traefik
-			if service == "traefik" {
-				if err := dockerClient.RestartContainerWithTimeout(service, 60); err != nil {
-					logger.Error("Failed to restart service", "service", service, "error", err)
-				}
-			} else {
-				if err := dockerClient.RestartContainer(service); err != nil {
-					logger.Error("Failed to restart service", "service", service, "error", err)
-				}
+		// Map of service names to their image names and requested tags (excluding CrowdSec)
+		serviceUpdates := map[string]struct {
+			imageName string
+			tag       string
+		}{
+			"pangolin": {"fosrl/pangolin", req.PangolinTag},
+			"gerbil":   {"fosrl/gerbil", req.GerbilTag},
+			"traefik":  {"traefik", req.TraefikTag},
+		}
+
+		// Step 1: Validate all tags against registries
+		logger.Info("Validating image tags against registries")
+		for serviceName, update := range serviceUpdates {
+			if update.tag == "" {
+				logger.Debug("Skipping validation for service (no tag provided)", "service", serviceName)
+				continue
+			}
+
+			logger.Info("Validating tag", "service", serviceName, "image", update.imageName, "tag", update.tag)
+			if err := dockerClient.ValidateImageTag(update.imageName, update.tag); err != nil {
+				c.JSON(http.StatusBadRequest, models.Response{
+					Success: false,
+					Error:   fmt.Sprintf("Invalid tag for %s: %v", serviceName, err),
+				})
+				return
 			}
 		}
 
+		// Step 2: Update docker-compose.yml file
+		logger.Info("Updating docker-compose.yml file")
+		composeTags := make(map[string]string)
+		for serviceName, update := range serviceUpdates {
+			if update.tag != "" {
+				composeTags[serviceName] = update.tag
+			}
+		}
+
+		if len(composeTags) > 0 {
+			if err := docker.UpdateComposeFileTags(composeFile, composeTags); err != nil {
+				logger.Error("Failed to update compose file", "error", err)
+				c.JSON(http.StatusInternalServerError, models.Response{
+					Success: false,
+					Error:   "Failed to update docker-compose.yml: " + err.Error(),
+				})
+				return
+			}
+			logger.Info("Successfully updated docker-compose.yml")
+		}
+
+		// Step 3: Pull new images
+		logger.Info("Pulling new images")
+		for serviceName, update := range serviceUpdates {
+			if update.tag == "" {
+				continue
+			}
+
+			logger.Info("Pulling image", "service", serviceName, "image", update.imageName, "tag", update.tag)
+			if err := dockerClient.PullImage(update.imageName, update.tag); err != nil {
+				logger.Error("Failed to pull image", "service", serviceName, "error", err)
+				c.JSON(http.StatusInternalServerError, models.Response{
+					Success: false,
+					Error:   fmt.Sprintf("Failed to pull image for %s: %v", serviceName, err),
+				})
+				return
+			}
+		}
+
+		// Step 4: Recreate containers with new images
+		logger.Info("Recreating containers")
+		services := []string{"pangolin", "gerbil", "traefik"}
+
+		for _, service := range services {
+			// Only recreate if a tag was provided for this service
+			update, exists := serviceUpdates[service]
+			if !exists || update.tag == "" {
+				logger.Debug("Skipping container recreation (no update)", "service", service)
+				continue
+			}
+
+			logger.Info("Recreating container", "service", service)
+			if err := dockerClient.RecreateContainer(service); err != nil {
+				logger.Error("Failed to recreate container", "service", service, "error", err)
+				c.JSON(http.StatusInternalServerError, models.Response{
+					Success: false,
+					Error:   fmt.Sprintf("Failed to recreate container %s: %v", service, err),
+				})
+				return
+			}
+		}
+
+		logger.Info("Stack updated successfully without CrowdSec")
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
 			Message: "Stack updated successfully without CrowdSec",
