@@ -15,6 +15,8 @@ import Update from './pages/Update'
 import Cron from './pages/Cron'
 import Services from './pages/Services'
 import Configuration from './pages/Configuration'
+import DecisionAnalysis from './pages/DecisionAnalysis'
+import AlertAnalysis from './pages/AlertAnalysis'
 
 function App() {
   return (
@@ -27,6 +29,8 @@ function App() {
           <Route path="/whitelist" element={<Whitelist />} />
           <Route path="/scenarios" element={<Scenarios />} />
           <Route path="/captcha" element={<Captcha />} />
+          <Route path="/decisions" element={<DecisionAnalysis />} />
+          <Route path="/alerts" element={<AlertAnalysis />} />
           <Route path="/logs" element={<Logs />} />
           <Route path="/backup" element={<Backup />} />
           <Route path="/update" element={<Update />} />

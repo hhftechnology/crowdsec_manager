@@ -368,8 +368,34 @@ export const servicesAPI = {
 }
 
 // =============================================================================
-// 11. CROWDSEC SPECIFIC (4 endpoints)
+// 11. CROWDSEC SPECIFIC (6 endpoints)
 // =============================================================================
+
+export interface DecisionFilters {
+  since?: string
+  until?: string
+  type?: string
+  scope?: string
+  origin?: string
+  value?: string
+  scenario?: string
+  ip?: string
+  range?: string
+  includeAll?: boolean
+}
+
+export interface AlertFilters {
+  since?: string
+  until?: string
+  ip?: string
+  range?: string
+  scope?: string
+  value?: string
+  scenario?: string
+  type?: string
+  origin?: string
+  includeAll?: boolean
+}
 
 export const crowdsecAPI = {
   getBouncers: () =>
@@ -378,11 +404,17 @@ export const crowdsecAPI = {
   getDecisions: () =>
     api.get<ApiResponse<{ decisions: Decision[]; count: number }>>('/crowdsec/decisions'),
 
+  getDecisionsAnalysis: (filters: DecisionFilters) =>
+    api.get<ApiResponse<{ decisions: Decision[]; count: number }>>('/crowdsec/decisions/analysis', { params: filters }),
+
   getMetrics: () =>
     api.get<ApiResponse<{ metrics: string }>>('/crowdsec/metrics'),
 
   enroll: (data: EnrollRequest) =>
     api.post<ApiResponse<{ output: string }>>('/crowdsec/enroll', data),
+
+  getAlertsAnalysis: (filters: AlertFilters) =>
+    api.get<ApiResponse<{ alerts: any[]; count: number }>>('/crowdsec/alerts/analysis', { params: filters }),
 }
 
 // =============================================================================
@@ -419,6 +451,6 @@ export default {
   traefik: traefikAPI,
 }
 
-// Total: 43 endpoints
+// Total: 45 endpoints
 // Health: 2, IP: 4, Whitelist: 7, Scenarios: 2, Captcha: 2, Logs: 5,
-// Backup: 6, Update: 3, Cron: 3, Services: 3, CrowdSec: 4, Traefik: 2
+// Backup: 6, Update: 3, Cron: 3, Services: 3, CrowdSec: 6, Traefik: 2

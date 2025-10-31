@@ -808,29 +808,61 @@ func SetupCustomScenarios(dockerClient *docker.Client) gin.HandlerFunc {
 		logger.Info("Setting up custom scenarios", "count", len(req.Scenarios))
 
 		results := []gin.H{}
+		hasErrors := false
 
 		for _, scenario := range req.Scenarios {
-			scenarioPath := filepath.Join("/etc/crowdsec/scenarios", scenario.Name+".yaml")
+			// Extract filename from scenario name (handle namespace/scenario-name format)
+			filename := strings.ReplaceAll(scenario.Name, "/", "_") + ".yaml"
+			scenarioPath := filepath.Join("/etc/crowdsec/scenarios", filename)
 
-			_, err := dockerClient.ExecCommand("crowdsec", []string{
-				"sh", "-c", fmt.Sprintf("echo '%s' > %s", scenario.Content, scenarioPath),
-			})
+			logger.Debug("Writing scenario file", "name", scenario.Name, "path", scenarioPath)
+
+			// Use cat with heredoc to properly write multi-line YAML content
+			// This handles special characters and multi-line content correctly
+			command := fmt.Sprintf("cat > %s << 'SCENARIO_EOF'\n%s\nSCENARIO_EOF", scenarioPath, scenario.Content)
+
+			_, err := dockerClient.ExecCommand("crowdsec", []string{"sh", "-c", command})
 
 			result := gin.H{
 				"name":    scenario.Name,
 				"success": err == nil,
+				"path":    scenarioPath,
 			}
 			if err != nil {
 				result["error"] = err.Error()
+				hasErrors = true
+				logger.Error("Failed to write scenario file", "name", scenario.Name, "error", err)
+			} else {
+				logger.Info("Successfully wrote scenario file", "name", scenario.Name, "path", scenarioPath)
 			}
 			results = append(results, result)
 		}
 
-		// Reload scenarios
-		_, _ = dockerClient.ExecCommand("crowdsec", []string{"cscli", "scenarios", "reload"})
+		// Restart CrowdSec to load new scenarios
+		// Note: reload doesn't work for custom scenarios, need full restart
+		if !hasErrors {
+			logger.Info("Restarting CrowdSec to load new scenarios")
+			restartOutput, restartErr := dockerClient.ExecCommand("crowdsec", []string{"sh", "-c", "kill -SIGHUP 1"})
+			if restartErr != nil {
+				logger.Warn("Failed to send HUP signal to CrowdSec, attempting container restart", "error", restartErr)
+				// Fallback: restart the container
+				if err := dockerClient.RestartContainerWithTimeout("crowdsec", 30); err != nil {
+					logger.Error("Failed to restart CrowdSec container", "error", err)
+					c.JSON(http.StatusOK, models.Response{
+						Success: false,
+						Message: "Scenarios written but failed to restart CrowdSec",
+						Data:    results,
+						Error:   fmt.Sprintf("Restart failed: %v", err),
+					})
+					return
+				}
+			} else {
+				logger.Debug("CrowdSec reload signal sent", "output", restartOutput)
+			}
+		}
 
 		c.JSON(http.StatusOK, models.Response{
-			Success: true,
+			Success: !hasErrors,
 			Message: "Custom scenarios setup completed",
 			Data:    results,
 		})
@@ -2278,6 +2310,186 @@ func GetFileContent(dockerClient *docker.Client, db *database.Database) gin.Hand
 				"path":    filePath,
 				"content": content,
 			},
+		})
+	}
+}
+
+// GetDecisionsAnalysis retrieves CrowdSec decisions with advanced filtering
+func GetDecisionsAnalysis(dockerClient *docker.Client) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		logger.Info("Getting CrowdSec decisions with filters")
+
+		// Build command with filters from query parameters
+		cmd := []string{"cscli", "decisions", "list", "-o", "json"}
+
+		// Add time-based filters
+		if since := c.Query("since"); since != "" {
+			cmd = append(cmd, "--since", since)
+		}
+		if until := c.Query("until"); until != "" {
+			cmd = append(cmd, "--until", until)
+		}
+
+		// Add decision type filter
+		if decType := c.Query("type"); decType != "" && decType != "all" {
+			cmd = append(cmd, "-t", decType)
+		}
+
+		// Add scope filter
+		if scope := c.Query("scope"); scope != "" && scope != "all" {
+			cmd = append(cmd, "--scope", scope)
+		}
+
+		// Add origin filter
+		if origin := c.Query("origin"); origin != "" && origin != "all" {
+			cmd = append(cmd, "--origin", origin)
+		}
+
+		// Add value filter
+		if value := c.Query("value"); value != "" {
+			cmd = append(cmd, "-v", value)
+		}
+
+		// Add scenario filter
+		if scenario := c.Query("scenario"); scenario != "" {
+			cmd = append(cmd, "-s", scenario)
+		}
+
+		// Add IP filter (shorthand for --scope ip --value <IP>)
+		if ip := c.Query("ip"); ip != "" {
+			cmd = append(cmd, "-i", ip)
+		}
+
+		// Add range filter (shorthand for --scope range --value <RANGE>)
+		if ipRange := c.Query("range"); ipRange != "" {
+			cmd = append(cmd, "-r", ipRange)
+		}
+
+		// Add --all flag to include decisions from Central API
+		if includeAll := c.Query("includeAll"); includeAll == "true" {
+			cmd = append(cmd, "-a")
+		}
+
+		logger.Debug("Executing decision analysis command", "cmd", cmd)
+
+		output, err := dockerClient.ExecCommand("crowdsec", cmd)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to get decisions: %v", err),
+			})
+			return
+		}
+
+		// Parse the JSON to ensure it's valid and return as structured data
+		var decisions []models.Decision
+		if err := json.Unmarshal([]byte(output), &decisions); err != nil {
+			logger.Warn("Failed to parse decisions JSON",
+				"error", err,
+				"output_length", len(output),
+				"output_preview", truncateString(output, 100))
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to parse decisions JSON: %v", err),
+			})
+			return
+		}
+
+		logger.Debug("Decisions analysis retrieved successfully", "count", len(decisions))
+
+		c.JSON(http.StatusOK, models.Response{
+			Success: true,
+			Data:    gin.H{"decisions": decisions, "count": len(decisions)},
+		})
+	}
+}
+
+// GetAlertsAnalysis retrieves CrowdSec alerts with advanced filtering
+func GetAlertsAnalysis(dockerClient *docker.Client) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		logger.Info("Getting CrowdSec alerts with filters")
+
+		// Build command with filters from query parameters
+		cmd := []string{"cscli", "alerts", "list", "-o", "json"}
+
+		// Add time-based filters
+		if since := c.Query("since"); since != "" {
+			cmd = append(cmd, "--since", since)
+		}
+		if until := c.Query("until"); until != "" {
+			cmd = append(cmd, "--until", until)
+		}
+
+		// Add IP filter
+		if ip := c.Query("ip"); ip != "" {
+			cmd = append(cmd, "-i", ip)
+		}
+
+		// Add range filter
+		if ipRange := c.Query("range"); ipRange != "" {
+			cmd = append(cmd, "-r", ipRange)
+		}
+
+		// Add scope filter
+		if scope := c.Query("scope"); scope != "" && scope != "all" {
+			cmd = append(cmd, "--scope", scope)
+		}
+
+		// Add value filter
+		if value := c.Query("value"); value != "" {
+			cmd = append(cmd, "-v", value)
+		}
+
+		// Add scenario filter
+		if scenario := c.Query("scenario"); scenario != "" {
+			cmd = append(cmd, "-s", scenario)
+		}
+
+		// Add type filter (decision type associated with alert)
+		if alertType := c.Query("type"); alertType != "" && alertType != "all" {
+			cmd = append(cmd, "--type", alertType)
+		}
+
+		// Add origin filter
+		if origin := c.Query("origin"); origin != "" && origin != "all" {
+			cmd = append(cmd, "--origin", origin)
+		}
+
+		// Add --all flag to include alerts from Central API
+		if includeAll := c.Query("includeAll"); includeAll == "true" {
+			cmd = append(cmd, "-a")
+		}
+
+		logger.Debug("Executing alert analysis command", "cmd", cmd)
+
+		output, err := dockerClient.ExecCommand("crowdsec", cmd)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to get alerts: %v", err),
+			})
+			return
+		}
+
+		// Parse the JSON output
+		var alerts []interface{}
+		if err := json.Unmarshal([]byte(output), &alerts); err != nil {
+			logger.Warn("Failed to parse alerts JSON",
+				"error", err,
+				"output_length", len(output),
+				"output_preview", truncateString(output, 100))
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to parse alerts JSON: %v", err),
+			})
+			return
+		}
+
+		logger.Debug("Alerts analysis retrieved successfully", "count", len(alerts))
+
+		c.JSON(http.StatusOK, models.Response{
+			Success: true,
+			Data:    gin.H{"alerts": alerts, "count": len(alerts)},
 		})
 	}
 }

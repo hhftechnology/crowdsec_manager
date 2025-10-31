@@ -120,6 +120,8 @@ func RegisterServicesRoutes(router *gin.RouterGroup, dockerClient *docker.Client
 	{
 		crowdsec.GET("/bouncers", handlers.GetBouncers(dockerClient))
 		crowdsec.GET("/decisions", handlers.GetDecisions(dockerClient))
+		crowdsec.GET("/decisions/analysis", handlers.GetDecisionsAnalysis(dockerClient))
+		crowdsec.GET("/alerts/analysis", handlers.GetAlertsAnalysis(dockerClient))
 		crowdsec.GET("/metrics", handlers.GetMetrics(dockerClient))
 		crowdsec.POST("/enroll", handlers.EnrollCrowdSec(dockerClient))
 	}

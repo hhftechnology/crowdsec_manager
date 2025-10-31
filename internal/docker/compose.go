@@ -7,25 +7,38 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// Healthcheck represents the healthcheck configuration for a service
+type Healthcheck struct {
+	Test     interface{} `yaml:"test,omitempty"`
+	Interval string      `yaml:"interval,omitempty"`
+	Timeout  string      `yaml:"timeout,omitempty"`
+	Retries  int         `yaml:"retries,omitempty"`
+	StartPeriod string   `yaml:"start_period,omitempty"`
+}
+
 // ComposeService represents a service in docker-compose.yml
 type ComposeService struct {
-	Image         string                 `yaml:"image,omitempty"`
-	ContainerName string                 `yaml:"container_name,omitempty"`
-	Build         map[string]interface{} `yaml:"build,omitempty"`
-	Restart       string                 `yaml:"restart,omitempty"`
-	Ports         []string               `yaml:"ports,omitempty"`
-	Environment   interface{}            `yaml:"environment,omitempty"`
-	Volumes       []string               `yaml:"volumes,omitempty"`
-	Networks      interface{}            `yaml:"networks,omitempty"`
-	DependsOn     interface{}            `yaml:"depends_on,omitempty"`
-	Labels        interface{}            `yaml:"labels,omitempty"`
-	Command       interface{}            `yaml:"command,omitempty"`
-	StopGracePeriod string               `yaml:"stop_grace_period,omitempty"`
+	Image           string                 `yaml:"image,omitempty"`
+	ContainerName   string                 `yaml:"container_name,omitempty"`
+	Build           map[string]interface{} `yaml:"build,omitempty"`
+	Restart         string                 `yaml:"restart,omitempty"`
+	Ports           []string               `yaml:"ports,omitempty"`
+	Environment     interface{}            `yaml:"environment,omitempty"`
+	Volumes         []string               `yaml:"volumes,omitempty"`
+	Networks        interface{}            `yaml:"networks,omitempty"`
+	DependsOn       interface{}            `yaml:"depends_on,omitempty"`
+	Labels          interface{}            `yaml:"labels,omitempty"`
+	Command         interface{}            `yaml:"command,omitempty"`
+	StopGracePeriod string                 `yaml:"stop_grace_period,omitempty"`
+	Healthcheck     *Healthcheck           `yaml:"healthcheck,omitempty"`
+	CapAdd          []string               `yaml:"cap_add,omitempty"`
+	NetworkMode     string                 `yaml:"network_mode,omitempty"`
 }
 
 // ComposeFile represents a docker-compose.yml file structure
 type ComposeFile struct {
-	Version  string                    `yaml:"version"`
+	Name     string                    `yaml:"name,omitempty"`
+	Version  string                    `yaml:"version,omitempty"`
 	Services map[string]ComposeService `yaml:"services"`
 	Networks map[string]interface{}    `yaml:"networks,omitempty"`
 	Volumes  map[string]interface{}    `yaml:"volumes,omitempty"`

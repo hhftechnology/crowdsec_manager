@@ -15,6 +15,8 @@ import {
   Github,
   MessageCircle,
   Sliders,
+  AlertTriangle,
+  Target,
 } from 'lucide-react'
 import { Separator } from './ui/separator'
 
@@ -25,6 +27,8 @@ const navigation = [
   { name: 'Whitelist', href: '/whitelist', icon: ListFilter },
   { name: 'Scenarios', href: '/scenarios', icon: Shield },
   { name: 'Captcha', href: '/captcha', icon: ScanFace },
+  { name: 'Decision Analysis', href: '/decisions', icon: Target },
+  { name: 'Alert Analysis', href: '/alerts', icon: AlertTriangle },
   { name: 'Logs & Monitoring', href: '/logs', icon: FileText },
   { name: 'Backups', href: '/backup', icon: Database },
   { name: 'Stack Update', href: '/update', icon: RefreshCw },
