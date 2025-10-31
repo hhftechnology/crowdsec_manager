@@ -841,10 +841,13 @@ func ListScenarios(dockerClient *docker.Client) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		logger.Info("Listing scenarios")
 
+		// Try JSON format first
 		output, err := dockerClient.ExecCommand("crowdsec", []string{
 			"cscli", "scenarios", "list", "-o", "json",
 		})
+		
 		if err != nil {
+			logger.Error("Failed to list scenarios", "error", err)
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
 				Error:   fmt.Sprintf("Failed to list scenarios: %v", err),
@@ -852,22 +855,35 @@ func ListScenarios(dockerClient *docker.Client) gin.HandlerFunc {
 			return
 		}
 
-		// Parse the JSON properly
-		var scenariosData map[string]interface{}
-		if err := json.Unmarshal([]byte(output), &scenariosData); err != nil {
-			logger.Warn("Failed to parse scenarios JSON", "error", err)
-			c.JSON(http.StatusInternalServerError, models.Response{
-				Success: false,
-				Error:   fmt.Sprintf("Failed to parse scenarios: %v", err),
+		// Log the raw output for debugging
+		logger.Debug("Raw scenarios output", "length", len(output), "preview", output[:min(len(output), 200)])
+
+		// Try to parse as JSON first
+		var jsonScenarios []interface{}
+		if err := json.Unmarshal([]byte(output), &jsonScenarios); err == nil {
+			// Successfully parsed as JSON
+			logger.Info("Successfully parsed scenarios as JSON", "count", len(jsonScenarios))
+			c.JSON(http.StatusOK, models.Response{
+				Success: true,
+				Data:    gin.H{"scenarios": jsonScenarios},
 			})
 			return
 		}
 
+		// If JSON parsing fails, return the raw string for frontend to parse
+		logger.Warn("Failed to parse scenarios as JSON, returning raw output")
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
-			Data:    scenariosData,
+			Data:    gin.H{"scenarios": output},
 		})
 	}
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // =============================================================================
