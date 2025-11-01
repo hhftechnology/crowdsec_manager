@@ -891,7 +891,7 @@ func ListScenarios(dockerClient *docker.Client) gin.HandlerFunc {
 		// Log the raw output for debugging
 		logger.Debug("Raw scenarios output",
 			"length", len(output),
-			"first_200_chars", truncateString(output, 200))
+			"first_500_chars", truncateString(output, 500))
 
 		// Clean the output - remove any non-JSON characters
 		cleanedOutput := strings.TrimSpace(output)
@@ -899,16 +899,40 @@ func ListScenarios(dockerClient *docker.Client) gin.HandlerFunc {
 		// Try to parse as JSON first
 		var jsonScenarios []any
 		if err := json.Unmarshal([]byte(cleanedOutput), &jsonScenarios); err == nil {
-			// Successfully parsed as JSON
-			logger.Info("Successfully parsed scenarios as JSON", "count", len(jsonScenarios))
+			// Successfully parsed as JSON array
+			logger.Info("Successfully parsed scenarios as JSON array", "total_count", len(jsonScenarios))
 
-			// Return with proper structure including count
+			// Filter for only installed/enabled scenarios
+			installedScenarios := []any{}
+			for _, scenario := range jsonScenarios {
+				if scenarioMap, ok := scenario.(map[string]any); ok {
+					// Check if scenario has status field indicating it's installed
+					if status, exists := scenarioMap["status"]; exists {
+						statusStr := fmt.Sprintf("%v", status)
+						// Only include scenarios with "enabled" or "disabled" status (installed)
+						if statusStr == "enabled" || statusStr == "disabled" {
+							installedScenarios = append(installedScenarios, scenario)
+						}
+					} else if installed, exists := scenarioMap["installed"]; exists {
+						// Some versions use "installed" boolean field
+						if installedBool, ok := installed.(bool); ok && installedBool {
+							installedScenarios = append(installedScenarios, scenario)
+						}
+					}
+				}
+			}
+
+			logger.Info("Filtered installed scenarios",
+				"total", len(jsonScenarios),
+				"installed", len(installedScenarios))
+
+			// Return filtered scenarios
 			c.JSON(http.StatusOK, models.Response{
 				Success: true,
-				Message: fmt.Sprintf("Found %d scenarios", len(jsonScenarios)),
+				Message: fmt.Sprintf("Found %d installed scenarios", len(installedScenarios)),
 				Data:    gin.H{
-					"scenarios": jsonScenarios,
-					"count": len(jsonScenarios),
+					"scenarios": installedScenarios,
+					"count":     len(installedScenarios),
 				},
 			})
 			return
@@ -929,7 +953,7 @@ func ListScenarios(dockerClient *docker.Client) gin.HandlerFunc {
 				Message: fmt.Sprintf("Found %d scenarios (parsed from text)", len(scenarios)),
 				Data:    gin.H{
 					"scenarios": scenarios,
-					"count": len(scenarios),
+					"count":     len(scenarios),
 				},
 			})
 			return
@@ -945,7 +969,7 @@ func ListScenarios(dockerClient *docker.Client) gin.HandlerFunc {
 			Error:   "Failed to parse scenarios output",
 			Data: gin.H{
 				"raw_output_preview": truncateString(output, 500),
-				"output_length": len(output),
+				"output_length":      len(output),
 			},
 		})
 	}
@@ -2651,6 +2675,214 @@ func analyzeLogs(logs string) models.LogStats {
 	}
 
 	return stats
+}
+
+// =============================================================================
+// 13. ALLOWLIST MANAGEMENT
+// =============================================================================
+
+// ListAllowlists lists all CrowdSec allowlists
+func ListAllowlists(dockerClient *docker.Client) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		logger.Info("Listing allowlists")
+
+		output, err := dockerClient.ExecCommand("crowdsec", []string{"cscli", "allowlists", "list", "-o", "json"})
+		if err != nil {
+			logger.Error("Failed to list allowlists", "error", err)
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to list allowlists: %v", err),
+			})
+			return
+		}
+
+		var allowlists []models.Allowlist
+		if err := json.Unmarshal([]byte(output), &allowlists); err != nil {
+			logger.Error("Failed to parse allowlists JSON", "error", err)
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to parse allowlists: %v", err),
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, models.Response{
+			Success: true,
+			Data:    allowlists,
+			Message: fmt.Sprintf("Found %d allowlists", len(allowlists)),
+		})
+	}
+}
+
+// CreateAllowlist creates a new CrowdSec allowlist
+func CreateAllowlist(dockerClient *docker.Client) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req models.AllowlistCreateRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Invalid request: %v", err),
+			})
+			return
+		}
+
+		logger.Info("Creating allowlist", "name", req.Name)
+
+		cmd := []string{"cscli", "allowlists", "create", req.Name, "--description", req.Description}
+		output, err := dockerClient.ExecCommand("crowdsec", cmd)
+		if err != nil {
+			logger.Error("Failed to create allowlist", "name", req.Name, "error", err, "output", output)
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to create allowlist: %v", err),
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, models.Response{
+			Success: true,
+			Data: models.Allowlist{
+				Name:        req.Name,
+				Description: req.Description,
+				CreatedAt:   time.Now(),
+			},
+			Message: fmt.Sprintf("Allowlist '%s' created successfully", req.Name),
+		})
+	}
+}
+
+// InspectAllowlist inspects a specific allowlist
+func InspectAllowlist(dockerClient *docker.Client) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		name := c.Param("name")
+		logger.Info("Inspecting allowlist", "name", name)
+
+		output, err := dockerClient.ExecCommand("crowdsec", []string{"cscli", "allowlists", "inspect", name, "-o", "json"})
+		if err != nil {
+			logger.Error("Failed to inspect allowlist", "name", name, "error", err)
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to inspect allowlist: %v", err),
+			})
+			return
+		}
+
+		var response models.AllowlistInspectResponse
+		if err := json.Unmarshal([]byte(output), &response); err != nil {
+			logger.Error("Failed to parse allowlist JSON", "error", err)
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to parse allowlist data: %v", err),
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, models.Response{
+			Success: true,
+			Data:    response,
+			Message: fmt.Sprintf("Allowlist '%s' has %d entries", name, response.Count),
+		})
+	}
+}
+
+// AddAllowlistEntries adds entries to an allowlist
+func AddAllowlistEntries(dockerClient *docker.Client) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req models.AllowlistAddEntriesRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Invalid request: %v", err),
+			})
+			return
+		}
+
+		logger.Info("Adding entries to allowlist", "name", req.AllowlistName, "count", len(req.Values))
+
+		// Build command
+		cmd := []string{"cscli", "allowlists", "add", req.AllowlistName}
+		cmd = append(cmd, req.Values...)
+
+		// Add optional flags
+		if req.Expiration != "" {
+			cmd = append(cmd, "-e", req.Expiration)
+		}
+		if req.Description != "" {
+			cmd = append(cmd, "-d", req.Description)
+		}
+
+		output, err := dockerClient.ExecCommand("crowdsec", cmd)
+		if err != nil {
+			logger.Error("Failed to add entries to allowlist", "name", req.AllowlistName, "error", err, "output", output)
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to add entries: %v", err),
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, models.Response{
+			Success: true,
+			Message: fmt.Sprintf("Added %d entries to allowlist '%s'", len(req.Values), req.AllowlistName),
+		})
+	}
+}
+
+// RemoveAllowlistEntries removes entries from an allowlist
+func RemoveAllowlistEntries(dockerClient *docker.Client) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req models.AllowlistRemoveEntriesRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Invalid request: %v", err),
+			})
+			return
+		}
+
+		logger.Info("Removing entries from allowlist", "name", req.AllowlistName, "count", len(req.Values))
+
+		cmd := []string{"cscli", "allowlists", "remove", req.AllowlistName}
+		cmd = append(cmd, req.Values...)
+
+		output, err := dockerClient.ExecCommand("crowdsec", cmd)
+		if err != nil {
+			logger.Error("Failed to remove entries from allowlist", "name", req.AllowlistName, "error", err, "output", output)
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to remove entries: %v", err),
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, models.Response{
+			Success: true,
+			Message: fmt.Sprintf("Removed %d entries from allowlist '%s'", len(req.Values), req.AllowlistName),
+		})
+	}
+}
+
+// DeleteAllowlist deletes an allowlist
+func DeleteAllowlist(dockerClient *docker.Client) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		name := c.Param("name")
+		logger.Info("Deleting allowlist", "name", name)
+
+		output, err := dockerClient.ExecCommand("crowdsec", []string{"cscli", "allowlists", "delete", name})
+		if err != nil {
+			logger.Error("Failed to delete allowlist", "name", name, "error", err, "output", output)
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to delete allowlist: %v", err),
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, models.Response{
+			Success: true,
+			Message: fmt.Sprintf("Allowlist '%s' deleted successfully", name),
+		})
+	}
 }
 
 // =============================================================================

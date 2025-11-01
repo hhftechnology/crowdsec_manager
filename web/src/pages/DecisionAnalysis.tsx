@@ -305,7 +305,7 @@ export default function DecisionAnalysis() {
                     <TableHead>Origin</TableHead>
                     <TableHead>Scenario</TableHead>
                     <TableHead>Duration</TableHead>
-                    <TableHead>Created</TableHead>
+                    <TableHead>Expires</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -326,7 +326,7 @@ export default function DecisionAnalysis() {
                       <TableCell className="text-sm">{decision.scenario}</TableCell>
                       <TableCell className="text-sm">{decision.duration}</TableCell>
                       <TableCell className="text-sm">
-                        {new Date(decision.created_at).toLocaleString()}
+                        {decision.until ? new Date(decision.until).toLocaleString() : 'N/A'}
                       </TableCell>
                     </TableRow>
                   ))}

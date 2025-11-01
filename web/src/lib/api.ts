@@ -195,6 +195,43 @@ export interface ConfigPathResponse {
   dynamic_config_path: string
 }
 
+export interface Allowlist {
+  name: string
+  description: string
+  created_at?: string
+}
+
+export interface AllowlistEntry {
+  value: string
+  description: string
+  expiration: string
+  expires_at?: string
+}
+
+export interface AllowlistCreateRequest {
+  name: string
+  description: string
+}
+
+export interface AllowlistAddEntriesRequest {
+  allowlist_name: string
+  values: string[]
+  expiration?: string
+  description?: string
+}
+
+export interface AllowlistRemoveEntriesRequest {
+  allowlist_name: string
+  values: string[]
+}
+
+export interface AllowlistInspectResponse {
+  name: string
+  description: string
+  entries: AllowlistEntry[]
+  count: number
+}
+
 // =============================================================================
 // 1. HEALTH & DIAGNOSTICS (2 endpoints)
 // =============================================================================
@@ -435,6 +472,30 @@ export const traefikAPI = {
     api.post<ApiResponse>('/traefik/config-path', data),
 }
 
+// =============================================================================
+// 13. ALLOWLIST (6 endpoints)
+// =============================================================================
+
+export const allowlistAPI = {
+  list: () =>
+    api.get<ApiResponse<Allowlist[]>>('/allowlist/list'),
+
+  create: (data: AllowlistCreateRequest) =>
+    api.post<ApiResponse<Allowlist>>('/allowlist/create', data),
+
+  inspect: (name: string) =>
+    api.get<ApiResponse<AllowlistInspectResponse>>(`/allowlist/inspect/${name}`),
+
+  addEntries: (data: AllowlistAddEntriesRequest) =>
+    api.post<ApiResponse>('/allowlist/add', data),
+
+  removeEntries: (data: AllowlistRemoveEntriesRequest) =>
+    api.post<ApiResponse>('/allowlist/remove', data),
+
+  delete: (name: string) =>
+    api.delete<ApiResponse>(`/allowlist/${name}`),
+}
+
 // Export default API object with all endpoints organized
 export default {
   health: healthAPI,
@@ -449,8 +510,9 @@ export default {
   services: servicesAPI,
   crowdsec: crowdsecAPI,
   traefik: traefikAPI,
+  allowlist: allowlistAPI,
 }
 
-// Total: 45 endpoints
+// Total: 51 endpoints
 // Health: 2, IP: 4, Whitelist: 7, Scenarios: 2, Captcha: 2, Logs: 5,
-// Backup: 6, Update: 3, Cron: 3, Services: 3, CrowdSec: 6, Traefik: 2
+// Backup: 6, Update: 3, Cron: 3, Services: 3, CrowdSec: 6, Traefik: 4, Allowlist: 6

@@ -7,6 +7,7 @@ import Dashboard from './pages/Dashboard'
 import Health from './pages/Health'
 import IPManagement from './pages/IPManagement'
 import Whitelist from './pages/Whitelist'
+import Allowlist from './pages/Allowlist'
 import Scenarios from './pages/Scenarios'
 import Captcha from './pages/Captcha'
 import Logs from './pages/Logs'
@@ -27,6 +28,7 @@ function App() {
           <Route path="/health" element={<Health />} />
           <Route path="/ip-management" element={<IPManagement />} />
           <Route path="/whitelist" element={<Whitelist />} />
+          <Route path="/allowlist" element={<Allowlist />} />
           <Route path="/scenarios" element={<Scenarios />} />
           <Route path="/captcha" element={<Captcha />} />
           <Route path="/decisions" element={<DecisionAnalysis />} />

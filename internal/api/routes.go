@@ -106,6 +106,19 @@ func RegisterCronRoutes(router *gin.RouterGroup) {
 	}
 }
 
+// RegisterAllowlistRoutes registers allowlist management routes
+func RegisterAllowlistRoutes(router *gin.RouterGroup, dockerClient *docker.Client) {
+	allowlist := router.Group("/allowlist")
+	{
+		allowlist.GET("/list", handlers.ListAllowlists(dockerClient))
+		allowlist.POST("/create", handlers.CreateAllowlist(dockerClient))
+		allowlist.GET("/inspect/:name", handlers.InspectAllowlist(dockerClient))
+		allowlist.POST("/add", handlers.AddAllowlistEntries(dockerClient))
+		allowlist.POST("/remove", handlers.RemoveAllowlistEntries(dockerClient))
+		allowlist.DELETE("/:name", handlers.DeleteAllowlist(dockerClient))
+	}
+}
+
 // RegisterServicesRoutes registers service management routes
 func RegisterServicesRoutes(router *gin.RouterGroup, dockerClient *docker.Client, db *database.Database) {
 	services := router.Group("/services")

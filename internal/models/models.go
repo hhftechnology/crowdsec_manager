@@ -27,14 +27,16 @@ type HealthStatus struct {
 
 // Decision represents a CrowdSec decision
 type Decision struct {
-	ID        int64     `json:"id"`
-	Origin    string    `json:"origin"`
-	Type      string    `json:"type"`
-	Scope     string    `json:"scope"`
-	Value     string    `json:"value"`
-	Duration  string    `json:"duration"`
-	Scenario  string    `json:"scenario"`
-	CreatedAt time.Time `json:"created_at"`
+	ID        int64  `json:"id"`
+	Origin    string `json:"origin"`
+	Type      string `json:"type"`
+	Scope     string `json:"scope"`
+	Value     string `json:"value"`
+	Duration  string `json:"duration"`
+	Scenario  string `json:"scenario"`
+	Until     string `json:"until,omitempty"`     // Expiration timestamp
+	Simulated *bool  `json:"simulated,omitempty"` // Whether decision is simulated
+	UUID      string `json:"uuid,omitempty"`      // Unique identifier for LAPI→CAPI
 }
 
 // Bouncer represents a CrowdSec bouncer
@@ -193,4 +195,47 @@ type ServiceAction struct {
 // ConfigPathRequest represents a configuration path update request
 type ConfigPathRequest struct {
 	DynamicConfigPath string `json:"dynamic_config_path" binding:"required"`
+}
+
+// Allowlist represents a CrowdSec allowlist
+type Allowlist struct {
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	CreatedAt   time.Time `json:"created_at,omitempty"`
+}
+
+// AllowlistEntry represents an entry in an allowlist
+type AllowlistEntry struct {
+	Value       string    `json:"value"`        // IP or CIDR range
+	Description string    `json:"description"`  // Optional entry description
+	Expiration  string    `json:"expiration"`   // Optional expiration (e.g., "7d")
+	ExpiresAt   time.Time `json:"expires_at,omitempty"`
+}
+
+// AllowlistCreateRequest represents a request to create a new allowlist
+type AllowlistCreateRequest struct {
+	Name        string `json:"name" binding:"required"`
+	Description string `json:"description" binding:"required"`
+}
+
+// AllowlistAddEntriesRequest represents a request to add entries to an allowlist
+type AllowlistAddEntriesRequest struct {
+	AllowlistName string   `json:"allowlist_name" binding:"required"`
+	Values        []string `json:"values" binding:"required"`
+	Expiration    string   `json:"expiration,omitempty"`    // Optional expiration (e.g., "7d")
+	Description   string   `json:"description,omitempty"`   // Optional entry description
+}
+
+// AllowlistRemoveEntriesRequest represents a request to remove entries from an allowlist
+type AllowlistRemoveEntriesRequest struct {
+	AllowlistName string   `json:"allowlist_name" binding:"required"`
+	Values        []string `json:"values" binding:"required"`
+}
+
+// AllowlistInspectResponse represents the detailed information about an allowlist
+type AllowlistInspectResponse struct {
+	Name        string           `json:"name"`
+	Description string           `json:"description"`
+	Entries     []AllowlistEntry `json:"entries"`
+	Count       int              `json:"count"`
 }
