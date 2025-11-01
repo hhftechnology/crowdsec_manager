@@ -1,0 +1,60 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Documentation
+*.md
+LICENSE
+CLAUDE.md
+FUNCTIONS_MAP.md
+IMPLEMENTATION_GUIDE.md
+PROJECT_STATUS.md
+FRONTEND_COMPLETE.md
+
+# Build artifacts
+crowdsec-manager
+crowdsec-manager.exe
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test files
+*_test.go
+testdata/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+logs/
+*.log
+
+# Backups
+backups/
+*.tar.gz
+*.backup
+
+# Node modules (handled in multi-stage build)
+web/node_modules/
+web/dist/
+web/.vite/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temp files
+tmp/
+temp/
+*.tmp
+
+# Environment
+.env
+.env.local
+.env.*.local
