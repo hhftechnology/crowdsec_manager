@@ -878,7 +878,7 @@ func ListScenarios(dockerClient *docker.Client) gin.HandlerFunc {
 		output, err := dockerClient.ExecCommand("crowdsec", []string{
 			"cscli", "scenarios", "list", "-o", "json",
 		})
-		
+
 		if err != nil {
 			logger.Error("Failed to list scenarios", "error", err)
 			c.JSON(http.StatusInternalServerError, models.Response{
@@ -889,25 +889,64 @@ func ListScenarios(dockerClient *docker.Client) gin.HandlerFunc {
 		}
 
 		// Log the raw output for debugging
-		logger.Debug("Raw scenarios output", "length", len(output), "preview", output[:min(len(output), 200)])
+		logger.Debug("Raw scenarios output",
+			"length", len(output),
+			"first_200_chars", truncateString(output, 200))
+
+		// Clean the output - remove any non-JSON characters
+		cleanedOutput := strings.TrimSpace(output)
 
 		// Try to parse as JSON first
-		var jsonScenarios []interface{}
-		if err := json.Unmarshal([]byte(output), &jsonScenarios); err == nil {
+		var jsonScenarios []any
+		if err := json.Unmarshal([]byte(cleanedOutput), &jsonScenarios); err == nil {
 			// Successfully parsed as JSON
 			logger.Info("Successfully parsed scenarios as JSON", "count", len(jsonScenarios))
+
+			// Return with proper structure including count
 			c.JSON(http.StatusOK, models.Response{
 				Success: true,
-				Data:    gin.H{"scenarios": jsonScenarios},
+				Message: fmt.Sprintf("Found %d scenarios", len(jsonScenarios)),
+				Data:    gin.H{
+					"scenarios": jsonScenarios,
+					"count": len(jsonScenarios),
+				},
 			})
 			return
 		}
 
-		// If JSON parsing fails, return the raw string for frontend to parse
-		logger.Warn("Failed to parse scenarios as JSON, returning raw output")
-		c.JSON(http.StatusOK, models.Response{
-			Success: true,
-			Data:    gin.H{"scenarios": output},
+		// JSON parsing failed, try text format
+		logger.Warn("Failed to parse scenarios as JSON",
+			"error", err,
+			"trying_text_format", true)
+
+		// Fallback to text parsing
+		scenarios := parseHumanReadableScenarios(output)
+
+		if len(scenarios) > 0 {
+			logger.Info("Successfully parsed scenarios from human format", "count", len(scenarios))
+			c.JSON(http.StatusOK, models.Response{
+				Success: true,
+				Message: fmt.Sprintf("Found %d scenarios (parsed from text)", len(scenarios)),
+				Data:    gin.H{
+					"scenarios": scenarios,
+					"count": len(scenarios),
+				},
+			})
+			return
+		}
+
+		// Better error response with debugging info
+		logger.Error("Failed to parse scenarios in any format",
+			"output_length", len(output),
+			"output_preview", truncateString(output, 500))
+
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Success: false,
+			Error:   "Failed to parse scenarios output",
+			Data: gin.H{
+				"raw_output_preview": truncateString(output, 500),
+				"output_length": len(output),
+			},
 		})
 	}
 }
@@ -2624,4 +2663,58 @@ func truncateString(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen] + "... (truncated)"
+}
+
+// parseHumanReadableScenarios parses the human-readable table format
+func parseHumanReadableScenarios(output string) []gin.H {
+	scenarios := []gin.H{}
+	lines := strings.Split(output, "\n")
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+
+		// Skip empty lines, headers, and separator lines
+		if line == "" ||
+			strings.Contains(line, "─") ||
+			strings.Contains(line, "SCENARIOS") ||
+			strings.Contains(line, "Name") ||
+			strings.Contains(line, "📦 Status") {
+			continue
+		}
+
+		// Remove leading/trailing pipes if present
+		line = strings.Trim(line, "│ ")
+
+		// Split by multiple spaces (table columns)
+		parts := strings.Fields(line)
+
+		if len(parts) >= 2 {
+			scenario := gin.H{
+				"name": parts[0],
+			}
+
+			// Parse status
+			if len(parts) >= 2 {
+				if strings.Contains(parts[1], "enabled") || parts[1] == "✔️" {
+					scenario["status"] = "enabled"
+				} else {
+					scenario["status"] = parts[1]
+				}
+			}
+
+			// Parse version
+			if len(parts) >= 3 {
+				scenario["version"] = parts[2]
+			}
+
+			// Parse local path (join remaining parts)
+			if len(parts) >= 4 {
+				scenario["local_path"] = strings.Join(parts[3:], " ")
+			}
+
+			scenarios = append(scenarios, scenario)
+		}
+	}
+
+	return scenarios
 }

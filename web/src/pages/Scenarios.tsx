@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import api, { Scenario, ScenarioSetupRequest } from '@/lib/api'
@@ -7,20 +7,42 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import { FileText, Plus, X } from 'lucide-react'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { FileText, Plus, X, CheckCircle2, AlertCircle } from 'lucide-react'
+
+interface ScenarioItem {
+  name: string
+  status?: string
+  version?: string
+  local_path?: string
+}
+
+interface ScenariosResponse {
+  scenarios?: ScenarioItem[] | string
+  count?: number
+}
 
 export default function Scenarios() {
   const queryClient = useQueryClient()
   const [scenarios, setScenarios] = useState<Scenario[]>([
     { name: '', description: '', content: '' }
   ])
+  const [debugInfo, setDebugInfo] = useState<any>(null)
 
-  const { data: scenariosList, isLoading } = useQuery({
+  const { data: scenariosListRaw, isLoading, error, isError } = useQuery({
     queryKey: ['scenarios'],
     queryFn: async () => {
-      const response = await api.scenarios.list()
-      return response.data.data
+      try {
+        const response = await api.scenarios.list()
+        console.log('API Response:', response.data)
+        return response.data.data as ScenariosResponse
+      } catch (err) {
+        console.error('Error fetching scenarios:', err)
+        throw err
+      }
     },
+    retry: 1,
+    retryDelay: 1000,
   })
 
   const setupMutation = useMutation({
@@ -66,34 +88,43 @@ export default function Scenarios() {
     setupMutation.mutate({ scenarios: validScenarios })
   }
 
-  // FIXED: Properly handle both string and already-parsed JSON response
-  const parseScenariosList = (data: any): any[] => {
-    if (!data) return []
+  // Robust parsing with comprehensive logging and type checking
+  const parseScenariosList = (data: ScenariosResponse | null | undefined): ScenarioItem[] => {
+    console.log('Parsing scenarios data:', data)
 
-    // If scenarios is already an array (properly parsed JSON from backend)
+    if (!data) {
+      console.warn('No data received')
+      return []
+    }
+
+    // Check if scenarios is already an array
     if (Array.isArray(data.scenarios)) {
-      return data.scenarios
+      console.log('Scenarios is array:', data.scenarios.length, 'items')
+      return data.scenarios as ScenarioItem[]
     }
 
     // If scenarios is a string, try to parse it
     if (typeof data.scenarios === 'string') {
+      console.log('Scenarios is string, attempting to parse')
       try {
         // Try parsing as JSON first
         const parsed = JSON.parse(data.scenarios)
         if (Array.isArray(parsed)) {
-          return parsed
+          console.log('Successfully parsed JSON from string:', parsed.length, 'items')
+          return parsed as ScenarioItem[]
         }
-      } catch {
+      } catch (jsonErr) {
+        console.warn('JSON parse failed, trying text parsing:', jsonErr)
         // If JSON parsing fails, parse as text table
         const scenariosStr = data.scenarios
-        const lines = scenariosStr.split('\n').filter(line => 
-          line.trim() && 
-          !line.includes('─') && 
+        const lines = scenariosStr.split('\n').filter(line =>
+          line.trim() &&
+          !line.includes('─') &&
           !line.includes('SCENARIOS') &&
           !line.includes('Name') &&
-          !line.includes('📦')
+          !line.includes('📦 Status')
         )
-        return lines.map(line => {
+        const parsed = lines.map(line => {
           const parts = line.split(/\s{2,}/).filter(p => p && p !== '│')
           if (parts.length >= 2) {
             return {
@@ -104,14 +135,35 @@ export default function Scenarios() {
             }
           }
           return null
-        }).filter(item => item && item.name)
+        }).filter((item): item is ScenarioItem => item !== null && item.name !== '')
+        console.log('Text parsing resulted in:', parsed.length, 'items')
+        return parsed
       }
     }
 
+    console.warn('Unable to parse scenarios data, unknown format')
     return []
   }
 
-  const scenarioNames = parseScenariosList(scenariosList)
+  const scenariosList = parseScenariosList(scenariosListRaw)
+
+  // Update debug info when data changes
+  useEffect(() => {
+    if (scenariosListRaw) {
+      setDebugInfo({
+        hasData: !!scenariosListRaw,
+        dataType: typeof scenariosListRaw,
+        hasScenarios: !!scenariosListRaw.scenarios,
+        scenariosType: typeof scenariosListRaw.scenarios,
+        scenariosIsArray: Array.isArray(scenariosListRaw.scenarios),
+        scenariosLength: Array.isArray(scenariosListRaw.scenarios)
+          ? scenariosListRaw.scenarios.length
+          : 'N/A',
+        count: scenariosListRaw.count || 'N/A',
+        parsedCount: scenariosList.length,
+      })
+    }
+  }, [scenariosListRaw, scenariosList])
 
   return (
     <div className="space-y-6">
@@ -125,31 +177,74 @@ export default function Scenarios() {
       {/* Current Scenarios */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5" />
-            Active Scenarios
-          </CardTitle>
-          <CardDescription>
-            Currently installed CrowdSec scenarios
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              <div>
+                <CardTitle>Active Scenarios</CardTitle>
+                <CardDescription>
+                  Currently installed CrowdSec scenarios
+                  {scenariosList.length > 0 && (
+                    <span className="ml-2">
+                      ({scenariosList.length} scenario{scenariosList.length !== 1 ? 's' : ''} found)
+                    </span>
+                  )}
+                </CardDescription>
+              </div>
+            </div>
+            {scenariosList.length > 0 && (
+              <Badge variant="outline" className="flex items-center gap-1">
+                <CheckCircle2 className="h-3 w-3" />
+                {scenariosList.length} Active
+              </Badge>
+            )}
+          </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          {/* Error alert */}
+          {isError && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                Failed to load scenarios: {error instanceof Error ? error.message : 'Unknown error'}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* Debug panel (development only) */}
+          {debugInfo && process.env.NODE_ENV === 'development' && (
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                <details className="text-xs">
+                  <summary className="cursor-pointer font-semibold mb-2">Debug Info (Click to expand)</summary>
+                  <pre className="mt-2 p-2 bg-muted rounded overflow-x-auto">
+                    {JSON.stringify(debugInfo, null, 2)}
+                  </pre>
+                </details>
+              </AlertDescription>
+            </Alert>
+          )}
+
           {isLoading ? (
             <div className="space-y-2">
               <div className="h-12 bg-muted animate-pulse rounded" />
               <div className="h-12 bg-muted animate-pulse rounded" />
+              <div className="h-12 bg-muted animate-pulse rounded" />
             </div>
-          ) : scenarioNames.length > 0 ? (
-            <div className="space-y-2">
-              {scenarioNames.map((scenario, index) => (
+          ) : scenariosList.length > 0 ? (
+            <div className="space-y-2 max-h-[400px] overflow-y-auto">
+              {scenariosList.map((scenario, index) => (
                 <div key={index} className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent/50 transition-colors">
-                  <div className="flex-1">
-                    <p className="font-mono font-medium text-sm">
-                      {typeof scenario === 'string' ? scenario : scenario.name}
+                  <div className="flex-1 min-w-0">
+                    <p className="font-mono font-medium text-sm truncate">
+                      {scenario.name}
                     </p>
-                    {typeof scenario === 'object' && scenario.status && (
-                      <div className="flex items-center gap-2 mt-1">
-                        <Badge variant="outline" className="text-xs">
+                    {scenario.status && (
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        <Badge
+                          variant={scenario.status === 'enabled' ? 'default' : 'outline'}
+                        >
                           {scenario.status}
                         </Badge>
                         {scenario.version && (
@@ -160,8 +255,8 @@ export default function Scenarios() {
                       </div>
                     )}
                   </div>
-                  {typeof scenario === 'object' && scenario.local_path && (
-                    <span className="text-xs text-muted-foreground font-mono ml-4">
+                  {scenario.local_path && (
+                    <span className="text-xs text-muted-foreground font-mono ml-4 truncate max-w-xs">
                       {scenario.local_path}
                     </span>
                   )}
@@ -169,9 +264,15 @@ export default function Scenarios() {
               ))}
             </div>
           ) : (
-            <p className="text-muted-foreground text-center py-8">
-              No scenarios installed
-            </p>
+            <div className="text-center py-8">
+              <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto mb-2" />
+              <p className="text-muted-foreground">No scenarios installed</p>
+              {debugInfo && (
+                <p className="text-sm text-muted-foreground mt-1">
+                  Check the debug info above for more details
+                </p>
+              )}
+            </div>
           )}
         </CardContent>
       </Card>
