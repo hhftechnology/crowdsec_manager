@@ -169,12 +169,50 @@ func RunCompleteDiagnostics(dockerClient *docker.Client, db *database.Database) 
 		var decisions []models.Decision
 		decisionOutput, err := dockerClient.ExecCommand("crowdsec", []string{"cscli", "decisions", "list", "-o", "json"})
 		if err == nil {
-			if err := json.Unmarshal([]byte(decisionOutput), &decisions); err != nil {
+			// Parse as raw JSON first to handle field name variations
+			var rawDecisions []map[string]interface{}
+			if err := json.Unmarshal([]byte(decisionOutput), &rawDecisions); err != nil {
 				logger.Warn("Failed to parse decisions JSON",
 					"error", err,
 					"output_length", len(decisionOutput),
 					"output_preview", truncateString(decisionOutput, 100))
 			} else {
+				// Convert to normalized Decision format
+				decisions = make([]models.Decision, 0, len(rawDecisions))
+				for _, raw := range rawDecisions {
+					decision := models.Decision{
+						ID:       int64(getInt(raw, "id")),
+						Duration: getString(raw, "duration"),
+					}
+
+					// Handle origin/source field (CrowdSec might use either)
+					decision.Source = getString(raw, "source")
+					if decision.Source == "" {
+						decision.Source = getString(raw, "origin")
+					}
+					decision.Origin = decision.Source
+
+					// Handle type field
+					decision.Type = getString(raw, "type")
+
+					// Handle scope field
+					decision.Scope = getString(raw, "scope")
+
+					// Handle value field
+					decision.Value = getString(raw, "value")
+
+					// Handle scenario/reason field (CrowdSec might use either)
+					decision.Scenario = getString(raw, "scenario")
+					if decision.Scenario == "" {
+						decision.Scenario = getString(raw, "reason")
+					}
+					decision.Reason = decision.Scenario
+
+					// Handle created_at field
+					decision.CreatedAt = getString(raw, "created_at")
+
+					decisions = append(decisions, decision)
+				}
 				logger.Debug("Decisions retrieved successfully", "count", len(decisions))
 			}
 		} else {
@@ -2042,9 +2080,9 @@ func GetDecisions(dockerClient *docker.Client) gin.HandlerFunc {
 			return
 		}
 
-		// Parse the JSON to ensure it's valid and return as structured data
-		var decisions []models.Decision
-		if err := json.Unmarshal([]byte(output), &decisions); err != nil {
+		// Parse as raw JSON first to handle field name variations
+		var rawDecisions []map[string]interface{}
+		if err := json.Unmarshal([]byte(output), &rawDecisions); err != nil {
 			// If JSON parsing fails, log details and return error
 			logger.Warn("Failed to parse decisions JSON",
 				"error", err,
@@ -2055,6 +2093,43 @@ func GetDecisions(dockerClient *docker.Client) gin.HandlerFunc {
 				Error:   fmt.Sprintf("Failed to parse decisions JSON: %v", err),
 			})
 			return
+		}
+
+		// Convert to normalized Decision format
+		decisions := make([]models.Decision, 0, len(rawDecisions))
+		for _, raw := range rawDecisions {
+			decision := models.Decision{
+				ID:       int64(getInt(raw, "id")),
+				Duration: getString(raw, "duration"),
+			}
+
+			// Handle origin/source field (CrowdSec might use either)
+			decision.Source = getString(raw, "source")
+			if decision.Source == "" {
+				decision.Source = getString(raw, "origin")
+			}
+			decision.Origin = decision.Source
+
+			// Handle type field
+			decision.Type = getString(raw, "type")
+
+			// Handle scope field
+			decision.Scope = getString(raw, "scope")
+
+			// Handle value field
+			decision.Value = getString(raw, "value")
+
+			// Handle scenario/reason field (CrowdSec might use either)
+			decision.Scenario = getString(raw, "scenario")
+			if decision.Scenario == "" {
+				decision.Scenario = getString(raw, "reason")
+			}
+			decision.Reason = decision.Scenario
+
+			// Handle created_at field
+			decision.CreatedAt = getString(raw, "created_at")
+
+			decisions = append(decisions, decision)
 		}
 
 		logger.Debug("Decisions API retrieved successfully", "count", len(decisions))
@@ -2444,9 +2519,14 @@ func GetDecisionsAnalysis(dockerClient *docker.Client) gin.HandlerFunc {
 			return
 		}
 
-		// Parse the JSON to ensure it's valid and return as structured data
-		var decisions []models.Decision
-		if err := json.Unmarshal([]byte(output), &decisions); err != nil {
+		// Log raw output for debugging
+		logger.Debug("Raw decisions output",
+			"length", len(output),
+			"preview", truncateString(output, 200))
+
+		// Parse as raw JSON first to see the actual structure
+		var rawDecisions []map[string]interface{}
+		if err := json.Unmarshal([]byte(output), &rawDecisions); err != nil {
 			logger.Warn("Failed to parse decisions JSON",
 				"error", err,
 				"output_length", len(output),
@@ -2458,8 +2538,48 @@ func GetDecisionsAnalysis(dockerClient *docker.Client) gin.HandlerFunc {
 			return
 		}
 
-		logger.Debug("Decisions analysis retrieved successfully", "count", len(decisions))
+		// Convert to normalized Decision format
+		decisions := make([]models.Decision, 0, len(rawDecisions))
+		for _, raw := range rawDecisions {
+			decision := models.Decision{
+				ID:       int64(getInt(raw, "id")),
+				Duration: getString(raw, "duration"),
+			}
 
+			// Handle origin/source field (CrowdSec might use either)
+			decision.Source = getString(raw, "source")
+			if decision.Source == "" {
+				decision.Source = getString(raw, "origin")
+			}
+			decision.Origin = decision.Source
+
+			// Handle type field
+			decision.Type = getString(raw, "type")
+
+			// Handle scope field
+			decision.Scope = getString(raw, "scope")
+
+			// Handle value field
+			decision.Value = getString(raw, "value")
+
+			// Handle scenario/reason field (CrowdSec might use either)
+			decision.Scenario = getString(raw, "scenario")
+			if decision.Scenario == "" {
+				decision.Scenario = getString(raw, "reason")
+			}
+			decision.Reason = decision.Scenario
+
+			// Handle created_at field
+			decision.CreatedAt = getString(raw, "created_at")
+
+			decisions = append(decisions, decision)
+		}
+
+		logger.Info("Decisions retrieved successfully",
+			"count", len(decisions),
+			"filters_applied", len(activeFilters(c)))
+
+		// Return properly formatted data
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
 			Data:    gin.H{"decisions": decisions, "count": len(decisions)},
@@ -2895,6 +3015,40 @@ func truncateString(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen] + "... (truncated)"
+}
+
+// Helper functions for safe type conversion from map[string]interface{}
+func getString(m map[string]interface{}, key string) string {
+	if v, ok := m[key]; ok {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
+}
+
+func getInt(m map[string]interface{}, key string) int {
+	if v, ok := m[key]; ok {
+		switch val := v.(type) {
+		case float64:
+			return int(val)
+		case int:
+			return val
+		case int64:
+			return int(val)
+		}
+	}
+	return 0
+}
+
+func activeFilters(c *gin.Context) map[string]string {
+	filters := make(map[string]string)
+	for _, key := range []string{"since", "until", "type", "scope", "origin", "value", "scenario", "ip", "range"} {
+		if val := c.Query(key); val != "" && val != "all" {
+			filters[key] = val
+		}
+	}
+	return filters
 }
 
 // parseHumanReadableScenarios parses the human-readable table format

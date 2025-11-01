@@ -28,15 +28,63 @@ type HealthStatus struct {
 // Decision represents a CrowdSec decision
 type Decision struct {
 	ID        int64  `json:"id"`
-	Origin    string `json:"origin"`
+	Source    string `json:"source"`    // Changed from "origin" to "source"
+	Type      string `json:"type"`      // This is the decision type (ban, captcha, etc.)
+	Scope     string `json:"scope"`     // This should be correct
+	Value     string `json:"value"`     // This should be correct
+	Duration  string `json:"duration"`  // This should be correct
+	Scenario  string `json:"scenario"`  // Changed from "scenario" - let's check if it's "reason"
+	CreatedAt string `json:"created_at"` // Changed from time.Time to string for flexibility
+
+	// Alternative field names that CrowdSec might use
+	Reason    string `json:"reason,omitempty"`    // CrowdSec might call scenario "reason"
+	Origin    string `json:"origin,omitempty"`    // Backup field name
+	Until     string `json:"until,omitempty"`     // Expiration timestamp
+	Simulated *bool  `json:"simulated,omitempty"` // Whether decision is simulated
+	UUID      string `json:"uuid,omitempty"`      // Unique identifier for LAPI→CAPI
+}
+
+// DecisionRaw is the raw structure from CrowdSec JSON output
+// This matches CrowdSec's actual JSON field names
+type DecisionRaw struct {
+	ID        int64  `json:"id"`
+	Source    string `json:"source"`
 	Type      string `json:"type"`
 	Scope     string `json:"scope"`
 	Value     string `json:"value"`
 	Duration  string `json:"duration"`
 	Scenario  string `json:"scenario"`
-	Until     string `json:"until,omitempty"`     // Expiration timestamp
-	Simulated *bool  `json:"simulated,omitempty"` // Whether decision is simulated
-	UUID      string `json:"uuid,omitempty"`      // Unique identifier for LAPI→CAPI
+	Reason    string `json:"reason"` // CrowdSec uses "reason" for the scenario
+	CreatedAt string `json:"created_at"`
+	Origin    string `json:"origin"`
+}
+
+// Normalize converts DecisionRaw to Decision with normalized fields
+func (d *DecisionRaw) Normalize() Decision {
+	// Use Reason if Scenario is empty
+	scenario := d.Scenario
+	if scenario == "" && d.Reason != "" {
+		scenario = d.Reason
+	}
+
+	// Use Source if Origin is empty
+	origin := d.Source
+	if origin == "" && d.Origin != "" {
+		origin = d.Origin
+	}
+
+	return Decision{
+		ID:        d.ID,
+		Source:    origin,
+		Type:      d.Type,
+		Scope:     d.Scope,
+		Value:     d.Value,
+		Duration:  d.Duration,
+		Scenario:  scenario,
+		CreatedAt: d.CreatedAt,
+		Origin:    origin,
+		Reason:    scenario,
+	}
 }
 
 // Bouncer represents a CrowdSec bouncer
