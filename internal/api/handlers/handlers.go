@@ -20,6 +20,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
+	"gopkg.in/yaml.v3"
 )
 
 // =============================================================================
@@ -832,7 +833,7 @@ whitelist:
 // =============================================================================
 
 // SetupCustomScenarios installs custom CrowdSec scenarios
-func SetupCustomScenarios(dockerClient *docker.Client) gin.HandlerFunc {
+func SetupCustomScenarios(dockerClient *docker.Client, configDir string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req models.ScenarioSetupRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -845,45 +846,76 @@ func SetupCustomScenarios(dockerClient *docker.Client) gin.HandlerFunc {
 
 		logger.Info("Setting up custom scenarios", "count", len(req.Scenarios))
 
+		hostScenariosDir := filepath.Join(configDir, "crowdsec", "scenarios")
+
+		if err := os.MkdirAll(hostScenariosDir, 0755); err != nil {
+			logger.Error("Failed to create scenarios directory on host", "error", err)
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to create scenarios directory: %v", err),
+			})
+			return
+		}
+
 		results := []gin.H{}
 		hasErrors := false
 
 		for _, scenario := range req.Scenarios {
-			// Extract filename from scenario name (handle namespace/scenario-name format)
 			filename := strings.ReplaceAll(scenario.Name, "/", "_") + ".yaml"
-			scenarioPath := filepath.Join("/etc/crowdsec/scenarios", filename)
+			hostScenarioPath := filepath.Join(hostScenariosDir, filename)
+			containerScenarioPath := filepath.Join("/etc/crowdsec/scenarios", filename)
 
-			logger.Debug("Writing scenario file", "name", scenario.Name, "path", scenarioPath)
+			logger.Debug("Writing scenario file",
+				"name", scenario.Name,
+				"host_path", hostScenarioPath,
+				"container_path", containerScenarioPath)
 
-			// Use cat with heredoc to properly write multi-line YAML content
-			// This handles special characters and multi-line content correctly
-			command := fmt.Sprintf("cat > %s << 'SCENARIO_EOF'\n%s\nSCENARIO_EOF", scenarioPath, scenario.Content)
+			if err := os.WriteFile(hostScenarioPath, []byte(scenario.Content), 0644); err != nil {
+				result := gin.H{
+					"name":    scenario.Name,
+					"success": false,
+					"path":    hostScenarioPath,
+					"error":   err.Error(),
+				}
+				results = append(results, result)
+				hasErrors = true
+				logger.Error("Failed to write scenario file to host", "name", scenario.Name, "error", err)
+				continue
+			}
 
-			_, err := dockerClient.ExecCommand("crowdsec", []string{"sh", "-c", command})
+			verifyCmd := fmt.Sprintf("test -f %s && echo 'exists' || echo 'missing'", containerScenarioPath)
+			output, err := dockerClient.ExecCommand("crowdsec", []string{"sh", "-c", verifyCmd})
+
+			fileExists := strings.TrimSpace(output) == "exists"
 
 			result := gin.H{
-				"name":    scenario.Name,
-				"success": err == nil,
-				"path":    scenarioPath,
+				"name":          scenario.Name,
+				"success":       true,
+				"host_path":     hostScenarioPath,
+				"container_path": containerScenarioPath,
+				"verified":      fileExists,
 			}
-			if err != nil {
-				result["error"] = err.Error()
-				hasErrors = true
-				logger.Error("Failed to write scenario file", "name", scenario.Name, "error", err)
-			} else {
-				logger.Info("Successfully wrote scenario file", "name", scenario.Name, "path", scenarioPath)
+
+			if err != nil || !fileExists {
+				result["warning"] = "File written to host but not visible in container. Check volume mount."
+				logger.Warn("Scenario file not visible in container",
+					"name", scenario.Name,
+					"verify_error", err,
+					"file_exists", fileExists)
 			}
+
 			results = append(results, result)
+			logger.Info("Successfully wrote scenario file", "name", scenario.Name, "path", hostScenarioPath)
 		}
 
-		// Restart CrowdSec to load new scenarios
-		// Note: reload doesn't work for custom scenarios, need full restart
 		if !hasErrors {
 			logger.Info("Restarting CrowdSec to load new scenarios")
+
 			restartOutput, restartErr := dockerClient.ExecCommand("crowdsec", []string{"sh", "-c", "kill -SIGHUP 1"})
+
 			if restartErr != nil {
 				logger.Warn("Failed to send HUP signal to CrowdSec, attempting container restart", "error", restartErr)
-				// Fallback: restart the container
+
 				if err := dockerClient.RestartContainerWithTimeout("crowdsec", 30); err != nil {
 					logger.Error("Failed to restart CrowdSec container", "error", err)
 					c.JSON(http.StatusOK, models.Response{
@@ -894,9 +926,13 @@ func SetupCustomScenarios(dockerClient *docker.Client) gin.HandlerFunc {
 					})
 					return
 				}
+
+				logger.Info("CrowdSec container restarted successfully")
 			} else {
 				logger.Debug("CrowdSec reload signal sent", "output", restartOutput)
 			}
+
+			time.Sleep(2 * time.Second)
 		}
 
 		c.JSON(http.StatusOK, models.Response{
@@ -1018,6 +1054,132 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// GetScenarioFiles returns a list of scenario files from the host filesystem
+func GetScenarioFiles(configDir string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		hostScenariosDir := filepath.Join(configDir, "crowdsec", "scenarios")
+
+		if _, err := os.Stat(hostScenariosDir); os.IsNotExist(err) {
+			c.JSON(http.StatusOK, models.Response{
+				Success: true,
+				Data:    []string{},
+				Message: "No scenarios directory found",
+			})
+			return
+		}
+
+		entries, err := os.ReadDir(hostScenariosDir)
+		if err != nil {
+			logger.Error("Failed to read scenarios directory", "error", err)
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to read scenarios directory: %v", err),
+			})
+			return
+		}
+
+		scenarioFiles := []gin.H{}
+		for _, entry := range entries {
+			if entry.IsDir() || (!strings.HasSuffix(entry.Name(), ".yaml") && !strings.HasSuffix(entry.Name(), ".yml")) {
+				continue
+			}
+
+			filePath := filepath.Join(hostScenariosDir, entry.Name())
+			info, err := entry.Info()
+			if err != nil {
+				continue
+			}
+
+			content, err := os.ReadFile(filePath)
+			if err != nil {
+				logger.Warn("Failed to read scenario file", "file", entry.Name(), "error", err)
+				continue
+			}
+
+			var scenarioData map[string]any
+			if err := yaml.Unmarshal(content, &scenarioData); err == nil {
+				scenarioFiles = append(scenarioFiles, gin.H{
+					"filename":    entry.Name(),
+					"name":        scenarioData["name"],
+					"description": scenarioData["description"],
+					"type":        scenarioData["type"],
+					"size":        info.Size(),
+					"modified":    info.ModTime(),
+				})
+			} else {
+				scenarioFiles = append(scenarioFiles, gin.H{
+					"filename": entry.Name(),
+					"size":     info.Size(),
+					"modified": info.ModTime(),
+				})
+			}
+		}
+
+		c.JSON(http.StatusOK, models.Response{
+			Success: true,
+			Data:    scenarioFiles,
+			Message: fmt.Sprintf("Found %d scenario files", len(scenarioFiles)),
+		})
+	}
+}
+
+// DeleteScenarioFile deletes a scenario file from the host filesystem
+func DeleteScenarioFile(dockerClient *docker.Client, configDir string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req struct {
+			Filename string `json:"filename" binding:"required"`
+		}
+
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, models.Response{
+				Success: false,
+				Error:   "Invalid request: " + err.Error(),
+			})
+			return
+		}
+
+		if strings.Contains(req.Filename, "..") || strings.Contains(req.Filename, "/") {
+			c.JSON(http.StatusBadRequest, models.Response{
+				Success: false,
+				Error:   "Invalid filename",
+			})
+			return
+		}
+
+		hostScenariosDir := filepath.Join(configDir, "crowdsec", "scenarios")
+		filePath := filepath.Join(hostScenariosDir, req.Filename)
+
+		if _, err := os.Stat(filePath); os.IsNotExist(err) {
+			c.JSON(http.StatusNotFound, models.Response{
+				Success: false,
+				Error:   "Scenario file not found",
+			})
+			return
+		}
+
+		if err := os.Remove(filePath); err != nil {
+			logger.Error("Failed to delete scenario file", "file", req.Filename, "error", err)
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to delete scenario file: %v", err),
+			})
+			return
+		}
+
+		logger.Info("Scenario file deleted", "file", req.Filename)
+
+		logger.Info("Restarting CrowdSec to apply changes")
+		if err := dockerClient.RestartContainerWithTimeout("crowdsec", 30); err != nil {
+			logger.Warn("Failed to restart CrowdSec after deleting scenario", "error", err)
+		}
+
+		c.JSON(http.StatusOK, models.Response{
+			Success: true,
+			Message: "Scenario file deleted successfully",
+		})
+	}
 }
 
 // =============================================================================

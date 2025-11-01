@@ -44,11 +44,13 @@ func RegisterWhitelistRoutes(router *gin.RouterGroup, dockerClient *docker.Clien
 }
 
 // RegisterScenarioRoutes registers scenario management routes
-func RegisterScenarioRoutes(router *gin.RouterGroup, dockerClient *docker.Client) {
+func RegisterScenarioRoutes(router *gin.RouterGroup, dockerClient *docker.Client, configDir string) {
 	scenarios := router.Group("/scenarios")
 	{
-		scenarios.POST("/setup", handlers.SetupCustomScenarios(dockerClient))
+		scenarios.POST("/setup", handlers.SetupCustomScenarios(dockerClient, configDir))
 		scenarios.GET("/list", handlers.ListScenarios(dockerClient))
+		scenarios.GET("/files", handlers.GetScenarioFiles(configDir))
+		scenarios.DELETE("/file", handlers.DeleteScenarioFile(dockerClient, configDir))
 	}
 }
 
