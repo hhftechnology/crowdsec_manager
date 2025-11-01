@@ -1,6 +1,6 @@
 # CrowdSec Manager
 
-A comprehensive web-based management interface for CrowdSec security stack with Pangolin integration. This project replaces the bash script with a modern, user-friendly web UI built with Go and React.
+A web-based management interface for CrowdSec security stack with Pangolin integration. This project replaces the bash script with a modern, user-friendly web UI built with Go and React.
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Go Version](https://img.shields.io/badge/go-1.23+-00ADD8.svg)
@@ -8,7 +8,7 @@ A comprehensive web-based management interface for CrowdSec security stack with 
 
 ## Features
 
-### 🔒 Complete Security Management
+###  Complete Security Management
 
 - **System Health Monitoring** - Real-time container status and diagnostics
 - **IP Management** - Block, unban, and monitor IP addresses
@@ -16,28 +16,28 @@ A comprehensive web-based management interface for CrowdSec security stack with 
 - **Decision Management** - View and manage CrowdSec security decisions
 - **Bouncer Management** - Monitor CrowdSec bouncers and their status
 
-### 🛡️ Advanced Security Features
+###  Advanced Security Features
 
 - **Custom Scenarios** - Deploy custom CrowdSec detection scenarios
 - **Captcha Protection** - Configure Cloudflare Turnstile captcha integration
 - **Traefik Integration** - Seamless CrowdSec-Traefik middleware configuration
 - **Console Enrollment** - Easy CrowdSec Console integration
 
-### 📊 Monitoring & Logs
+###  Monitoring & Logs
 
 - **Real-time Log Streaming** - WebSocket-based live log viewing
 - **Advanced Log Analysis** - Analyze Traefik logs with statistics
 - **Prometheus Metrics** - View CrowdSec metrics
 - **Multi-service Logs** - View logs from all services (CrowdSec, Traefik, Pangolin, Gerbil)
 
-### 💾 Backup & Recovery
+###  Backup & Recovery
 
 - **Automated Backups** - Create full system backups
 - **Scheduled Backups** - Configure cron jobs for automatic backups
 - **Easy Restoration** - Restore from any backup with confirmation
 - **Retention Management** - Automatic cleanup of old backups
 
-### 🔄 Stack Updates
+###  Stack Updates
 
 - **Version Management** - Update Docker images with custom tags
 - **Graceful Updates** - Safe updates with automatic rollback on failure
