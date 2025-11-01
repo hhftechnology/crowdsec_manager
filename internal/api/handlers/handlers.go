@@ -970,28 +970,63 @@ func ListScenarios(dockerClient *docker.Client) gin.HandlerFunc {
 		// Clean the output - remove any non-JSON characters
 		cleanedOutput := strings.TrimSpace(output)
 
-		// Try to parse as JSON first
+		// Try to parse as JSON - CrowdSec returns {"scenarios": [...]}
+		// First try the nested structure
+		type ScenariosResponse struct {
+			Scenarios []map[string]any `json:"scenarios"`
+		}
+		var scenariosResp ScenariosResponse
 		var jsonScenarios []any
-		if err := json.Unmarshal([]byte(cleanedOutput), &jsonScenarios); err == nil {
-			// Successfully parsed as JSON array
-			logger.Info("Successfully parsed scenarios as JSON array", "total_count", len(jsonScenarios))
 
-			// Filter for only installed/enabled scenarios
+		if err := json.Unmarshal([]byte(cleanedOutput), &scenariosResp); err == nil && len(scenariosResp.Scenarios) > 0 {
+			// Successfully parsed nested structure {"scenarios": [...]}
+			logger.Info("Successfully parsed scenarios from nested JSON structure", "total_count", len(scenariosResp.Scenarios))
+			// Convert to []any for processing
+			for _, s := range scenariosResp.Scenarios {
+				jsonScenarios = append(jsonScenarios, s)
+			}
+		} else if err := json.Unmarshal([]byte(cleanedOutput), &jsonScenarios); err == nil {
+			// Fallback: try parsing as flat array (older format or different command)
+			logger.Info("Successfully parsed scenarios as JSON array", "total_count", len(jsonScenarios))
+		}
+
+		// If we successfully parsed scenarios, filter for installed ones
+		if len(jsonScenarios) > 0 {
+			// Filter for only installed scenarios
+			// A scenario is installed if it has a non-empty local_path or local_version field
 			installedScenarios := []any{}
 			for _, scenario := range jsonScenarios {
 				if scenarioMap, ok := scenario.(map[string]any); ok {
-					// Check if scenario has status field indicating it's installed
-					if status, exists := scenarioMap["status"]; exists {
-						statusStr := fmt.Sprintf("%v", status)
-						// Only include scenarios with "enabled" or "disabled" status (installed)
-						if statusStr == "enabled" || statusStr == "disabled" {
-							installedScenarios = append(installedScenarios, scenario)
+					isInstalled := false
+
+					// Check for local_path field (primary indicator of installation)
+					if localPath, exists := scenarioMap["local_path"]; exists {
+						if pathStr := fmt.Sprintf("%v", localPath); pathStr != "" && pathStr != "<nil>" {
+							isInstalled = true
 						}
-					} else if installed, exists := scenarioMap["installed"]; exists {
-						// Some versions use "installed" boolean field
-						if installedBool, ok := installed.(bool); ok && installedBool {
-							installedScenarios = append(installedScenarios, scenario)
+					}
+
+					// Also check for local_version field as secondary indicator
+					if !isInstalled {
+						if localVersion, exists := scenarioMap["local_version"]; exists {
+							if versionStr := fmt.Sprintf("%v", localVersion); versionStr != "" && versionStr != "<nil>" {
+								isInstalled = true
+							}
 						}
+					}
+
+					// Also check status field for backward compatibility
+					if !isInstalled {
+						if status, exists := scenarioMap["status"]; exists {
+							statusStr := fmt.Sprintf("%v", status)
+							if statusStr == "enabled" || statusStr == "disabled" {
+								isInstalled = true
+							}
+						}
+					}
+
+					if isInstalled {
+						installedScenarios = append(installedScenarios, scenario)
 					}
 				}
 			}
@@ -2242,9 +2277,10 @@ func GetDecisions(dockerClient *docker.Client) gin.HandlerFunc {
 			return
 		}
 
-		// Parse as raw JSON first to handle field name variations
-		var rawDecisions []map[string]interface{}
-		if err := json.Unmarshal([]byte(output), &rawDecisions); err != nil {
+		// Parse as raw JSON - CrowdSec returns an array of alert objects,
+		// each containing a "decisions" array
+		var rawAlerts []map[string]interface{}
+		if err := json.Unmarshal([]byte(output), &rawAlerts); err != nil {
 			// If JSON parsing fails, log details and return error
 			logger.Warn("Failed to parse decisions JSON",
 				"error", err,
@@ -2257,41 +2293,48 @@ func GetDecisions(dockerClient *docker.Client) gin.HandlerFunc {
 			return
 		}
 
-		// Convert to normalized Decision format
-		decisions := make([]models.Decision, 0, len(rawDecisions))
-		for _, raw := range rawDecisions {
-			decision := models.Decision{
-				ID:       int64(getInt(raw, "id")),
-				Duration: getString(raw, "duration"),
+		// Extract decisions from each alert and convert to normalized Decision format
+		decisions := make([]models.Decision, 0)
+		for _, alert := range rawAlerts {
+			// Each alert has a "decisions" array
+			if decisionsArr, ok := alert["decisions"].([]interface{}); ok {
+				for _, decisionInterface := range decisionsArr {
+					if raw, ok := decisionInterface.(map[string]interface{}); ok {
+						decision := models.Decision{
+							ID:       int64(getInt(raw, "id")),
+							Duration: getString(raw, "duration"),
+						}
+
+						// Handle origin/source field (CrowdSec might use either)
+						decision.Source = getString(raw, "source")
+						if decision.Source == "" {
+							decision.Source = getString(raw, "origin")
+						}
+						decision.Origin = decision.Source
+
+						// Handle type field
+						decision.Type = getString(raw, "type")
+
+						// Handle scope field
+						decision.Scope = getString(raw, "scope")
+
+						// Handle value field
+						decision.Value = getString(raw, "value")
+
+						// Handle scenario/reason field (CrowdSec might use either)
+						decision.Scenario = getString(raw, "scenario")
+						if decision.Scenario == "" {
+							decision.Scenario = getString(raw, "reason")
+						}
+						decision.Reason = decision.Scenario
+
+						// Handle created_at field
+						decision.CreatedAt = getString(raw, "created_at")
+
+						decisions = append(decisions, decision)
+					}
+				}
 			}
-
-			// Handle origin/source field (CrowdSec might use either)
-			decision.Source = getString(raw, "source")
-			if decision.Source == "" {
-				decision.Source = getString(raw, "origin")
-			}
-			decision.Origin = decision.Source
-
-			// Handle type field
-			decision.Type = getString(raw, "type")
-
-			// Handle scope field
-			decision.Scope = getString(raw, "scope")
-
-			// Handle value field
-			decision.Value = getString(raw, "value")
-
-			// Handle scenario/reason field (CrowdSec might use either)
-			decision.Scenario = getString(raw, "scenario")
-			if decision.Scenario == "" {
-				decision.Scenario = getString(raw, "reason")
-			}
-			decision.Reason = decision.Scenario
-
-			// Handle created_at field
-			decision.CreatedAt = getString(raw, "created_at")
-
-			decisions = append(decisions, decision)
 		}
 
 		logger.Debug("Decisions API retrieved successfully", "count", len(decisions))

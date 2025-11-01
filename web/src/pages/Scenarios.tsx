@@ -12,9 +12,13 @@ import { FileText, Plus, X, CheckCircle2, AlertCircle } from 'lucide-react'
 
 interface ScenarioItem {
   name: string
-  status?: string
-  version?: string
+  local_version?: string
   local_path?: string
+  description?: string
+  utf8_status?: string
+  status?: string
+  // Keep version for backward compatibility
+  version?: string
 }
 
 interface ScenariosResponse {
@@ -91,6 +95,8 @@ export default function Scenarios() {
   // Robust parsing with comprehensive logging and type checking
   const parseScenariosList = (data: ScenariosResponse | null | undefined): ScenarioItem[] => {
     console.log('Parsing scenarios data:', data)
+    console.log('Data type:', typeof data)
+    console.log('Scenarios type:', typeof data?.scenarios)
 
     if (!data) {
       console.warn('No data received')
@@ -100,18 +106,27 @@ export default function Scenarios() {
     // Check if scenarios is already an array
     if (Array.isArray(data.scenarios)) {
       console.log('Scenarios is array:', data.scenarios.length, 'items')
-      return data.scenarios as ScenarioItem[]
+      // Validate that items have the expected structure
+      const validScenarios = data.scenarios.filter((item: any) => {
+        return item && typeof item === 'object' && 'name' in item
+      })
+      console.log('Valid scenarios after filtering:', validScenarios.length)
+      return validScenarios as ScenarioItem[]
     }
 
     // If scenarios is a string, try to parse it
     if (typeof data.scenarios === 'string') {
-      console.log('Scenarios is string, attempting to parse')
+      console.log('Scenarios is string, length:', data.scenarios.length)
+      console.log('First 200 chars:', data.scenarios.substring(0, 200))
+
       try {
         // Try parsing as JSON first
         const parsed = JSON.parse(data.scenarios)
         if (Array.isArray(parsed)) {
           console.log('Successfully parsed JSON from string:', parsed.length, 'items')
           return parsed as ScenarioItem[]
+        } else {
+          console.warn('Parsed JSON is not an array:', typeof parsed)
         }
       } catch (jsonErr) {
         console.warn('JSON parse failed, trying text parsing:', jsonErr)
@@ -124,6 +139,8 @@ export default function Scenarios() {
           !line.includes('Name') &&
           !line.includes('📦 Status')
         )
+        console.log('Text lines to parse:', lines.length)
+
         const parsed = lines.map(line => {
           const parts = line.split(/\s{2,}/).filter(p => p && p !== '│')
           if (parts.length >= 2) {
@@ -141,7 +158,19 @@ export default function Scenarios() {
       }
     }
 
+    // Handle case where scenarios might be an object with nested data
+    if (data.scenarios && typeof data.scenarios === 'object' && !Array.isArray(data.scenarios)) {
+      console.warn('Scenarios is an object but not an array. Keys:', Object.keys(data.scenarios))
+      // Try to extract array from nested structure
+      const scenariosObj = data.scenarios as any
+      if (scenariosObj.scenarios && Array.isArray(scenariosObj.scenarios)) {
+        console.log('Found nested scenarios array:', scenariosObj.scenarios.length)
+        return scenariosObj.scenarios as ScenarioItem[]
+      }
+    }
+
     console.warn('Unable to parse scenarios data, unknown format')
+    console.warn('Data structure:', JSON.stringify(data).substring(0, 500))
     return []
   }
 
@@ -247,9 +276,9 @@ export default function Scenarios() {
                         >
                           {scenario.status}
                         </Badge>
-                        {scenario.version && (
+                        {(scenario.local_version || scenario.version) && (
                           <span className="text-xs text-muted-foreground">
-                            v{scenario.version}
+                            v{scenario.local_version || scenario.version}
                           </span>
                         )}
                       </div>

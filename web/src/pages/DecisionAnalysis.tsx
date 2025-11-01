@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import api from '@/lib/api'
+import api, { Decision } from '@/lib/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -64,7 +64,7 @@ export default function DecisionAnalysis() {
 
     const csvContent = [
       ['ID', 'Type', 'Scope', 'Value', 'Origin', 'Scenario', 'Duration', 'Created At'].join(','),
-      ...decisionsData.decisions.map((d: any) =>
+      ...decisionsData.decisions.map((d: Decision) =>
         [d.id, d.type, d.scope, d.value, d.origin, d.scenario, d.duration, d.created_at].join(',')
       ),
     ].join('\n')
@@ -309,7 +309,7 @@ export default function DecisionAnalysis() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {decisionsData.decisions.map((decision: any, index: number) => (
+                  {decisionsData.decisions.map((decision: Decision, index: number) => (
                     <TableRow key={decision.id || index}>
                       <TableCell>
                         <Badge variant={decision.type === 'ban' ? 'destructive' : 'default'}>
