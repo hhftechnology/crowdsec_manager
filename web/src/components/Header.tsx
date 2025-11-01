@@ -1,35 +1,73 @@
-import { useQuery } from '@tanstack/react-query'
-import { ipAPI } from '@/lib/api'
+import { useEffect, useState } from 'react'
 import { Badge } from './ui/badge'
-import { RefreshCw } from 'lucide-react'
+import { Activity, Github, MessageCircle, Home } from 'lucide-react'
 import { Button } from './ui/button'
-import { cn } from '@/lib/utils'
+import { useNavigate } from 'react-router-dom'
 
-export default function Header() {
-  const { data: publicIPData, refetch, isLoading } = useQuery({
-    queryKey: ['publicIP'],
-    queryFn: () => ipAPI.getPublicIP(),
-  })
+interface HeaderProps {
+  onMenuToggle: () => void
+}
+
+export default function Header({ onMenuToggle }: HeaderProps) {
+  const [lastUpdate, setLastUpdate] = useState<string>('')
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    const updateTime = () => {
+      const now = new Date()
+      const hours = now.getHours().toString().padStart(2, '0')
+      const minutes = now.getMinutes().toString().padStart(2, '0')
+      const seconds = now.getSeconds().toString().padStart(2, '0')
+      setLastUpdate(`${hours}:${minutes}:${seconds}`)
+    }
+
+    updateTime()
+    const interval = setInterval(updateTime, 1000)
+
+    return () => clearInterval(interval)
+  }, [])
 
   return (
     <header className="h-16 border-b border-border bg-card px-6 flex items-center justify-between">
       <div className="flex items-center gap-4">
-        <h2 className="text-lg font-semibold">CrowdSec Manager</h2>
+        <Activity className="h-6 w-6 text-red-500" />
+        <div>
+          <h1 className="text-xl font-bold">TRAEFIK LOG DASHBOARD - Demo Mode</h1>
+          <Badge variant="secondary" className="text-xs">
+            Demo Mode - Simulated Data
+          </Badge>
+        </div>
       </div>
       <div className="flex items-center gap-4">
-        {publicIPData?.data?.data?.ip && (
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Public IP:</span>
-            <Badge variant="outline">{publicIPData.data.data.ip}</Badge>
-          </div>
-        )}
+        <span className="text-sm text-muted-foreground">
+          Last update: {lastUpdate}
+        </span>
         <Button
           variant="ghost"
-          size="icon"
-          onClick={() => refetch()}
-          disabled={isLoading}
+          size="sm"
+          className="gap-2"
+          onClick={() => window.open('https://github.com/hhftechnology/crowdsec-manager', '_blank')}
         >
-          <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
+          <Github className="h-4 w-4" />
+          GitHub
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="gap-2"
+          onClick={() => window.open('https://discord.gg/xCtMFeUKf9', '_blank')}
+        >
+          <MessageCircle className="h-4 w-4" />
+          Discord
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="gap-2"
+          onClick={() => navigate('/')}
+        >
+          <Home className="h-4 w-4" />
+          Home
         </Button>
       </div>
     </header>
