@@ -32,9 +32,9 @@ export default function Header({ onMenuToggle }: HeaderProps) {
       <div className="flex items-center gap-4">
         <Activity className="h-6 w-6 text-red-500" />
         <div>
-          <h1 className="text-xl font-bold">TRAEFIK LOG DASHBOARD - Demo Mode</h1>
+          <h1 className="text-xl font-bold">CROWDSEC MANAGER</h1>
           <Badge variant="secondary" className="text-xs">
-            Demo Mode - Simulated Data
+            Beta-version - v0.0.1
           </Badge>
         </div>
       </div>
@@ -46,7 +46,7 @@ export default function Header({ onMenuToggle }: HeaderProps) {
           variant="ghost"
           size="sm"
           className="gap-2"
-          onClick={() => window.open('https://github.com/hhftechnology/crowdsec-manager', '_blank')}
+          onClick={() => window.open('https://github.com/hhftechnology/crowdsec_manager', '_blank')}
         >
           <Github className="h-4 w-4" />
           GitHub

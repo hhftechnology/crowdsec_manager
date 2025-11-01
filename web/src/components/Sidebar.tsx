@@ -57,8 +57,8 @@ export default function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
       <div className={cn('p-6 flex items-center', isCollapsed ? 'justify-center' : 'justify-between')}>
         {!isCollapsed && (
           <div>
-            <h1 className="text-2xl font-bold text-primary">CrowdSec Manager</h1>
-            <p className="text-sm text-muted-foreground mt-1">Security Management</p>
+            <h2 className="text-2xl font-bold text-primary">Panel</h2>
+            <p className="text-sm text-muted-foreground mt-1">Management</p>
           </div>
         )}
         <Button
