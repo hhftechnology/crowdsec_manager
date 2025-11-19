@@ -1,0 +1,49 @@
+import { Routes, Route } from 'react-router-dom'
+import { Toaster } from 'sonner'
+import Layout from './components/Layout'
+
+// Pages
+import Dashboard from './pages/Dashboard'
+import Health from './pages/Health'
+import IPManagement from './pages/IPManagement'
+import Whitelist from './pages/Whitelist'
+import Allowlist from './pages/Allowlist'
+import Scenarios from './pages/Scenarios'
+import Captcha from './pages/Captcha'
+import Logs from './pages/Logs'
+import Backup from './pages/Backup'
+import Update from './pages/Update'
+import Cron from './pages/Cron'
+import Services from './pages/Services'
+import Configuration from './pages/Configuration'
+import DecisionAnalysis from './pages/DecisionAnalysis'
+import AlertAnalysis from './pages/AlertAnalysis'
+
+function App() {
+  return (
+    <>
+      <Layout>
+        <Routes>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/health" element={<Health />} />
+          <Route path="/ip-management" element={<IPManagement />} />
+          <Route path="/whitelist" element={<Whitelist />} />
+          <Route path="/allowlist" element={<Allowlist />} />
+          <Route path="/scenarios" element={<Scenarios />} />
+          <Route path="/captcha" element={<Captcha />} />
+          <Route path="/decisions" element={<DecisionAnalysis />} />
+          <Route path="/alerts" element={<AlertAnalysis />} />
+          <Route path="/logs" element={<Logs />} />
+          <Route path="/backup" element={<Backup />} />
+          <Route path="/update" element={<Update />} />
+          <Route path="/cron" element={<Cron />} />
+          <Route path="/services" element={<Services />} />
+          <Route path="/configuration" element={<Configuration />} />
+        </Routes>
+      </Layout>
+      <Toaster position="top-right" richColors />
+    </>
+  )
+}
+
+export default App

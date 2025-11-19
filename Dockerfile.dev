@@ -1,0 +1,27 @@
+# Development Dockerfile with hot reload support
+
+FROM golang:1.23-alpine
+
+WORKDIR /app
+
+# Install dependencies (CGO required for go-sqlite3)
+RUN apk add --no-cache git nodejs npm curl gcc musl-dev sqlite-dev
+
+# Install Air for hot reload
+RUN go install github.com/cosmtrek/air@latest
+
+# Copy go mod files
+COPY go.mod go.sum ./
+
+# Download dependencies
+RUN go mod download
+
+# Expose ports
+EXPOSE 8080 5173
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+  CMD curl -f http://localhost:8080/health || exit 1
+
+# Air will be started via docker-compose command
+CMD ["air"]
