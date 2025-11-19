@@ -316,6 +316,28 @@ func (c *Client) FileExists(containerName, path string) (bool, error) {
 	return true, nil
 }
 
+// GetHostMountPath finds the host path that is mounted to a given container path
+// Returns the host path and true if found, or empty string and false if not found
+func (c *Client) GetHostMountPath(containerName, containerPath string) (string, bool, error) {
+	inspect, err := c.InspectContainer(containerName)
+	if err != nil {
+		return "", false, err
+	}
+
+	// Check mounts for the container path
+	for _, mount := range inspect.Mounts {
+		// Check if the container path starts with or matches this mount destination
+		if strings.HasPrefix(containerPath, mount.Destination) {
+			// Calculate the relative path within the mount
+			relativePath := strings.TrimPrefix(containerPath, mount.Destination)
+			hostPath := mount.Source + relativePath
+			return hostPath, true, nil
+		}
+	}
+
+	return "", false, nil
+}
+
 // ValidateImageTag validates if an image tag exists in the registry
 func (c *Client) ValidateImageTag(imageName, tag string) error {
 	// Construct full image reference

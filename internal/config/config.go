@@ -17,13 +17,13 @@ type Config struct {
 	LogFile     string
 
 	// Docker configuration
-	DockerHost         string
-	ComposeFile        string
-	PangolinDir        string
-	ConfigDir          string
+	DockerHost  string
+	ComposeFile string
+	PangolinDir string
+	ConfigDir   string
 
 	// Database
-	DatabasePath       string
+	DatabasePath string
 
 	// File paths (from environment or database)
 	TraefikDynamicConfig string
@@ -38,9 +38,9 @@ type Config struct {
 	BackupItems   []string
 
 	// Services
-	Services            []string
+	Services             []string
 	ServicesWithCrowdsec []string
-	IncludeCrowdsec     bool
+	IncludeCrowdsec      bool
 
 	// Timeouts
 	ShutdownTimeout time.Duration
@@ -56,12 +56,12 @@ func Load() (*Config, error) {
 		LogLevel:    getEnv("LOG_LEVEL", "info"),
 		LogFile:     getEnv("LOG_FILE", "./logs/crowdsec-manager.log"),
 
-		DockerHost:         getEnv("DOCKER_HOST", ""),
-		ComposeFile:        getEnv("COMPOSE_FILE", "./docker-compose.yml"),
-		PangolinDir:        getEnv("PANGOLIN_DIR", "."),
-		ConfigDir:          getEnv("CONFIG_DIR", "./config"),
+		DockerHost:  getEnv("DOCKER_HOST", ""),
+		ComposeFile: getEnv("COMPOSE_FILE", "./docker-compose.yml"),
+		PangolinDir: getEnv("PANGOLIN_DIR", "."),
+		ConfigDir:   getEnv("CONFIG_DIR", "./config"),
 
-		DatabasePath:       getEnv("DATABASE_PATH", "./data/settings.db"),
+		DatabasePath: getEnv("DATABASE_PATH", "./data/settings.db"),
 
 		TraefikDynamicConfig: getEnv("TRAEFIK_DYNAMIC_CONFIG", "/etc/traefik/dynamic_config.yml"),
 		TraefikStaticConfig:  getEnv("TRAEFIK_STATIC_CONFIG", "/etc/traefik/traefik_config.yml"),

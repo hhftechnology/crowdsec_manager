@@ -16,6 +16,7 @@ export default function Logs() {
   const [streamLogs, setStreamLogs] = useState<string[]>([])
   const wsRef = useRef<WebSocket | null>(null)
   const logEndRef = useRef<HTMLDivElement>(null)
+  const prevStreamLengthRef = useRef<number>(0)
 
   const { data: crowdsecLogs, isLoading: crowdsecLoading, refetch: refetchCrowdSec } = useQuery({
     queryKey: ['logs-crowdsec', tailLines],
@@ -55,10 +56,36 @@ export default function Logs() {
         ws.onopen = () => {
           toast.success('Log stream connected')
           setStreamLogs([])
+          prevStreamLengthRef.current = 0
         }
 
         ws.onmessage = (event) => {
-          setStreamLogs(prev => [...prev, event.data])
+          // Filter out empty messages
+          const message = event.data?.trim()
+          if (!message || message === '') {
+            return
+          }
+
+          // Split message into lines and filter empty lines
+          const lines = message.split('\n').filter(line => line.trim().length > 0)
+          if (lines.length === 0) {
+            return
+          }
+
+          // Only update if there are actual new lines
+          setStreamLogs(prev => {
+            // Check if these lines are duplicates by comparing with last few lines
+            const lastFewLines = prev.slice(-5)
+            const hasNewContent = lines.some(line => !lastFewLines.includes(line))
+            
+            if (!hasNewContent && prev.length > 0) {
+              // No new content, don't update
+              return prev
+            }
+
+            // Add new lines
+            return [...prev, ...lines]
+          })
         }
 
         ws.onerror = () => {
@@ -68,6 +95,7 @@ export default function Logs() {
 
         ws.onclose = () => {
           toast.info('Log stream disconnected')
+          setIsStreaming(false)
         }
       } catch (error) {
         toast.error('Failed to connect to log stream')
@@ -78,14 +106,35 @@ export default function Logs() {
         if (wsRef.current) {
           wsRef.current.close()
         }
+        prevStreamLengthRef.current = 0
+      }
+    } else {
+      // Reset stream logs when stopping stream
+      setStreamLogs([])
+      prevStreamLengthRef.current = 0
+      if (wsRef.current) {
+        wsRef.current.close()
+        wsRef.current = null
       }
     }
   }, [isStreaming, selectedService])
 
-  // Auto-scroll to bottom
+  // Auto-scroll to bottom - only when there's actual new content
   useEffect(() => {
-    logEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [streamLogs, crowdsecLogs, traefikLogs])
+    if (isStreaming) {
+      // Only scroll if streamLogs actually increased
+      const currentLength = streamLogs.length
+      if (currentLength > prevStreamLengthRef.current && logEndRef.current) {
+        logEndRef.current.scrollIntoView({ behavior: 'smooth' })
+        prevStreamLengthRef.current = currentLength
+      }
+    } else {
+      // For non-streaming, scroll when logs change
+      if (logEndRef.current) {
+        logEndRef.current.scrollIntoView({ behavior: 'smooth' })
+      }
+    }
+  }, [streamLogs, crowdsecLogs, traefikLogs, isStreaming])
 
   const handleRefresh = () => {
     if (selectedService === 'crowdsec') {
@@ -97,11 +146,23 @@ export default function Logs() {
   }
 
   const handleToggleStream = () => {
-    setIsStreaming(!isStreaming)
+    if (isStreaming) {
+      // Stop streaming
+      if (wsRef.current) {
+        wsRef.current.close()
+        wsRef.current = null
+      }
+      setStreamLogs([])
+      prevStreamLengthRef.current = 0
+      setIsStreaming(false)
+    } else {
+      // Start streaming
+      setIsStreaming(true)
+    }
   }
 
   const currentLogs = isStreaming
-    ? streamLogs.join('\n')
+    ? streamLogs.filter(line => line.trim().length > 0).join('\n')
     : selectedService === 'crowdsec'
       ? crowdsecLogs?.logs || ''
       : traefikLogs?.logs || ''
@@ -133,7 +194,13 @@ export default function Logs() {
             <Button
               variant={selectedService === 'crowdsec' ? 'default' : 'outline'}
               onClick={() => {
+                if (isStreaming && wsRef.current) {
+                  wsRef.current.close()
+                  wsRef.current = null
+                }
                 setSelectedService('crowdsec')
+                setStreamLogs([])
+                prevStreamLengthRef.current = 0
                 setIsStreaming(false)
               }}
               className="flex-1"
@@ -143,7 +210,13 @@ export default function Logs() {
             <Button
               variant={selectedService === 'traefik' ? 'default' : 'outline'}
               onClick={() => {
+                if (isStreaming && wsRef.current) {
+                  wsRef.current.close()
+                  wsRef.current = null
+                }
                 setSelectedService('traefik')
+                setStreamLogs([])
+                prevStreamLengthRef.current = 0
                 setIsStreaming(false)
               }}
               className="flex-1"

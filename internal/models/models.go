@@ -28,12 +28,12 @@ type HealthStatus struct {
 // Decision represents a CrowdSec decision
 type Decision struct {
 	ID        int64  `json:"id"`
-	Source    string `json:"source"`    // Changed from "origin" to "source"
-	Type      string `json:"type"`      // This is the decision type (ban, captcha, etc.)
-	Scope     string `json:"scope"`     // This should be correct
-	Value     string `json:"value"`     // This should be correct
-	Duration  string `json:"duration"`  // This should be correct
-	Scenario  string `json:"scenario"`  // Changed from "scenario" - let's check if it's "reason"
+	Source    string `json:"source"`     // Changed from "origin" to "source"
+	Type      string `json:"type"`       // This is the decision type (ban, captcha, etc.)
+	Scope     string `json:"scope"`      // This should be correct
+	Value     string `json:"value"`      // This should be correct
+	Duration  string `json:"duration"`   // This should be correct
+	Scenario  string `json:"scenario"`   // Changed from "scenario" - let's check if it's "reason"
 	CreatedAt string `json:"created_at"` // Changed from time.Time to string for flexibility
 
 	// Alternative field names that CrowdSec might use
@@ -100,20 +100,20 @@ type Bouncer struct {
 
 // IPInfo represents IP address information
 type IPInfo struct {
-	IP          string `json:"ip"`
-	IsBlocked   bool   `json:"is_blocked"`
-	IsWhitelisted bool `json:"is_whitelisted"`
-	InCrowdSec  bool   `json:"in_crowdsec"`
-	InTraefik   bool   `json:"in_traefik"`
+	IP            string `json:"ip"`
+	IsBlocked     bool   `json:"is_blocked"`
+	IsWhitelisted bool   `json:"is_whitelisted"`
+	InCrowdSec    bool   `json:"in_crowdsec"`
+	InTraefik     bool   `json:"in_traefik"`
 }
 
 // WhitelistRequest represents a whitelist request
 type WhitelistRequest struct {
-	IP             string `json:"ip"`
-	CIDR           string `json:"cidr,omitempty"`
-	AddToCrowdSec  bool   `json:"add_to_crowdsec"`
-	AddToTraefik   bool   `json:"add_to_traefik"`
-	Comprehensive  bool   `json:"comprehensive,omitempty"`
+	IP            string `json:"ip"`
+	CIDR          string `json:"cidr,omitempty"`
+	AddToCrowdSec bool   `json:"add_to_crowdsec"`
+	AddToTraefik  bool   `json:"add_to_traefik"`
+	Comprehensive bool   `json:"comprehensive,omitempty"`
 }
 
 // Backup represents a backup
@@ -127,8 +127,8 @@ type Backup struct {
 
 // BackupRequest represents a backup request
 type BackupRequest struct {
-	Items   []string `json:"items,omitempty"`
-	DryRun  bool     `json:"dry_run"`
+	Items  []string `json:"items,omitempty"`
+	DryRun bool     `json:"dry_run"`
 }
 
 // RestoreRequest represents a restore request
@@ -139,11 +139,11 @@ type RestoreRequest struct {
 
 // UpdateRequest represents an update request
 type UpdateRequest struct {
-	PangolinTag      string `json:"pangolin_tag,omitempty"`
-	GerbilTag        string `json:"gerbil_tag,omitempty"`
-	TraefikTag       string `json:"traefik_tag,omitempty"`
-	CrowdSecTag      string `json:"crowdsec_tag,omitempty"`
-	IncludeCrowdSec  bool   `json:"include_crowdsec"`
+	PangolinTag     string `json:"pangolin_tag,omitempty"`
+	GerbilTag       string `json:"gerbil_tag,omitempty"`
+	TraefikTag      string `json:"traefik_tag,omitempty"`
+	CrowdSecTag     string `json:"crowdsec_tag,omitempty"`
+	IncludeCrowdSec bool   `json:"include_crowdsec"`
 }
 
 // ImageTags represents current Docker image tags
@@ -164,11 +164,11 @@ type LogEntry struct {
 
 // LogStats represents log statistics
 type LogStats struct {
-	TotalLines   int                       `json:"total_lines"`
-	TopIPs       []IPCount                 `json:"top_ips"`
-	StatusCodes  map[string]int            `json:"status_codes"`
-	HTTPMethods  map[string]int            `json:"http_methods"`
-	ErrorEntries []LogEntry                `json:"error_entries"`
+	TotalLines   int            `json:"total_lines"`
+	TopIPs       []IPCount      `json:"top_ips"`
+	StatusCodes  map[string]int `json:"status_codes"`
+	HTTPMethods  map[string]int `json:"http_methods"`
+	ErrorEntries []LogEntry     `json:"error_entries"`
 }
 
 // IPCount represents IP address count
@@ -204,8 +204,8 @@ type CronJobRequest struct {
 
 // Metric represents a Prometheus metric
 type Metric struct {
-	Name  string            `json:"name"`
-	Value float64           `json:"value"`
+	Name   string            `json:"name"`
+	Value  float64           `json:"value"`
 	Labels map[string]string `json:"labels,omitempty"`
 }
 
@@ -254,9 +254,9 @@ type Allowlist struct {
 
 // AllowlistEntry represents an entry in an allowlist
 type AllowlistEntry struct {
-	Value       string    `json:"value"`        // IP or CIDR range
-	Description string    `json:"description"`  // Optional entry description
-	Expiration  string    `json:"expiration"`   // Optional expiration (e.g., "7d")
+	Value       string    `json:"value"`       // IP or CIDR range
+	Description string    `json:"description"` // Optional entry description
+	Expiration  string    `json:"expiration"`  // Optional expiration (e.g., "7d")
 	ExpiresAt   time.Time `json:"expires_at,omitempty"`
 }
 
@@ -270,8 +270,8 @@ type AllowlistCreateRequest struct {
 type AllowlistAddEntriesRequest struct {
 	AllowlistName string   `json:"allowlist_name" binding:"required"`
 	Values        []string `json:"values" binding:"required"`
-	Expiration    string   `json:"expiration,omitempty"`    // Optional expiration (e.g., "7d")
-	Description   string   `json:"description,omitempty"`   // Optional entry description
+	Expiration    string   `json:"expiration,omitempty"`  // Optional expiration (e.g., "7d")
+	Description   string   `json:"description,omitempty"` // Optional entry description
 }
 
 // AllowlistRemoveEntriesRequest represents a request to remove entries from an allowlist
