@@ -18,6 +18,23 @@ A web-based management interface for CrowdSec security stack with Pangolin integ
 ![React Version](https://img.shields.io/badge/react-18.3-61DAFB.svg)
 ![Status](https://img.shields.io/badge/status-beta-orange.svg)
 
+<img width="1200" height="630" alt="Dashboard" src="/images/Dashboard.png"/>
+<img width="1200" height="630" alt="Health & Diagnostics" src="/images/Health & Diagnostics.png"/>
+<img width="1200" height="630" alt="Whitelist Management" src="/images/Whitelist Management.png"/>
+<img width="1200" height="630" alt="IP Management" src="/images/IP Management.png"/>
+<img width="1200" height="630" alt="CrowdSec Allowlist Management" src="/images/CrowdSec Allowlist Management.png"/>
+<img width="1200" height="630" alt="Scenario Management" src="/images/Scenario Management.png"/>
+<img width="1200" height="630" alt="Captcha Setup" src="/images/Captcha Setup.png"/>
+<img width="1200" height="630" alt="Decision List Analysis" src="/images/Decision List Analysis.png"/>
+<img width="1200" height="630" alt="Alert List Analysis" src="/images/Alert List Analysis.png"/>
+<img width="1200" height="630" alt="Logs Viewer" src="/images/Logs Viewer.png"/>
+<img width="1200" height="630" alt="Backup Management" src="/images/Backup Management.png"/>
+<img width="1200" height="630" alt="System Update" src="/images/System Update.png"/>
+<img width="1200" height="630" alt="Cron Job Management" src="/images/Cron Job Management.png"/>
+<img width="1200" height="630" alt="Services Management" src="/images/Services Management.png"/>
+<img width="1200" height="630" alt="Configuration" src="/images/Configuration.png"/>
+
+
 ## Table of Contents
 
 - [Features](#features)
