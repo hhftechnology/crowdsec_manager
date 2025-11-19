@@ -2905,9 +2905,10 @@ func GetDecisionsAnalysis(dockerClient *docker.Client) gin.HandlerFunc {
 			"length", len(output),
 			"preview", truncateString(output, 200))
 
-		// Parse as raw JSON first to see the actual structure
-		var rawDecisions []map[string]interface{}
-		if err := json.Unmarshal([]byte(output), &rawDecisions); err != nil {
+		// Parse as raw JSON - CrowdSec returns an array of alert objects,
+		// each containing a "decisions" array
+		var rawAlerts []map[string]interface{}
+		if err := json.Unmarshal([]byte(output), &rawAlerts); err != nil {
 			logger.Warn("Failed to parse decisions JSON",
 				"error", err,
 				"output_length", len(output),
@@ -2919,41 +2920,58 @@ func GetDecisionsAnalysis(dockerClient *docker.Client) gin.HandlerFunc {
 			return
 		}
 
-		// Convert to normalized Decision format
-		decisions := make([]models.Decision, 0, len(rawDecisions))
-		for _, raw := range rawDecisions {
-			decision := models.Decision{
-				ID:       int64(getInt(raw, "id")),
-				Duration: getString(raw, "duration"),
+		// Extract decisions from each alert and convert to normalized Decision format
+		decisions := make([]models.Decision, 0)
+		for _, alert := range rawAlerts {
+			// Each alert has a "decisions" array
+			if decisionsArr, ok := alert["decisions"].([]interface{}); ok {
+				// Get alert-level created_at (decisions don't have their own created_at)
+				alertCreatedAt := getString(alert, "created_at")
+				
+				for _, decisionInterface := range decisionsArr {
+					if raw, ok := decisionInterface.(map[string]interface{}); ok {
+						decision := models.Decision{
+							ID:       int64(getInt(raw, "id")),
+							Duration: getString(raw, "duration"),
+						}
+
+						// Handle origin/source field (CrowdSec might use either)
+						decision.Source = getString(raw, "source")
+						if decision.Source == "" {
+							decision.Source = getString(raw, "origin")
+						}
+						decision.Origin = decision.Source
+
+						// Handle type field
+						decision.Type = getString(raw, "type")
+
+						// Handle scope field
+						decision.Scope = getString(raw, "scope")
+
+						// Handle value field
+						decision.Value = getString(raw, "value")
+
+						// Handle scenario/reason field (CrowdSec might use either)
+						decision.Scenario = getString(raw, "scenario")
+						if decision.Scenario == "" {
+							decision.Scenario = getString(raw, "reason")
+						}
+						decision.Reason = decision.Scenario
+
+						// Use alert-level created_at (decisions inherit from their alert)
+						decision.CreatedAt = alertCreatedAt
+
+						// Calculate until/expires timestamp from created_at and duration
+						if decision.CreatedAt != "" && decision.Duration != "" {
+							if untilTime := calculateUntil(decision.CreatedAt, decision.Duration); untilTime != nil {
+								decision.Until = untilTime.Format(time.RFC3339)
+							}
+						}
+
+						decisions = append(decisions, decision)
+					}
+				}
 			}
-
-			// Handle origin/source field (CrowdSec might use either)
-			decision.Source = getString(raw, "source")
-			if decision.Source == "" {
-				decision.Source = getString(raw, "origin")
-			}
-			decision.Origin = decision.Source
-
-			// Handle type field
-			decision.Type = getString(raw, "type")
-
-			// Handle scope field
-			decision.Scope = getString(raw, "scope")
-
-			// Handle value field
-			decision.Value = getString(raw, "value")
-
-			// Handle scenario/reason field (CrowdSec might use either)
-			decision.Scenario = getString(raw, "scenario")
-			if decision.Scenario == "" {
-				decision.Scenario = getString(raw, "reason")
-			}
-			decision.Reason = decision.Scenario
-
-			// Handle created_at field
-			decision.CreatedAt = getString(raw, "created_at")
-
-			decisions = append(decisions, decision)
 		}
 
 		logger.Info("Decisions retrieved successfully",
@@ -3420,6 +3438,47 @@ func getInt(m map[string]interface{}, key string) int {
 		}
 	}
 	return 0
+}
+
+// calculateUntil calculates the expiration time from created_at and duration
+// Duration format: "3h57m35s", "1h", "30m", etc.
+func calculateUntil(createdAtStr, durationStr string) *time.Time {
+	if createdAtStr == "" || durationStr == "" {
+		return nil
+	}
+
+	// Parse created_at timestamp - try multiple formats
+	var createdAt time.Time
+	
+	formats := []string{
+		time.RFC3339,
+		"2006-01-02T15:04:05Z",
+		"2006-01-02 15:04:05 +0000 UTC",
+		time.RFC3339Nano,
+	}
+	
+	for _, format := range formats {
+		if t, err := time.Parse(format, createdAtStr); err == nil {
+			createdAt = t
+			break
+		}
+	}
+	
+	if createdAt.IsZero() {
+		logger.Debug("Failed to parse created_at", "value", createdAtStr)
+		return nil
+	}
+
+	// Parse duration (e.g., "3h57m35s", "1h", "30m")
+	duration, err := time.ParseDuration(durationStr)
+	if err != nil {
+		logger.Debug("Failed to parse duration", "value", durationStr, "error", err)
+		return nil
+	}
+
+	// Calculate until time
+	until := createdAt.Add(duration)
+	return &until
 }
 
 func activeFilters(c *gin.Context) map[string]string {

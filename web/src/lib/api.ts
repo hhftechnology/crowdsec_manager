@@ -38,6 +38,7 @@ export interface Decision {
   duration: string
   scenario: string
   created_at: string
+  until?: string
 }
 
 export interface Bouncer {
