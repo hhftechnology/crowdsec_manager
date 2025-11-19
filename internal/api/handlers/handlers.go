@@ -149,15 +149,15 @@ func RunCompleteDiagnostics(dockerClient *docker.Client, db *database.Database) 
 			} else {
 				// Compute status for each bouncer
 				for i := range bouncers {
-					if bouncers[i].Valid {
+					// Primary indicator: if last pull was recent (within 5 minutes), bouncer is connected
+					if time.Since(bouncers[i].LastPull) <= 5*time.Minute {
 						bouncers[i].Status = "connected"
-					} else {
-						bouncers[i].Status = "disconnected"
-					}
-
-					// Check if last pull was recent (within 5 minutes)
-					if time.Since(bouncers[i].LastPull) > 5*time.Minute {
+					} else if bouncers[i].Valid {
+						// Last pull is old but key is valid - bouncer exists but inactive
 						bouncers[i].Status = "stale"
+					} else {
+						// Key is invalid - bouncer is disconnected
+						bouncers[i].Status = "disconnected"
 					}
 				}
 				logger.Debug("Bouncers retrieved successfully", "count", len(bouncers))
@@ -2417,15 +2417,15 @@ func GetBouncers(dockerClient *docker.Client) gin.HandlerFunc {
 
 		// Compute status for each bouncer
 		for i := range bouncers {
-			if bouncers[i].Valid {
+			// Primary indicator: if last pull was recent (within 5 minutes), bouncer is connected
+			if time.Since(bouncers[i].LastPull) <= 5*time.Minute {
 				bouncers[i].Status = "connected"
-			} else {
-				bouncers[i].Status = "disconnected"
-			}
-
-			// Check if last pull was recent (within 5 minutes)
-			if time.Since(bouncers[i].LastPull) > 5*time.Minute {
+			} else if bouncers[i].Valid {
+				// Last pull is old but key is valid - bouncer exists but inactive
 				bouncers[i].Status = "stale"
+			} else {
+				// Key is invalid - bouncer is disconnected
+				bouncers[i].Status = "disconnected"
 			}
 		}
 

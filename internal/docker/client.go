@@ -173,12 +173,32 @@ func (c *Client) GetContainerLogs(containerName string, tail string) (string, er
 	}
 	defer logs.Close()
 
-	output, err := io.ReadAll(logs)
-	if err != nil {
-		return "", fmt.Errorf("failed to read logs: %w", err)
+	// Use stdcopy to properly demultiplex Docker's log stream protocol
+	// This removes the 8-byte headers that Docker adds to each log line
+	var stdout, stderr bytes.Buffer
+	_, err = stdcopy.StdCopy(&stdout, &stderr, logs)
+	if err != nil && err != io.EOF {
+		return "", fmt.Errorf("failed to demultiplex logs: %w", err)
 	}
 
-	return string(output), nil
+	// Combine stdout and stderr, marking stderr lines if needed
+	var result strings.Builder
+	stdoutStr := stdout.String()
+	stderrStr := stderr.String()
+
+	if len(stdoutStr) > 0 {
+		result.WriteString(stdoutStr)
+	}
+
+	if len(stderrStr) > 0 {
+		if len(stdoutStr) > 0 && !strings.HasSuffix(stdoutStr, "\n") {
+			result.WriteString("\n")
+		}
+		result.WriteString(stderrStr)
+	}
+
+	// Strip control characters and clean up the output
+	return stripControlCharacters(result.String()), nil
 }
 
 // RestartContainer restarts a container
