@@ -3288,13 +3288,16 @@ func InspectAllowlist(dockerClient *docker.Client) gin.HandlerFunc {
 
 		var response models.AllowlistInspectResponse
 		if err := json.Unmarshal([]byte(output), &response); err != nil {
-			logger.Error("Failed to parse allowlist JSON", "error", err)
+			logger.Error("Failed to parse allowlist JSON", "error", err, "output", output)
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
 				Error:   fmt.Sprintf("Failed to parse allowlist data: %v", err),
 			})
 			return
 		}
+
+		// Calculate count from items length (CrowdSec doesn't provide it)
+		response.Count = len(response.Items)
 
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,

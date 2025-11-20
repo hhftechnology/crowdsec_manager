@@ -253,11 +253,11 @@ type Allowlist struct {
 }
 
 // AllowlistEntry represents an entry in an allowlist
+// This structure matches CrowdSec's actual JSON output
 type AllowlistEntry struct {
-	Value       string    `json:"value"`       // IP or CIDR range
-	Description string    `json:"description"` // Optional entry description
-	Expiration  string    `json:"expiration"`  // Optional expiration (e.g., "7d")
-	ExpiresAt   time.Time `json:"expires_at,omitempty"`
+	Value      string    `json:"value"`      // IP or CIDR range
+	CreatedAt  time.Time `json:"created_at"` // When the entry was added
+	Expiration string    `json:"expiration"` // Expiration date (ISO format or "0001-01-01T00:00:00.000Z" for never)
 }
 
 // AllowlistCreateRequest represents a request to create a new allowlist
@@ -271,7 +271,7 @@ type AllowlistAddEntriesRequest struct {
 	AllowlistName string   `json:"allowlist_name" binding:"required"`
 	Values        []string `json:"values" binding:"required"`
 	Expiration    string   `json:"expiration,omitempty"`  // Optional expiration (e.g., "7d")
-	Description   string   `json:"description,omitempty"` // Optional entry description
+	Description   string   `json:"description,omitempty"` // Optional entry description (for CLI, not stored per-entry)
 }
 
 // AllowlistRemoveEntriesRequest represents a request to remove entries from an allowlist
@@ -281,9 +281,12 @@ type AllowlistRemoveEntriesRequest struct {
 }
 
 // AllowlistInspectResponse represents the detailed information about an allowlist
+// This structure matches CrowdSec's actual JSON output from "cscli allowlists inspect -o json"
 type AllowlistInspectResponse struct {
 	Name        string           `json:"name"`
 	Description string           `json:"description"`
-	Entries     []AllowlistEntry `json:"entries"`
-	Count       int              `json:"count"`
+	Items       []AllowlistEntry `json:"items"`      // CrowdSec uses "items", not "entries"
+	CreatedAt   time.Time        `json:"created_at"` // When the allowlist was created
+	UpdatedAt   time.Time        `json:"updated_at"` // When the allowlist was last updated
+	Count       int              `json:"-"`          // Computed field, not in JSON
 }
