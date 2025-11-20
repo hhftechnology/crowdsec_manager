@@ -19,9 +19,9 @@ RUN go mod download
 # Expose ports
 EXPOSE 8080 5173
 
-# Health check
+# Health check (uses PORT env var, defaults to 8080)
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-  CMD curl -f http://localhost:8080/health || exit 1
+  CMD curl -f http://localhost:${PORT:-8080}/health || exit 1
 
 # Air will be started via docker-compose command
 CMD ["air"]

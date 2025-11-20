@@ -58,9 +58,9 @@ RUN mkdir -p /app/backups /app/logs /app/config /app/data
 # Expose port
 EXPOSE 8080
 
-# Health check
+# Health check (uses PORT env var, defaults to 8080)
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:8080/health || exit 1
+  CMD curl -f http://localhost:${PORT:-8080}/health || exit 1
 
 # Run as root user (no USER directive)
 # This allows write access to mounted volumes
