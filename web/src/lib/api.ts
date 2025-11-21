@@ -204,9 +204,8 @@ export interface Allowlist {
 
 export interface AllowlistEntry {
   value: string
-  description: string
+  created_at: string
   expiration: string
-  expires_at?: string
 }
 
 export interface AllowlistCreateRequest {
@@ -229,8 +228,10 @@ export interface AllowlistRemoveEntriesRequest {
 export interface AllowlistInspectResponse {
   name: string
   description: string
-  entries: AllowlistEntry[]
-  count: number
+  items: AllowlistEntry[]  // CrowdSec uses "items", not "entries"
+  created_at: string
+  updated_at: string
+  count: number  // Computed by backend
 }
 
 // =============================================================================

@@ -487,32 +487,43 @@ export default function Allowlist() {
                 <div>
                   <p className="font-medium">{inspectData.name}</p>
                   <p className="text-sm text-muted-foreground">{inspectData.description}</p>
+                  <div className="flex gap-4 mt-2 text-xs text-muted-foreground">
+                    <span>Created: {new Date(inspectData.created_at).toLocaleString()}</span>
+                    <span>Updated: {new Date(inspectData.updated_at).toLocaleString()}</span>
+                  </div>
                 </div>
                 <Badge variant="secondary">{inspectData.count} entries</Badge>
               </div>
 
-              {inspectData.entries && inspectData.entries.length > 0 ? (
+              {inspectData.items && inspectData.items.length > 0 ? (
                 <div className="rounded-md border">
                   <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead>Value</TableHead>
-                        <TableHead>Description</TableHead>
+                        <TableHead>Created At</TableHead>
                         <TableHead>Expiration</TableHead>
-                        <TableHead>Expires At</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {inspectData.entries.map((entry: any, idx: number) => (
-                        <TableRow key={idx}>
-                          <TableCell className="font-mono">{entry.value}</TableCell>
-                          <TableCell>{entry.description || 'N/A'}</TableCell>
-                          <TableCell>{entry.expiration || 'Never'}</TableCell>
-                          <TableCell className="text-sm text-muted-foreground">
-                            {entry.expires_at ? new Date(entry.expires_at).toLocaleString() : 'N/A'}
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                      {inspectData.items.map((entry: any, idx: number) => {
+                        const isNeverExpires = entry.expiration === '0001-01-01T00:00:00.000Z' || !entry.expiration
+                        return (
+                          <TableRow key={idx}>
+                            <TableCell className="font-mono">{entry.value}</TableCell>
+                            <TableCell className="text-sm text-muted-foreground">
+                              {new Date(entry.created_at).toLocaleString()}
+                            </TableCell>
+                            <TableCell>
+                              {isNeverExpires ? (
+                                <Badge variant="secondary">Never</Badge>
+                              ) : (
+                                <span className="text-sm">{new Date(entry.expiration).toLocaleString()}</span>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
                     </TableBody>
                   </Table>
                 </div>
