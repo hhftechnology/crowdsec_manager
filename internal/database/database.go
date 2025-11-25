@@ -55,7 +55,8 @@ func (d *Database) Close() error {
 
 // initSchema initializes the database schema
 func (d *Database) initSchema() error {
-	schema := `
+	// 1. Create table with full schema if it doesn't exist
+	createTable := `
 	CREATE TABLE IF NOT EXISTS settings (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		traefik_dynamic_config TEXT NOT NULL DEFAULT '/etc/traefik/dynamic_config.yml',
@@ -67,24 +68,31 @@ func (d *Database) initSchema() error {
 		discord_webhook_token TEXT NOT NULL DEFAULT '',
 		geoapify_key TEXT NOT NULL DEFAULT '',
 		cti_key TEXT NOT NULL DEFAULT ''
-	);
+	);`
+	if _, err := d.db.Exec(createTable); err != nil {
+		return fmt.Errorf("failed to create settings table: %w", err)
+	}
 
-	-- Insert default settings if not exists
+	// 2. Migrate: Add columns if they don't exist (ignoring errors)
+	// This is necessary because if the table already existed with the old schema, 
+	// CREATE TABLE IF NOT EXISTS does nothing.
+	migrations := []string{
+		"ALTER TABLE settings ADD COLUMN discord_webhook_id TEXT NOT NULL DEFAULT ''",
+		"ALTER TABLE settings ADD COLUMN discord_webhook_token TEXT NOT NULL DEFAULT ''",
+		"ALTER TABLE settings ADD COLUMN geoapify_key TEXT NOT NULL DEFAULT ''",
+		"ALTER TABLE settings ADD COLUMN cti_key TEXT NOT NULL DEFAULT ''",
+	}
+
+	for _, query := range migrations {
+		d.db.Exec(query) // Ignore error: column might already exist
+	}
+
+	// 3. Insert default settings if not exists
+	insertDefaults := `
 	INSERT OR IGNORE INTO settings (id, traefik_dynamic_config, traefik_static_config, traefik_access_log, traefik_error_log, crowdsec_acquis_file, discord_webhook_id, discord_webhook_token, geoapify_key, cti_key)
 	VALUES (1, '/etc/traefik/dynamic_config.yml', '/etc/traefik/traefik_config.yml', '/var/log/traefik/access.log', '/var/log/traefik/traefik.log', '/etc/crowdsec/acquis.yaml', '', '', '', '');
-	
-	-- Add columns if they don't exist (migration)
-	-- SQLite doesn't support IF NOT EXISTS for ADD COLUMN, so we ignore errors in application logic or use a more complex migration strategy.
-	-- For simplicity in this project, we'll rely on the user to reset DB or we can check if column exists.
-	-- A simple way is to try to add them and ignore error.
-	
-	ALTER TABLE settings ADD COLUMN discord_webhook_id TEXT NOT NULL DEFAULT '';
-	ALTER TABLE settings ADD COLUMN discord_webhook_token TEXT NOT NULL DEFAULT '';
-	ALTER TABLE settings ADD COLUMN geoapify_key TEXT NOT NULL DEFAULT '';
-	ALTER TABLE settings ADD COLUMN cti_key TEXT NOT NULL DEFAULT '';
 	`
-
-	_, err := d.db.Exec(schema)
+	_, err := d.db.Exec(insertDefaults)
 	return err
 }
 
