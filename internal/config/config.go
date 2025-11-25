@@ -46,7 +46,9 @@ type Config struct {
 	// Services
 	Services             []string
 	ServicesWithCrowdsec []string
-	IncludeCrowdsec      bool
+	IncludeCrowdsec bool
+	IncludePangolin bool
+	IncludeGerbil   bool
 
 	// Timeouts
 	ShutdownTimeout time.Duration
@@ -85,14 +87,27 @@ func Load() (*Config, error) {
 		TraefikContainerName:  getEnv("TRAEFIK_CONTAINER_NAME", "traefik"),
 
 		IncludeCrowdsec: getEnvAsBool("INCLUDE_CROWDSEC", true),
+		IncludePangolin: getEnvAsBool("INCLUDE_PANGOLIN", true),
+		IncludeGerbil:   getEnvAsBool("INCLUDE_GERBIL", true),
 
 		ShutdownTimeout: time.Duration(getEnvAsInt("SHUTDOWN_TIMEOUT", 30)) * time.Second,
 		ReadTimeout:     time.Duration(getEnvAsInt("READ_TIMEOUT", 15)) * time.Second,
 		WriteTimeout:    time.Duration(getEnvAsInt("WRITE_TIMEOUT", 15)) * time.Second,
 	}
 
-	cfg.Services = []string{cfg.PangolinContainerName, cfg.GerbilContainerName, cfg.TraefikContainerName}
-	cfg.ServicesWithCrowdsec = []string{cfg.PangolinContainerName, cfg.GerbilContainerName, cfg.CrowdsecContainerName, cfg.TraefikContainerName}
+	// Build services list dynamically
+	cfg.Services = []string{cfg.TraefikContainerName}
+	if cfg.IncludePangolin {
+		cfg.Services = append(cfg.Services, cfg.PangolinContainerName)
+	}
+	if cfg.IncludeGerbil {
+		cfg.Services = append(cfg.Services, cfg.GerbilContainerName)
+	}
+
+	// Build ServicesWithCrowdsec list
+	cfg.ServicesWithCrowdsec = make([]string, len(cfg.Services))
+	copy(cfg.ServicesWithCrowdsec, cfg.Services)
+	cfg.ServicesWithCrowdsec = append(cfg.ServicesWithCrowdsec, cfg.CrowdsecContainerName)
 
 	// Ensure required directories exist
 	if err := cfg.createDirectories(); err != nil {

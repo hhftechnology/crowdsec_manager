@@ -15,6 +15,8 @@ export default function Services() {
   const queryClient = useQueryClient()
   const [enrollmentKey, setEnrollmentKey] = useState('')
   const [isEnrollDialogOpen, setIsEnrollDialogOpen] = useState(false)
+  const [enrollmentStatus, setEnrollmentStatus] = useState<'idle' | 'enrolling' | 'waiting_approval' | 'success'>('idle')
+  const [pollInterval, setPollInterval] = useState<number | null>(null)
 
   const { data: servicesData, isLoading } = useQuery({
     queryKey: ['services'],
@@ -23,6 +25,29 @@ export default function Services() {
       return response.data.data || []
     },
     refetchInterval: 10000, // Refresh every 10 seconds
+  })
+
+  // Poll for enrollment status
+  useQuery({
+    queryKey: ['crowdsec-enrollment-status'],
+    queryFn: async () => {
+      if (enrollmentStatus !== 'waiting_approval') return null
+      const response = await api.crowdsec.getStatus()
+      
+      if (response.data.data?.enrolled && response.data.data?.validated) {
+        setEnrollmentStatus('success')
+        setPollInterval(null)
+        toast.success('CrowdSec instance successfully enrolled and validated!')
+        setTimeout(() => {
+          setIsEnrollDialogOpen(false)
+          setEnrollmentStatus('idle')
+          setEnrollmentKey('')
+        }, 2000)
+      }
+      return response.data.data
+    },
+    enabled: enrollmentStatus === 'waiting_approval',
+    refetchInterval: 2000, // Poll every 2 seconds
   })
 
   const actionMutation = useMutation({
@@ -50,15 +75,15 @@ export default function Services() {
   const enrollMutation = useMutation({
     mutationFn: (data: EnrollRequest) => api.crowdsec.enroll(data),
     onSuccess: (response: { data: { data?: { output?: string } } }) => {
-      toast.success('Enrollment completed successfully')
-      setEnrollmentKey('')
-      setIsEnrollDialogOpen(false)
+      toast.success('Enrollment key submitted. Please approve in CrowdSec Console.')
+      setEnrollmentStatus('waiting_approval')
       if (response.data.data?.output) {
         console.log('Enrollment output:', response.data.data.output)
       }
     },
     onError: () => {
-      toast.error('Failed to enroll with CrowdSec')
+      toast.error('Failed to submit enrollment key')
+      setEnrollmentStatus('idle')
     },
   })
 
@@ -77,6 +102,12 @@ export default function Services() {
       return
     }
     enrollMutation.mutate({ enrollment_key: enrollmentKey.trim() })
+    setEnrollmentStatus('enrolling')
+  }
+
+  const handleCancelEnrollment = () => {
+    setEnrollmentStatus('idle')
+    setPollInterval(null)
   }
 
   const getServiceStatus = (service: any): 'running' | 'stopped' | 'unknown' => {
@@ -109,28 +140,65 @@ export default function Services() {
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleEnroll} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="enrollment-key">
-                  Enrollment Key <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  id="enrollment-key"
-                  type="text"
-                  placeholder="Your CrowdSec Console enrollment key"
-                  value={enrollmentKey}
-                  onChange={(e) => setEnrollmentKey(e.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Get your enrollment key from the CrowdSec Console
-                </p>
-              </div>
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={enrollMutation.isPending}
-              >
-                {enrollMutation.isPending ? 'Enrolling...' : 'Enroll Instance'}
-              </Button>
+              {enrollmentStatus === 'idle' || enrollmentStatus === 'enrolling' ? (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="enrollment-key">
+                      Enrollment Key <span className="text-destructive">*</span>
+                    </Label>
+                    <Input
+                      id="enrollment-key"
+                      type="text"
+                      placeholder="Your CrowdSec Console enrollment key"
+                      value={enrollmentKey}
+                      onChange={(e) => setEnrollmentKey(e.target.value)}
+                      disabled={enrollmentStatus === 'enrolling'}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Get your enrollment key from the CrowdSec Console
+                    </p>
+                  </div>
+                  <Button
+                    type="submit"
+                    className="w-full"
+                    disabled={enrollmentStatus === 'enrolling'}
+                  >
+                    {enrollmentStatus === 'enrolling' ? 'Submitting...' : 'Enroll Instance'}
+                  </Button>
+                </>
+              ) : enrollmentStatus === 'waiting_approval' ? (
+                <div className="text-center space-y-4 py-4">
+                  <div className="flex justify-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+                  </div>
+                  <div>
+                    <h3 className="font-medium text-lg">Waiting for Approval</h3>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Please go to the CrowdSec Console and approve this instance.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleCancelEnrollment}
+                    className="w-full"
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              ) : (
+                <div className="text-center space-y-4 py-4">
+                  <div className="flex justify-center">
+                    <CheckCircle2 className="h-12 w-12 text-green-500" />
+                  </div>
+                  <div>
+                    <h3 className="font-medium text-lg">Enrollment Successful!</h3>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Your instance has been successfully enrolled and validated.
+                    </p>
+                  </div>
+                </div>
+              )}
             </form>
           </DialogContent>
         </Dialog>

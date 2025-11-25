@@ -129,6 +129,7 @@ func RegisterServicesRoutes(router *gin.RouterGroup, dockerClient *docker.Client
 		services.GET("/verify", handlers.VerifyServices(dockerClient, cfg))
 		services.POST("/shutdown", handlers.GracefulShutdown(dockerClient, cfg))
 		services.POST("/action", handlers.ServiceAction(dockerClient, cfg))
+
 	}
 
 	// CrowdSec specific
@@ -140,12 +141,12 @@ func RegisterServicesRoutes(router *gin.RouterGroup, dockerClient *docker.Client
 		crowdsec.GET("/alerts/analysis", handlers.GetAlertsAnalysis(dockerClient, cfg))
 		crowdsec.GET("/metrics", handlers.GetMetrics(dockerClient, cfg))
 		crowdsec.POST("/enroll", handlers.EnrollCrowdSec(dockerClient, cfg))
+		crowdsec.GET("/status", handlers.GetCrowdSecEnrollmentStatus(dockerClient, cfg))
 	}
 
 	// Traefik specific
 	traefik := router.Group("/traefik")
 	{
-		traefik.GET("/integration", handlers.CheckTraefikIntegration(dockerClient, db, cfg))
 		traefik.GET("/config", handlers.GetTraefikConfig())
 		traefik.GET("/config-path", handlers.GetTraefikConfigPath(db))
 		traefik.POST("/config-path", handlers.SetTraefikConfigPath(db))

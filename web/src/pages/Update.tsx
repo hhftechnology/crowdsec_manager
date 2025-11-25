@@ -157,29 +157,33 @@ export default function Update() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="pangolin-tag">Pangolin Tag</Label>
-            <Input
-              id="pangolin-tag"
-              type="text"
-              placeholder="e.g., latest, v1.0.0, stable"
-              value={pangolinTag}
-              onChange={(e) => setPangolinTag(e.target.value)}
-              disabled={isUpdating}
-            />
-          </div>
+          {updateStatus && updateStatus['pangolin'] && (
+            <div className="space-y-2">
+              <Label htmlFor="pangolin-tag">Pangolin Tag</Label>
+              <Input
+                id="pangolin-tag"
+                type="text"
+                placeholder="e.g., latest, v1.0.0, stable"
+                value={pangolinTag}
+                onChange={(e) => setPangolinTag(e.target.value)}
+                disabled={isUpdating}
+              />
+            </div>
+          )}
 
-          <div className="space-y-2">
-            <Label htmlFor="gerbil-tag">Gerbil Tag</Label>
-            <Input
-              id="gerbil-tag"
-              type="text"
-              placeholder="e.g., latest, v1.0.0, stable"
-              value={gerbilTag}
-              onChange={(e) => setGerbilTag(e.target.value)}
-              disabled={isUpdating}
-            />
-          </div>
+          {updateStatus && updateStatus['gerbil'] && (
+            <div className="space-y-2">
+              <Label htmlFor="gerbil-tag">Gerbil Tag</Label>
+              <Input
+                id="gerbil-tag"
+                type="text"
+                placeholder="e.g., latest, v1.0.0, stable"
+                value={gerbilTag}
+                onChange={(e) => setGerbilTag(e.target.value)}
+                disabled={isUpdating}
+              />
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="traefik-tag">Traefik Tag</Label>
