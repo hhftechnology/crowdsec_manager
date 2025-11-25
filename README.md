@@ -61,6 +61,7 @@ A web-based management interface for CrowdSec security stack with Pangolin integ
 - **Whitelist Management** - Comprehensive IP and CIDR whitelisting for CrowdSec and Traefik
 - **Decision Management** - View and manage CrowdSec security decisions
 - **Bouncer Management** - Monitor CrowdSec bouncers and their status
+- **Modular Architecture** - Run with or without optional components (Pangolin, Gerbil)
 
 ### Advanced Security Features
 
@@ -258,6 +259,8 @@ The following environment variables can be configured in your `docker-compose.ym
 | ---------------------- | --------------------------- | ----------------------------------------------- |
 | `CROWDSEC_ACQUIS_FILE` | `/etc/crowdsec/acquis.yaml` | CrowdSec acquisition file path                  |
 | `INCLUDE_CROWDSEC`     | `false`                     | Include CrowdSec in operations (`true`/`false`) |
+| `INCLUDE_PANGOLIN`     | `true`                      | Include Pangolin service (`true`/`false`)       |
+| `INCLUDE_GERBIL`       | `true`                      | Include Gerbil service (`true`/`false`)         |
 
 #### Backup Configuration
 
@@ -267,32 +270,7 @@ The following environment variables can be configured in your `docker-compose.ym
 | `RETENTION_DAYS` | `60`           | Number of days to retain backups before auto-cleanup |
 
 ### Volume Mappings
-
-The following volumes are mounted in the container:
-
-#### Required Volumes
-
-| Host Path                  | Container Path            | Purpose                       | Required |
-| -------------------------- | ------------------------- | ----------------------------- | -------- |
-| `/var/run/docker.sock`     | `/var/run/docker.sock`    | Docker daemon access          |    Yes   |
-| `/root/config`             | `/app/config`             | Configuration files           |    Yes   |
-| `/root/docker-compose.yml` | `/app/docker-compose.yml` | Docker Compose file           |    Yes   |
-| `./backups`                | `/app/backups`            | Backup storage                |    Yes   |
-| `./data`                   | `/app/data`               | Application data and database |    Yes   |
-
-#### Optional Volumes
-
-| Host Path                   | Container Path     | Purpose            | Required     |
-| --------------------------- | ------------------ | ------------------ | -------------|
-| `/root/config/traefik/logs` | `/app/logs`        | Application logs   |  Recommended |
-| `/root/config/traefik/logs` | `/var/log/traefik` | Traefik log access |  Recommended |
-
-**Important Notes:**
-
-- The `./backups` and `./data` paths are relative to your `docker-compose.yml` location
-- Ensure the host directories exist and have proper permissions
-- The Docker socket mount is required for container management
-- Traefik logs volume allows the application to read Traefik access/error logs
+For a detailed explanation of volume mappings, directory structure, and permissions, please refer to [VOLUMES_AND_PATHS.md](VOLUMES_AND_PATHS.md).
 
 ### Network Configuration
 

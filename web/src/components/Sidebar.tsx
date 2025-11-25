@@ -18,6 +18,7 @@ import {
   Target,
   ChevronLeft,
   ChevronRight,
+  Bell,
 } from 'lucide-react'
 import { Separator } from './ui/separator'
 import { Button } from './ui/button'
@@ -39,6 +40,7 @@ const navigation = [
   { name: 'Cron Jobs', href: '/cron', icon: Clock },
   { name: 'Services', href: '/services', icon: Settings },
   { name: 'Configuration', href: '/configuration', icon: Sliders },
+  { name: 'Notifications', href: '/notifications', icon: Bell },
 ]
 
 interface SidebarProps {

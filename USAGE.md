@@ -118,6 +118,23 @@ curl -X POST http://localhost:8080/api/cron/setup \
 curl http://localhost:8080/api/cron/list | jq
 ```
 
+### 4. Configure Optional Services
+
+You can enable or disable optional services (Pangolin, Gerbil) using environment variables in your `docker-compose.yml`.
+
+**Configuration:**
+```yaml
+environment:
+  - INCLUDE_PANGOLIN=true  # Set to false to disable Pangolin
+  - INCLUDE_GERBIL=true    # Set to false to disable Gerbil
+```
+
+**Verify Service Status:**
+```bash
+# Check which services are active
+curl http://localhost:8080/api/health/stack | jq
+```
+
 ## Daily Operations
 
 ### Monitoring System Health
@@ -344,14 +361,35 @@ curl http://localhost:8080/api/traefik/config | jq
 
 ### CrowdSec Console Enrollment
 
-**Enroll with Console:**
-```bash
-curl -X POST http://localhost:8080/api/crowdsec/enroll \
-  -H "Content-Type: application/json" \
-  -d '{
-    "console_token": "your-console-token"
-  }'
-```
+
+
+**Enroll with Console (Two-Step Process):**
+
+1. **Submit Enrollment Key:**
+   ```bash
+   curl -X POST http://localhost:8080/api/crowdsec/enroll \
+     -H "Content-Type: application/json" \
+     -d '{
+       "enrollment_key": "your-console-key"
+     }'
+   ```
+
+2. **Check Enrollment Status:**
+   The enrollment process may take a few moments to validate. Poll the status endpoint:
+   ```bash
+   curl http://localhost:8080/api/crowdsec/status | jq
+   ```
+   
+   Expected output when successful:
+   ```json
+   {
+     "success": true,
+     "data": {
+       "enrolled": true,
+       "validated": true
+     }
+   }
+   ```
 
 ## Best Practices
 

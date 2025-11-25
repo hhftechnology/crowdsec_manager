@@ -167,3 +167,12 @@ func RegisterServicesRoutes(router *gin.RouterGroup, dockerClient *docker.Client
 		config.GET("/files/:container/:fileType", handlers.GetFileContent(dockerClient, db))
 	}
 }
+
+// RegisterNotificationRoutes registers notification management routes
+func RegisterNotificationRoutes(router *gin.RouterGroup, dockerClient *docker.Client, db *database.Database, cfg *config.Config) {
+	notifications := router.Group("/notifications")
+	{
+		notifications.GET("/discord", handlers.GetDiscordConfig(db, cfg))
+		notifications.POST("/discord", handlers.UpdateDiscordConfig(db, cfg, dockerClient))
+	}
+}

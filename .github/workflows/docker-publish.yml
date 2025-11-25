@@ -6,6 +6,7 @@ on:
       - main
       - dev
       - dev-go
+      - dev-discord
     tags:
       - 'v*'
   pull_request:

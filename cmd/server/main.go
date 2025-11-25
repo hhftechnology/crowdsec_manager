@@ -92,6 +92,7 @@ func main() {
 		api.RegisterUpdateRoutes(apiGroup, dockerClient, cfg)
 		api.RegisterCronRoutes(apiGroup)
 		api.RegisterServicesRoutes(apiGroup, dockerClient, db, cfg)
+		api.RegisterNotificationRoutes(apiGroup, dockerClient, db, cfg)
 	}
 
 	// Serve static files (built frontend)

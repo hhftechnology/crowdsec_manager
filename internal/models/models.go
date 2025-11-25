@@ -290,3 +290,13 @@ type AllowlistInspectResponse struct {
 	UpdatedAt   time.Time        `json:"updated_at"` // When the allowlist was last updated
 	Count       int              `json:"-"`          // Computed field, not in JSON
 }
+
+// DiscordConfig represents the configuration for Discord notifications
+type DiscordConfig struct {
+	Enabled           bool   `json:"enabled"`
+	WebhookID         string `json:"webhook_id"`
+	WebhookToken      string `json:"webhook_token"`
+	GeoapifyKey       string `json:"geoapify_key"`
+	CTIKey            string `json:"cti_key"`
+	CrowdSecRestarted bool   `json:"crowdsec_restarted,omitempty"` // Status flag
+}

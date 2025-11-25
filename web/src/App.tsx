@@ -19,6 +19,7 @@ const Services = lazy(() => import('./pages/Services'))
 const Configuration = lazy(() => import('./pages/Configuration'))
 const DecisionAnalysis = lazy(() => import('./pages/DecisionAnalysis'))
 const AlertAnalysis = lazy(() => import('./pages/AlertAnalysis'))
+const Notifications = lazy(() => import('./pages/Notifications'))
 
 function App() {
   return (
@@ -41,6 +42,7 @@ function App() {
             <Route path="/cron" element={<Cron />} />
             <Route path="/services" element={<Services />} />
             <Route path="/configuration" element={<Configuration />} />
+            <Route path="/notifications" element={<Notifications />} />
           </Routes>
         </Suspense>
       </Layout>

@@ -20,6 +20,10 @@ type Settings struct {
 	TraefikAccessLog     string
 	TraefikErrorLog      string
 	CrowdSecAcquisFile   string
+	DiscordWebhookID     string
+	DiscordWebhookToken  string
+	GeoapifyKey          string
+	CTIKey               string
 }
 
 // New creates a new database connection
@@ -58,12 +62,26 @@ func (d *Database) initSchema() error {
 		traefik_static_config TEXT NOT NULL DEFAULT '/etc/traefik/traefik_config.yml',
 		traefik_access_log TEXT NOT NULL DEFAULT '/var/log/traefik/access.log',
 		traefik_error_log TEXT NOT NULL DEFAULT '/var/log/traefik/traefik.log',
-		crowdsec_acquis_file TEXT NOT NULL DEFAULT '/etc/crowdsec/acquis.yaml'
+		crowdsec_acquis_file TEXT NOT NULL DEFAULT '/etc/crowdsec/acquis.yaml',
+		discord_webhook_id TEXT NOT NULL DEFAULT '',
+		discord_webhook_token TEXT NOT NULL DEFAULT '',
+		geoapify_key TEXT NOT NULL DEFAULT '',
+		cti_key TEXT NOT NULL DEFAULT ''
 	);
 
 	-- Insert default settings if not exists
-	INSERT OR IGNORE INTO settings (id, traefik_dynamic_config, traefik_static_config, traefik_access_log, traefik_error_log, crowdsec_acquis_file)
-	VALUES (1, '/etc/traefik/dynamic_config.yml', '/etc/traefik/traefik_config.yml', '/var/log/traefik/access.log', '/var/log/traefik/traefik.log', '/etc/crowdsec/acquis.yaml');
+	INSERT OR IGNORE INTO settings (id, traefik_dynamic_config, traefik_static_config, traefik_access_log, traefik_error_log, crowdsec_acquis_file, discord_webhook_id, discord_webhook_token, geoapify_key, cti_key)
+	VALUES (1, '/etc/traefik/dynamic_config.yml', '/etc/traefik/traefik_config.yml', '/var/log/traefik/access.log', '/var/log/traefik/traefik.log', '/etc/crowdsec/acquis.yaml', '', '', '', '');
+	
+	-- Add columns if they don't exist (migration)
+	-- SQLite doesn't support IF NOT EXISTS for ADD COLUMN, so we ignore errors in application logic or use a more complex migration strategy.
+	-- For simplicity in this project, we'll rely on the user to reset DB or we can check if column exists.
+	-- A simple way is to try to add them and ignore error.
+	
+	ALTER TABLE settings ADD COLUMN discord_webhook_id TEXT NOT NULL DEFAULT '';
+	ALTER TABLE settings ADD COLUMN discord_webhook_token TEXT NOT NULL DEFAULT '';
+	ALTER TABLE settings ADD COLUMN geoapify_key TEXT NOT NULL DEFAULT '';
+	ALTER TABLE settings ADD COLUMN cti_key TEXT NOT NULL DEFAULT '';
 	`
 
 	_, err := d.db.Exec(schema)
@@ -74,11 +92,13 @@ func (d *Database) initSchema() error {
 func (d *Database) GetSettings() (*Settings, error) {
 	settings := &Settings{}
 	err := d.db.QueryRow(`
-		SELECT id, traefik_dynamic_config, traefik_static_config, traefik_access_log, traefik_error_log, crowdsec_acquis_file
+		SELECT id, traefik_dynamic_config, traefik_static_config, traefik_access_log, traefik_error_log, crowdsec_acquis_file,
+		discord_webhook_id, discord_webhook_token, geoapify_key, cti_key
 		FROM settings
 		WHERE id = 1
 	`).Scan(&settings.ID, &settings.TraefikDynamicConfig, &settings.TraefikStaticConfig,
-		&settings.TraefikAccessLog, &settings.TraefikErrorLog, &settings.CrowdSecAcquisFile)
+		&settings.TraefikAccessLog, &settings.TraefikErrorLog, &settings.CrowdSecAcquisFile,
+		&settings.DiscordWebhookID, &settings.DiscordWebhookToken, &settings.GeoapifyKey, &settings.CTIKey)
 
 	if err == sql.ErrNoRows {
 		// Return defaults
@@ -103,10 +123,15 @@ func (d *Database) UpdateSettings(settings *Settings) error {
 		    traefik_static_config = ?,
 		    traefik_access_log = ?,
 		    traefik_error_log = ?,
-		    crowdsec_acquis_file = ?
+		    crowdsec_acquis_file = ?,
+			discord_webhook_id = ?,
+			discord_webhook_token = ?,
+			geoapify_key = ?,
+			cti_key = ?
 		WHERE id = 1
 	`, settings.TraefikDynamicConfig, settings.TraefikStaticConfig,
-		settings.TraefikAccessLog, settings.TraefikErrorLog, settings.CrowdSecAcquisFile)
+		settings.TraefikAccessLog, settings.TraefikErrorLog, settings.CrowdSecAcquisFile,
+		settings.DiscordWebhookID, settings.DiscordWebhookToken, settings.GeoapifyKey, settings.CTIKey)
 	return err
 }
 
