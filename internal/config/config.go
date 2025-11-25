@@ -37,6 +37,12 @@ type Config struct {
 	RetentionDays int
 	BackupItems   []string
 
+	// Container Names
+	CrowdsecContainerName string
+	PangolinContainerName string
+	GerbilContainerName   string
+	TraefikContainerName  string
+
 	// Services
 	Services             []string
 	ServicesWithCrowdsec []string
@@ -73,14 +79,20 @@ func Load() (*Config, error) {
 		RetentionDays: getEnvAsInt("RETENTION_DAYS", 60),
 		BackupItems:   []string{"docker-compose.yml", "config"},
 
-		Services:             []string{"pangolin", "gerbil", "traefik"},
-		ServicesWithCrowdsec: []string{"pangolin", "gerbil", "crowdsec", "traefik"},
-		IncludeCrowdsec:      getEnvAsBool("INCLUDE_CROWDSEC", true),
+		CrowdsecContainerName: getEnv("CROWDSEC_CONTAINER_NAME", "crowdsec"),
+		PangolinContainerName: getEnv("PANGOLIN_CONTAINER_NAME", "pangolin"),
+		GerbilContainerName:   getEnv("GERBIL_CONTAINER_NAME", "gerbil"),
+		TraefikContainerName:  getEnv("TRAEFIK_CONTAINER_NAME", "traefik"),
+
+		IncludeCrowdsec: getEnvAsBool("INCLUDE_CROWDSEC", true),
 
 		ShutdownTimeout: time.Duration(getEnvAsInt("SHUTDOWN_TIMEOUT", 30)) * time.Second,
 		ReadTimeout:     time.Duration(getEnvAsInt("READ_TIMEOUT", 15)) * time.Second,
 		WriteTimeout:    time.Duration(getEnvAsInt("WRITE_TIMEOUT", 15)) * time.Second,
 	}
+
+	cfg.Services = []string{cfg.PangolinContainerName, cfg.GerbilContainerName, cfg.TraefikContainerName}
+	cfg.ServicesWithCrowdsec = []string{cfg.PangolinContainerName, cfg.GerbilContainerName, cfg.CrowdsecContainerName, cfg.TraefikContainerName}
 
 	// Ensure required directories exist
 	if err := cfg.createDirectories(); err != nil {

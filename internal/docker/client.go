@@ -128,9 +128,19 @@ func (c *Client) ExecCommand(containerName string, cmd []string) (string, error)
 		return "", fmt.Errorf("failed to demultiplex exec output: %w", err)
 	}
 
-	// Return stdout output, log stderr if present
-	if stderr.Len() > 0 {
-		return stripControlCharacters(stdout.String()), fmt.Errorf("command stderr: %s", stderr.String())
+	// Inspect the exec instance to get the exit code
+	inspect, err := c.cli.ContainerExecInspect(c.ctx, execIDResp.ID)
+	if err != nil {
+		return stripControlCharacters(stdout.String()), fmt.Errorf("failed to inspect exec: %w", err)
+	}
+
+	// Return stdout output, log stderr if present but exit code is 0
+	if inspect.ExitCode != 0 {
+		errMsg := stderr.String()
+		if errMsg == "" {
+			errMsg = fmt.Sprintf("command failed with exit code %d", inspect.ExitCode)
+		}
+		return stripControlCharacters(stdout.String()), fmt.Errorf("command failed (exit code %d): %s", inspect.ExitCode, errMsg)
 	}
 
 	return stripControlCharacters(stdout.String()), nil

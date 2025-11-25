@@ -47,7 +47,7 @@ func main() {
 	defer dockerClient.Close()
 
 	// Check prerequisites
-	if err := checkPrerequisites(dockerClient); err != nil {
+	if err := checkPrerequisites(dockerClient, cfg); err != nil {
 		logger.Fatal("Prerequisites check failed", "error", err)
 	}
 
@@ -81,17 +81,17 @@ func main() {
 	// API routes
 	apiGroup := router.Group("/api")
 	{
-		api.RegisterHealthRoutes(apiGroup, dockerClient, db)
-		api.RegisterIPRoutes(apiGroup, dockerClient)
-		api.RegisterWhitelistRoutes(apiGroup, dockerClient)
+		api.RegisterHealthRoutes(apiGroup, dockerClient, db, cfg)
+		api.RegisterIPRoutes(apiGroup, dockerClient, cfg)
+		api.RegisterWhitelistRoutes(apiGroup, dockerClient, cfg)
 		api.RegisterAllowlistRoutes(apiGroup, dockerClient)
-		api.RegisterScenarioRoutes(apiGroup, dockerClient, cfg.ConfigDir)
-		api.RegisterCaptchaRoutes(apiGroup, dockerClient, db)
-		api.RegisterLogRoutes(apiGroup, dockerClient, db)
+		api.RegisterScenarioRoutes(apiGroup, dockerClient, cfg.ConfigDir, cfg)
+		api.RegisterCaptchaRoutes(apiGroup, dockerClient, db, cfg)
+		api.RegisterLogRoutes(apiGroup, dockerClient, db, cfg)
 		api.RegisterBackupRoutes(apiGroup, backupManager, dockerClient)
-		api.RegisterUpdateRoutes(apiGroup, dockerClient)
+		api.RegisterUpdateRoutes(apiGroup, dockerClient, cfg)
 		api.RegisterCronRoutes(apiGroup)
-		api.RegisterServicesRoutes(apiGroup, dockerClient, db)
+		api.RegisterServicesRoutes(apiGroup, dockerClient, db, cfg)
 	}
 
 	// Serve static files (built frontend)
@@ -136,7 +136,7 @@ func main() {
 	logger.Info("Server exited")
 }
 
-func checkPrerequisites(client *docker.Client) error {
+func checkPrerequisites(client *docker.Client, cfg *config.Config) error {
 	logger.Info("Checking prerequisites...")
 
 	// Check Docker daemon
@@ -146,7 +146,7 @@ func checkPrerequisites(client *docker.Client) error {
 	logger.Info(" Docker daemon is running")
 
 	// Check required containers exist
-	containers := []string{"crowdsec", "traefik", "pangolin", "gerbil"}
+	containers := []string{cfg.CrowdsecContainerName, cfg.TraefikContainerName, cfg.PangolinContainerName, cfg.GerbilContainerName}
 	for _, name := range containers {
 		exists, err := client.ContainerExists(name)
 		if err != nil {

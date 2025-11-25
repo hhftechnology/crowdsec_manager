@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"crowdsec-manager/internal/backup"
+	"crowdsec-manager/internal/config"
 	"crowdsec-manager/internal/database"
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
@@ -26,13 +27,12 @@ import (
 // =============================================================================
 // 1. HEALTH & DIAGNOSTICS
 // =============================================================================
-
 // CheckStackHealth checks the health of all containers in the stack
-func CheckStackHealth(dockerClient *docker.Client) gin.HandlerFunc {
+func CheckStackHealth(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		logger.Info("Checking stack health")
 
-		containerNames := []string{"crowdsec", "traefik", "pangolin", "gerbil"}
+		containerNames := []string{cfg.CrowdsecContainerName, cfg.TraefikContainerName, cfg.PangolinContainerName, cfg.GerbilContainerName}
 		var containers []models.Container
 
 		allRunning := true
@@ -93,12 +93,12 @@ func CheckStackHealth(dockerClient *docker.Client) gin.HandlerFunc {
 }
 
 // RunCompleteDiagnostics runs a complete system diagnostic
-func RunCompleteDiagnostics(dockerClient *docker.Client, db *database.Database) gin.HandlerFunc {
+func RunCompleteDiagnostics(dockerClient *docker.Client, db *database.Database, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		logger.Info("Running complete diagnostics")
 
 		// Get health status
-		containerNames := []string{"crowdsec", "traefik", "pangolin", "gerbil"}
+		containerNames := []string{cfg.CrowdsecContainerName, cfg.TraefikContainerName, cfg.PangolinContainerName, cfg.GerbilContainerName}
 		var containers []models.Container
 		allRunning := true
 
@@ -138,7 +138,7 @@ func RunCompleteDiagnostics(dockerClient *docker.Client, db *database.Database) 
 
 		// Get bouncers
 		var bouncers []models.Bouncer
-		bouncerOutput, err := dockerClient.ExecCommand("crowdsec", []string{"cscli", "bouncers", "list", "-o", "json"})
+		bouncerOutput, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{"cscli", "bouncers", "list", "-o", "json"})
 		if err == nil {
 			// Parse bouncer JSON output
 			if err := json.Unmarshal([]byte(bouncerOutput), &bouncers); err != nil {
@@ -168,7 +168,7 @@ func RunCompleteDiagnostics(dockerClient *docker.Client, db *database.Database) 
 
 		// Get decisions
 		var decisions []models.Decision
-		decisionOutput, err := dockerClient.ExecCommand("crowdsec", []string{"cscli", "decisions", "list", "-o", "json"})
+		decisionOutput, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{"cscli", "decisions", "list", "-o", "json"})
 		if err == nil {
 			// Parse as raw JSON first to handle field name variations
 			var rawDecisions []map[string]interface{}
@@ -247,7 +247,7 @@ func RunCompleteDiagnostics(dockerClient *docker.Client, db *database.Database) 
 
 		// Try each path until we find one that works
 		for _, path := range configPaths {
-			output, err := dockerClient.ExecCommand("traefik", []string{"cat", path})
+			output, err := dockerClient.ExecCommand(cfg.TraefikContainerName, []string{"cat", path})
 			if err == nil && output != "" {
 				configContent = output
 				foundConfigPath = path
@@ -349,13 +349,13 @@ func GetPublicIP() gin.HandlerFunc {
 }
 
 // IsIPBlocked checks if an IP is blocked by CrowdSec
-func IsIPBlocked(dockerClient *docker.Client) gin.HandlerFunc {
+func IsIPBlocked(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ip := c.Param("ip")
 		logger.Info("Checking if IP is blocked", "ip", ip)
 
 		// Check CrowdSec decisions
-		output, err := dockerClient.ExecCommand("crowdsec", []string{
+		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
 			"cscli", "decisions", "list", "-i", ip, "-o", "json",
 		})
 		if err != nil {
@@ -381,7 +381,7 @@ func IsIPBlocked(dockerClient *docker.Client) gin.HandlerFunc {
 }
 
 // CheckIPSecurity performs comprehensive IP security check
-func CheckIPSecurity(dockerClient *docker.Client) gin.HandlerFunc {
+func CheckIPSecurity(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ip := c.Param("ip")
 		logger.Info("Performing security check", "ip", ip)
@@ -395,7 +395,7 @@ func CheckIPSecurity(dockerClient *docker.Client) gin.HandlerFunc {
 		}
 
 		// Check CrowdSec decisions
-		decisionOutput, err := dockerClient.ExecCommand("crowdsec", []string{
+		decisionOutput, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
 			"cscli", "decisions", "list", "-i", ip,
 		})
 		if err == nil {
@@ -404,7 +404,7 @@ func CheckIPSecurity(dockerClient *docker.Client) gin.HandlerFunc {
 		}
 
 		// Check CrowdSec whitelist
-		whitelistOutput, err := dockerClient.ExecCommand("crowdsec", []string{
+		whitelistOutput, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
 			"cat", "/etc/crowdsec/parsers/s02-enrich/mywhitelists.yaml",
 		})
 		if err == nil {
@@ -415,7 +415,7 @@ func CheckIPSecurity(dockerClient *docker.Client) gin.HandlerFunc {
 		}
 
 		// Check Traefik whitelist
-		traefikConfig, err := dockerClient.ExecCommand("traefik", []string{
+		traefikConfig, err := dockerClient.ExecCommand(cfg.TraefikContainerName, []string{
 			"cat", "/etc/traefik/dynamic_config.yml",
 		})
 		if err == nil {
@@ -433,7 +433,7 @@ func CheckIPSecurity(dockerClient *docker.Client) gin.HandlerFunc {
 }
 
 // UnbanIP unbans an IP address from CrowdSec
-func UnbanIP(dockerClient *docker.Client) gin.HandlerFunc {
+func UnbanIP(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req models.UnbanRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -447,7 +447,7 @@ func UnbanIP(dockerClient *docker.Client) gin.HandlerFunc {
 		logger.Info("Unbanning IP", "ip", req.IP)
 
 		// Delete decisions for the IP
-		output, err := dockerClient.ExecCommand("crowdsec", []string{
+		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
 			"cscli", "decisions", "delete", "--ip", req.IP,
 		})
 		if err != nil {
@@ -473,7 +473,7 @@ func UnbanIP(dockerClient *docker.Client) gin.HandlerFunc {
 // =============================================================================
 
 // ViewWhitelist displays all whitelisted IPs from both CrowdSec and Traefik
-func ViewWhitelist(dockerClient *docker.Client) gin.HandlerFunc {
+func ViewWhitelist(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		logger.Info("Viewing whitelist")
 
@@ -483,7 +483,7 @@ func ViewWhitelist(dockerClient *docker.Client) gin.HandlerFunc {
 		}
 
 		// Get CrowdSec whitelist
-		crowdsecWL, err := dockerClient.ExecCommand("crowdsec", []string{
+		crowdsecWL, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
 			"cat", "/etc/crowdsec/parsers/s02-enrich/mywhitelists.yaml",
 		})
 		if err == nil {
@@ -491,7 +491,7 @@ func ViewWhitelist(dockerClient *docker.Client) gin.HandlerFunc {
 		}
 
 		// Get Traefik whitelist
-		traefikWL, err := dockerClient.ExecCommand("traefik", []string{
+		traefikWL, err := dockerClient.ExecCommand(cfg.TraefikContainerName, []string{
 			"cat", "/etc/traefik/dynamic_config.yml",
 		})
 		if err == nil {
@@ -506,7 +506,7 @@ func ViewWhitelist(dockerClient *docker.Client) gin.HandlerFunc {
 }
 
 // WhitelistCurrentIP whitelists the current public IP
-func WhitelistCurrentIP(dockerClient *docker.Client) gin.HandlerFunc {
+func WhitelistCurrentIP(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		logger.Info("Whitelisting current IP")
 
@@ -534,7 +534,7 @@ whitelist:
 `, publicIP)
 
 		// Write to CrowdSec container
-		_, err = dockerClient.ExecCommand("crowdsec", []string{
+		_, err = dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
 			"sh", "-c", fmt.Sprintf("echo '%s' > /etc/crowdsec/parsers/s02-enrich/mywhitelists.yaml", whitelistContent),
 		})
 		if err != nil {
@@ -542,7 +542,7 @@ whitelist:
 		}
 
 		// Reload CrowdSec
-		_, _ = dockerClient.ExecCommand("crowdsec", []string{"cscli", "parsers", "reload"})
+		_, _ = dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{"cscli", "parsers", "reload"})
 
 		logger.Info("Current IP whitelisted", "ip", publicIP)
 		c.JSON(http.StatusOK, models.Response{
@@ -554,7 +554,7 @@ whitelist:
 }
 
 // WhitelistManualIP whitelists a manually specified IP
-func WhitelistManualIP(dockerClient *docker.Client) gin.HandlerFunc {
+func WhitelistManualIP(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req models.WhitelistRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -572,7 +572,7 @@ func WhitelistManualIP(dockerClient *docker.Client) gin.HandlerFunc {
 
 		if req.AddToCrowdSec {
 			// Get current whitelist
-			currentWL, err := dockerClient.ExecCommand("crowdsec", []string{
+			currentWL, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
 				"cat", "/etc/crowdsec/parsers/s02-enrich/mywhitelists.yaml",
 			})
 
@@ -590,7 +590,7 @@ whitelist:
 				whitelistContent = strings.TrimSpace(currentWL) + fmt.Sprintf("\n    - %s\n", req.IP)
 			}
 
-			_, err = dockerClient.ExecCommand("crowdsec", []string{
+			_, err = dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
 				"sh", "-c", fmt.Sprintf("echo '%s' > /etc/crowdsec/parsers/s02-enrich/mywhitelists.yaml", whitelistContent),
 			})
 			if err != nil {
@@ -599,7 +599,7 @@ whitelist:
 				errors = append(errors, errMsg)
 			} else {
 				// Reload parsers to apply changes
-				if _, reloadErr := dockerClient.ExecCommand("crowdsec", []string{"cscli", "parsers", "reload"}); reloadErr != nil {
+				if _, reloadErr := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{"cscli", "parsers", "reload"}); reloadErr != nil {
 					logger.Warn("Failed to reload CrowdSec parsers", "error", reloadErr)
 					successMessages = append(successMessages, "Added to CrowdSec whitelist (reload failed, restart CrowdSec to apply)")
 				} else {
@@ -610,7 +610,7 @@ whitelist:
 
 		if req.AddToTraefik {
 			// Update Traefik dynamic config
-			_, err := dockerClient.ExecCommand("traefik", []string{
+			_, err := dockerClient.ExecCommand(cfg.TraefikContainerName, []string{
 				"sh", "-c", fmt.Sprintf(`sed -i '/sourceRange:/a\        - %s' /etc/traefik/dynamic_config.yml`, req.IP),
 			})
 			if err != nil {
@@ -651,7 +651,7 @@ whitelist:
 }
 
 // WhitelistCIDR whitelists a CIDR range
-func WhitelistCIDR(dockerClient *docker.Client) gin.HandlerFunc {
+func WhitelistCIDR(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req models.WhitelistRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -673,13 +673,13 @@ whitelist:
     - %s
 `, req.CIDR)
 
-			_, err := dockerClient.ExecCommand("crowdsec", []string{
+			_, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
 				"sh", "-c", fmt.Sprintf("echo '%s' > /etc/crowdsec/parsers/s02-enrich/mywhitelists.yaml", whitelistContent),
 			})
 			if err != nil {
 				logger.Error("Failed to update CrowdSec whitelist", "error", err)
 			} else {
-				_, _ = dockerClient.ExecCommand("crowdsec", []string{"cscli", "parsers", "reload"})
+				_, _ = dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{"cscli", "parsers", "reload"})
 			}
 		}
 
@@ -691,7 +691,7 @@ whitelist:
 }
 
 // AddToCrowdSecWhitelist adds an IP to CrowdSec whitelist only
-func AddToCrowdSecWhitelist(dockerClient *docker.Client) gin.HandlerFunc {
+func AddToCrowdSecWhitelist(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req models.WhitelistRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -712,7 +712,7 @@ whitelist:
     - %s
 `, req.IP)
 
-		_, err := dockerClient.ExecCommand("crowdsec", []string{
+		_, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
 			"sh", "-c", fmt.Sprintf("echo '%s' > /etc/crowdsec/parsers/s02-enrich/mywhitelists.yaml", whitelistContent),
 		})
 		if err != nil {
@@ -723,7 +723,7 @@ whitelist:
 			return
 		}
 
-		_, _ = dockerClient.ExecCommand("crowdsec", []string{"cscli", "parsers", "reload"})
+		_, _ = dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{"cscli", "parsers", "reload"})
 
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
@@ -733,7 +733,7 @@ whitelist:
 }
 
 // AddToTraefikWhitelist adds an IP to Traefik whitelist only
-func AddToTraefikWhitelist(dockerClient *docker.Client) gin.HandlerFunc {
+func AddToTraefikWhitelist(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req models.WhitelistRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -746,7 +746,7 @@ func AddToTraefikWhitelist(dockerClient *docker.Client) gin.HandlerFunc {
 
 		logger.Info("Adding to Traefik whitelist", "ip", req.IP)
 
-		_, err := dockerClient.ExecCommand("traefik", []string{
+		_, err := dockerClient.ExecCommand(cfg.TraefikContainerName, []string{
 			"sh", "-c", fmt.Sprintf(`sed -i '/sourceRange:/a\        - %s' /etc/traefik/dynamic_config.yml`, req.IP),
 		})
 		if err != nil {
@@ -765,7 +765,7 @@ func AddToTraefikWhitelist(dockerClient *docker.Client) gin.HandlerFunc {
 }
 
 // SetupComprehensiveWhitelist sets up complete whitelist configuration
-func SetupComprehensiveWhitelist(dockerClient *docker.Client) gin.HandlerFunc {
+func SetupComprehensiveWhitelist(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req models.WhitelistRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -804,16 +804,16 @@ whitelist:
     - %s
 `, ip)
 
-		_, err := dockerClient.ExecCommand("crowdsec", []string{
+		_, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
 			"sh", "-c", fmt.Sprintf("echo '%s' > /etc/crowdsec/parsers/s02-enrich/mywhitelists.yaml", whitelistContent),
 		})
 		if err == nil {
-			_, _ = dockerClient.ExecCommand("crowdsec", []string{"cscli", "parsers", "reload"})
+			_, _ = dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{"cscli", "parsers", "reload"})
 			results["crowdsec"] = true
 		}
 
 		// Add to Traefik
-		_, err = dockerClient.ExecCommand("traefik", []string{
+		_, err = dockerClient.ExecCommand(cfg.TraefikContainerName, []string{
 			"sh", "-c", fmt.Sprintf(`sed -i '/sourceRange:/a\        - %s' /etc/traefik/dynamic_config.yml`, ip),
 		})
 		if err == nil {
@@ -833,7 +833,7 @@ whitelist:
 // =============================================================================
 
 // SetupCustomScenarios installs custom CrowdSec scenarios
-func SetupCustomScenarios(dockerClient *docker.Client, configDir string) gin.HandlerFunc {
+func SetupCustomScenarios(dockerClient *docker.Client, configDir string, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req models.ScenarioSetupRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -884,7 +884,7 @@ func SetupCustomScenarios(dockerClient *docker.Client, configDir string) gin.Han
 			}
 
 			verifyCmd := fmt.Sprintf("test -f %s && echo 'exists' || echo 'missing'", containerScenarioPath)
-			output, err := dockerClient.ExecCommand("crowdsec", []string{"sh", "-c", verifyCmd})
+			output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{"sh", "-c", verifyCmd})
 
 			fileExists := strings.TrimSpace(output) == "exists"
 
@@ -911,12 +911,12 @@ func SetupCustomScenarios(dockerClient *docker.Client, configDir string) gin.Han
 		if !hasErrors {
 			logger.Info("Restarting CrowdSec to load new scenarios")
 
-			restartOutput, restartErr := dockerClient.ExecCommand("crowdsec", []string{"sh", "-c", "kill -SIGHUP 1"})
+			restartOutput, restartErr := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{"sh", "-c", "kill -SIGHUP 1"})
 
 			if restartErr != nil {
 				logger.Warn("Failed to send HUP signal to CrowdSec, attempting container restart", "error", restartErr)
 
-				if err := dockerClient.RestartContainerWithTimeout("crowdsec", 30); err != nil {
+				if err := dockerClient.RestartContainerWithTimeout(cfg.CrowdsecContainerName, 30); err != nil {
 					logger.Error("Failed to restart CrowdSec container", "error", err)
 					c.JSON(http.StatusOK, models.Response{
 						Success: false,
@@ -944,12 +944,12 @@ func SetupCustomScenarios(dockerClient *docker.Client, configDir string) gin.Han
 }
 
 // ListScenarios lists all installed CrowdSec scenarios
-func ListScenarios(dockerClient *docker.Client) gin.HandlerFunc {
+func ListScenarios(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		logger.Info("Listing scenarios")
 
 		// Try JSON format first
-		output, err := dockerClient.ExecCommand("crowdsec", []string{
+		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
 			"cscli", "scenarios", "list", "-o", "json",
 		})
 
@@ -1161,7 +1161,7 @@ func GetScenarioFiles(configDir string) gin.HandlerFunc {
 }
 
 // DeleteScenarioFile deletes a scenario file from the host filesystem
-func DeleteScenarioFile(dockerClient *docker.Client, configDir string) gin.HandlerFunc {
+func DeleteScenarioFile(dockerClient *docker.Client, configDir string, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req struct {
 			Filename string `json:"filename" binding:"required"`
@@ -1206,7 +1206,7 @@ func DeleteScenarioFile(dockerClient *docker.Client, configDir string) gin.Handl
 		logger.Info("Scenario file deleted", "file", req.Filename)
 
 		logger.Info("Restarting CrowdSec to apply changes")
-		if err := dockerClient.RestartContainerWithTimeout("crowdsec", 30); err != nil {
+		if err := dockerClient.RestartContainerWithTimeout(cfg.CrowdsecContainerName, 30); err != nil {
 			logger.Warn("Failed to restart CrowdSec after deleting scenario", "error", err)
 		}
 
@@ -1222,7 +1222,7 @@ func DeleteScenarioFile(dockerClient *docker.Client, configDir string) gin.Handl
 // =============================================================================
 
 // SetupCaptcha sets up Cloudflare Turnstile captcha
-func SetupCaptcha(dockerClient *docker.Client) gin.HandlerFunc {
+func SetupCaptcha(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req models.CaptchaSetupRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -1236,7 +1236,7 @@ func SetupCaptcha(dockerClient *docker.Client) gin.HandlerFunc {
 		logger.Info("Setting up captcha", "provider", req.Provider)
 
 		// Get the host mount path for /etc/traefik/conf
-		hostConfPath, found, err := dockerClient.GetHostMountPath("traefik", "/etc/traefik/conf")
+		hostConfPath, found, err := dockerClient.GetHostMountPath(cfg.TraefikContainerName, "/etc/traefik/conf")
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
@@ -1247,7 +1247,7 @@ func SetupCaptcha(dockerClient *docker.Client) gin.HandlerFunc {
 
 		// If /etc/traefik/conf is not directly mounted, try /etc/traefik and append /conf
 		if !found {
-			hostTraefikPath, found, err := dockerClient.GetHostMountPath("traefik", "/etc/traefik")
+			hostTraefikPath, found, err := dockerClient.GetHostMountPath(cfg.TraefikContainerName, "/etc/traefik")
 			if err != nil || !found {
 				c.JSON(http.StatusInternalServerError, models.Response{
 					Success: false,
@@ -1326,7 +1326,7 @@ CAPTCHA_SECRET_KEY=%s
 `, req.Provider, req.SiteKey, req.SecretKey)
 
 		// Write to config file in Traefik container
-		_, err = dockerClient.ExecCommand("traefik", []string{
+		_, err = dockerClient.ExecCommand(cfg.TraefikContainerName, []string{
 			"sh", "-c", fmt.Sprintf("echo '%s' > /etc/traefik/captcha.env", captchaConfig),
 		})
 		if err != nil {
@@ -1385,12 +1385,12 @@ func detectCaptchaInConfig(configContent string) (enabled bool, provider string,
 }
 
 // GetCaptchaStatus retrieves the current captcha configuration status
-func GetCaptchaStatus(dockerClient *docker.Client, db *database.Database) gin.HandlerFunc {
+func GetCaptchaStatus(dockerClient *docker.Client, db *database.Database, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		logger.Info("Getting captcha status")
 
 		// Check if captcha.env exists (saved configuration)
-		output, err := dockerClient.ExecCommand("traefik", []string{
+		output, err := dockerClient.ExecCommand(cfg.TraefikContainerName, []string{
 			"cat", "/etc/traefik/captcha.env",
 		})
 
@@ -1417,7 +1417,7 @@ func GetCaptchaStatus(dockerClient *docker.Client, db *database.Database) gin.Ha
 		}
 
 		// Check dynamic_config.yml for actual captcha configuration
-		configContent, err := dockerClient.ExecCommand("traefik", []string{
+		configContent, err := dockerClient.ExecCommand(cfg.TraefikContainerName, []string{
 			"cat", dynamicConfigPath,
 		})
 
@@ -1432,10 +1432,10 @@ func GetCaptchaStatus(dockerClient *docker.Client, db *database.Database) gin.Ha
 		// Check if captcha.html exists on host filesystem
 		captchaHTMLExistsOnHost := false
 		hostHTMLPath := ""
-		hostConfPath, found, hostErr := dockerClient.GetHostMountPath("traefik", "/etc/traefik/conf")
+		hostConfPath, found, hostErr := dockerClient.GetHostMountPath(cfg.TraefikContainerName, "/etc/traefik/conf")
 		if hostErr == nil && !found {
 			// Try /etc/traefik and append /conf
-			hostTraefikPath, found, err := dockerClient.GetHostMountPath("traefik", "/etc/traefik")
+			hostTraefikPath, found, err := dockerClient.GetHostMountPath(cfg.TraefikContainerName, "/etc/traefik")
 			if err == nil && found {
 				hostConfPath = filepath.Join(hostTraefikPath, "conf")
 			}
@@ -1449,7 +1449,7 @@ func GetCaptchaStatus(dockerClient *docker.Client, db *database.Database) gin.Ha
 
 		// Check if captcha.html exists in Traefik container (verifies mount is working)
 		captchaHTMLExistsInContainer := false
-		exists, err := dockerClient.FileExists("traefik", "/etc/traefik/conf/captcha.html")
+		exists, err := dockerClient.FileExists(cfg.TraefikContainerName, "/etc/traefik/conf/captcha.html")
 		if err == nil && exists {
 			captchaHTMLExistsInContainer = true
 		}
@@ -1500,12 +1500,12 @@ func GetCaptchaStatus(dockerClient *docker.Client, db *database.Database) gin.Ha
 // =============================================================================
 
 // GetCrowdSecLogs retrieves CrowdSec logs
-func GetCrowdSecLogs(dockerClient *docker.Client) gin.HandlerFunc {
+func GetCrowdSecLogs(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tail := c.DefaultQuery("tail", "100")
 		logger.Info("Getting CrowdSec logs", "tail", tail)
 
-		logs, err := dockerClient.GetContainerLogs("crowdsec", tail)
+		logs, err := dockerClient.GetContainerLogs(cfg.CrowdsecContainerName, tail)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
@@ -1522,7 +1522,7 @@ func GetCrowdSecLogs(dockerClient *docker.Client) gin.HandlerFunc {
 }
 
 // GetTraefikLogs retrieves Traefik logs from the access log file
-func GetTraefikLogs(dockerClient *docker.Client, db *database.Database) gin.HandlerFunc {
+func GetTraefikLogs(dockerClient *docker.Client, db *database.Database, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tail := c.DefaultQuery("tail", "100")
 		logType := c.DefaultQuery("type", "access") // access or error
@@ -1537,11 +1537,11 @@ func GetTraefikLogs(dockerClient *docker.Client, db *database.Database) gin.Hand
 		}
 
 		// Read log file from traefik container
-		logs, err := dockerClient.ExecCommand("traefik", []string{"tail", "-n", tail, logPath})
+		logs, err := dockerClient.ExecCommand(cfg.TraefikContainerName, []string{"tail", "-n", tail, logPath})
 		if err != nil {
 			// Fallback to container logs if file reading fails
 			logger.Warn("Failed to read log file, falling back to container logs", "error", err)
-			logs, err = dockerClient.GetContainerLogs("traefik", tail)
+			logs, err = dockerClient.GetContainerLogs(cfg.TraefikContainerName, tail)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, models.Response{
 					Success: false,
@@ -1559,12 +1559,12 @@ func GetTraefikLogs(dockerClient *docker.Client, db *database.Database) gin.Hand
 }
 
 // AnalyzeTraefikLogsAdvanced performs advanced analysis of Traefik logs
-func AnalyzeTraefikLogsAdvanced(dockerClient *docker.Client) gin.HandlerFunc {
+func AnalyzeTraefikLogsAdvanced(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tail := c.DefaultQuery("tail", "1000")
 		logger.Info("Analyzing Traefik logs", "tail", tail)
 
-		logs, err := dockerClient.GetContainerLogs("traefik", tail)
+		logs, err := dockerClient.GetContainerLogs(cfg.TraefikContainerName, tail)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
@@ -1976,7 +1976,7 @@ func GetCurrentTags(dockerClient *docker.Client) gin.HandlerFunc {
 }
 
 // UpdateWithCrowdSec updates the stack including CrowdSec
-func UpdateWithCrowdSec(dockerClient *docker.Client) gin.HandlerFunc {
+func UpdateWithCrowdSec(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req models.UpdateRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -2004,6 +2004,14 @@ func UpdateWithCrowdSec(dockerClient *docker.Client) gin.HandlerFunc {
 			"gerbil":   {"fosrl/gerbil", req.GerbilTag},
 			"traefik":  {"traefik", req.TraefikTag},
 			"crowdsec": {"crowdsecurity/crowdsec", req.CrowdSecTag},
+		}
+
+		// Map service names to container names
+		serviceToContainer := map[string]string{
+			"pangolin": cfg.PangolinContainerName,
+			"gerbil":   cfg.GerbilContainerName,
+			"traefik":  cfg.TraefikContainerName,
+			"crowdsec": cfg.CrowdsecContainerName,
 		}
 
 		// Step 1: Validate all tags against registries
@@ -2076,11 +2084,12 @@ func UpdateWithCrowdSec(dockerClient *docker.Client) gin.HandlerFunc {
 			}
 
 			logger.Info("Recreating container", "service", service)
-			if err := dockerClient.RecreateContainer(service); err != nil {
-				logger.Error("Failed to recreate container", "service", service, "error", err)
+			containerName := serviceToContainer[service]
+			if err := dockerClient.RecreateContainer(containerName); err != nil {
+				logger.Error("Failed to recreate container", "service", service, "container", containerName, "error", err)
 				c.JSON(http.StatusInternalServerError, models.Response{
 					Success: false,
-					Error:   fmt.Sprintf("Failed to recreate container %s: %v", service, err),
+					Error:   fmt.Sprintf("Failed to recreate container %s: %v", containerName, err),
 				})
 				return
 			}
@@ -2095,7 +2104,7 @@ func UpdateWithCrowdSec(dockerClient *docker.Client) gin.HandlerFunc {
 }
 
 // UpdateWithoutCrowdSec updates the stack without CrowdSec
-func UpdateWithoutCrowdSec(dockerClient *docker.Client) gin.HandlerFunc {
+func UpdateWithoutCrowdSec(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req models.UpdateRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -2122,6 +2131,13 @@ func UpdateWithoutCrowdSec(dockerClient *docker.Client) gin.HandlerFunc {
 			"pangolin": {"fosrl/pangolin", req.PangolinTag},
 			"gerbil":   {"fosrl/gerbil", req.GerbilTag},
 			"traefik":  {"traefik", req.TraefikTag},
+		}
+
+		// Map service names to container names
+		serviceToContainer := map[string]string{
+			"pangolin": cfg.PangolinContainerName,
+			"gerbil":   cfg.GerbilContainerName,
+			"traefik":  cfg.TraefikContainerName,
 		}
 
 		// Step 1: Validate all tags against registries
@@ -2194,11 +2210,12 @@ func UpdateWithoutCrowdSec(dockerClient *docker.Client) gin.HandlerFunc {
 			}
 
 			logger.Info("Recreating container", "service", service)
-			if err := dockerClient.RecreateContainer(service); err != nil {
-				logger.Error("Failed to recreate container", "service", service, "error", err)
+			containerName := serviceToContainer[service]
+			if err := dockerClient.RecreateContainer(containerName); err != nil {
+				logger.Error("Failed to recreate container", "service", service, "container", containerName, "error", err)
 				c.JSON(http.StatusInternalServerError, models.Response{
 					Success: false,
-					Error:   fmt.Sprintf("Failed to recreate container %s: %v", service, err),
+					Error:   fmt.Sprintf("Failed to recreate container %s: %v", containerName, err),
 				})
 				return
 			}
@@ -2279,11 +2296,11 @@ func DeleteCronJob() gin.HandlerFunc {
 // =============================================================================
 
 // VerifyServices verifies all services are running
-func VerifyServices(dockerClient *docker.Client) gin.HandlerFunc {
+func VerifyServices(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		logger.Info("Verifying services")
 
-		services := []string{"pangolin", "gerbil", "traefik", "crowdsec"}
+		services := []string{cfg.PangolinContainerName, cfg.GerbilContainerName, cfg.TraefikContainerName, cfg.CrowdsecContainerName}
 		results := []gin.H{}
 
 		for _, service := range services {
@@ -2306,11 +2323,11 @@ func VerifyServices(dockerClient *docker.Client) gin.HandlerFunc {
 }
 
 // GracefulShutdown performs graceful shutdown of services
-func GracefulShutdown(dockerClient *docker.Client) gin.HandlerFunc {
+func GracefulShutdown(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		logger.Info("Performing graceful shutdown")
 
-		services := []string{"crowdsec", "traefik", "gerbil", "pangolin"}
+		services := []string{cfg.CrowdsecContainerName, cfg.TraefikContainerName, cfg.GerbilContainerName, cfg.PangolinContainerName}
 
 		for _, service := range services {
 			logger.Info("Stopping service", "service", service)
@@ -2334,7 +2351,7 @@ func GracefulShutdown(dockerClient *docker.Client) gin.HandlerFunc {
 }
 
 // ServiceAction performs start/stop/restart action on a service
-func ServiceAction(dockerClient *docker.Client) gin.HandlerFunc {
+func ServiceAction(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req models.ServiceAction
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -2353,14 +2370,27 @@ func ServiceAction(dockerClient *docker.Client) gin.HandlerFunc {
 			timeout = 60
 		}
 
+		// Map service names to container names
+		containerName := req.Service
+		switch req.Service {
+		case "crowdsec":
+			containerName = cfg.CrowdsecContainerName
+		case "traefik":
+			containerName = cfg.TraefikContainerName
+		case "pangolin":
+			containerName = cfg.PangolinContainerName
+		case "gerbil":
+			containerName = cfg.GerbilContainerName
+		}
+
 		var err error
 		switch req.Action {
 		case "start":
-			err = dockerClient.StartContainer(req.Service)
+			err = dockerClient.StartContainer(containerName)
 		case "stop":
-			err = dockerClient.StopContainerWithTimeout(req.Service, timeout)
+			err = dockerClient.StopContainerWithTimeout(containerName, timeout)
 		case "restart":
-			err = dockerClient.RestartContainerWithTimeout(req.Service, timeout)
+			err = dockerClient.RestartContainerWithTimeout(containerName, timeout)
 		default:
 			c.JSON(http.StatusBadRequest, models.Response{
 				Success: false,
@@ -2385,11 +2415,11 @@ func ServiceAction(dockerClient *docker.Client) gin.HandlerFunc {
 }
 
 // GetBouncers retrieves CrowdSec bouncers
-func GetBouncers(dockerClient *docker.Client) gin.HandlerFunc {
+func GetBouncers(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		logger.Info("Getting CrowdSec bouncers")
 
-		output, err := dockerClient.ExecCommand("crowdsec", []string{
+		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
 			"cscli", "bouncers", "list", "-o", "json",
 		})
 		if err != nil {
@@ -2440,11 +2470,11 @@ func GetBouncers(dockerClient *docker.Client) gin.HandlerFunc {
 }
 
 // GetDecisions retrieves CrowdSec decisions
-func GetDecisions(dockerClient *docker.Client) gin.HandlerFunc {
+func GetDecisions(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		logger.Info("Getting CrowdSec decisions")
 
-		output, err := dockerClient.ExecCommand("crowdsec", []string{
+		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
 			"cscli", "decisions", "list", "-o", "json",
 		})
 		if err != nil {
@@ -2525,11 +2555,11 @@ func GetDecisions(dockerClient *docker.Client) gin.HandlerFunc {
 }
 
 // GetMetrics retrieves CrowdSec Prometheus metrics
-func GetMetrics(dockerClient *docker.Client) gin.HandlerFunc {
+func GetMetrics(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		logger.Info("Getting CrowdSec metrics")
 
-		output, err := dockerClient.ExecCommand("crowdsec", []string{
+		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
 			"cscli", "metrics",
 		})
 		if err != nil {
@@ -2548,7 +2578,7 @@ func GetMetrics(dockerClient *docker.Client) gin.HandlerFunc {
 }
 
 // EnrollCrowdSec enrolls CrowdSec with the console
-func EnrollCrowdSec(dockerClient *docker.Client) gin.HandlerFunc {
+func EnrollCrowdSec(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req struct {
 			EnrollmentKey string `json:"enrollment_key" binding:"required"`
@@ -2563,7 +2593,7 @@ func EnrollCrowdSec(dockerClient *docker.Client) gin.HandlerFunc {
 
 		logger.Info("Enrolling CrowdSec with console")
 
-		output, err := dockerClient.ExecCommand("crowdsec", []string{
+		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
 			"cscli", "console", "enroll", req.EnrollmentKey,
 		})
 		if err != nil {
@@ -2583,7 +2613,7 @@ func EnrollCrowdSec(dockerClient *docker.Client) gin.HandlerFunc {
 }
 
 // CheckTraefikIntegration checks Traefik-CrowdSec integration
-func CheckTraefikIntegration(dockerClient *docker.Client, db *database.Database) gin.HandlerFunc {
+func CheckTraefikIntegration(dockerClient *docker.Client, db *database.Database, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		logger.Info("Checking Traefik integration")
 
@@ -2616,7 +2646,7 @@ func CheckTraefikIntegration(dockerClient *docker.Client, db *database.Database)
 
 		// Try each path until we find one that works
 		for _, path := range configPaths {
-			output, err := dockerClient.ExecCommand("traefik", []string{"cat", path})
+			output, err := dockerClient.ExecCommand(cfg.TraefikContainerName, []string{"cat", path})
 			if err == nil && output != "" {
 				config = output
 				configPath = path
@@ -2659,7 +2689,7 @@ func CheckTraefikIntegration(dockerClient *docker.Client, db *database.Database)
 		integration.CaptchaProvider = captchaProvider
 
 		// Check if captcha.html exists in Traefik container
-		captchaExists, captchaErr := dockerClient.FileExists("traefik", "/etc/traefik/conf/captcha.html")
+		captchaExists, captchaErr := dockerClient.FileExists(cfg.TraefikContainerName, "/etc/traefik/conf/captcha.html")
 		if captchaErr == nil && captchaExists {
 			integration.CaptchaHTMLExists = true
 		}
@@ -2834,7 +2864,7 @@ func GetFileContent(dockerClient *docker.Client, db *database.Database) gin.Hand
 }
 
 // GetDecisionsAnalysis retrieves CrowdSec decisions with advanced filtering
-func GetDecisionsAnalysis(dockerClient *docker.Client) gin.HandlerFunc {
+func GetDecisionsAnalysis(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		logger.Info("Getting CrowdSec decisions with filters")
 
@@ -2891,7 +2921,7 @@ func GetDecisionsAnalysis(dockerClient *docker.Client) gin.HandlerFunc {
 
 		logger.Debug("Executing decision analysis command", "cmd", cmd)
 
-		output, err := dockerClient.ExecCommand("crowdsec", cmd)
+		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, cmd)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
@@ -2987,7 +3017,7 @@ func GetDecisionsAnalysis(dockerClient *docker.Client) gin.HandlerFunc {
 }
 
 // GetAlertsAnalysis retrieves CrowdSec alerts with advanced filtering
-func GetAlertsAnalysis(dockerClient *docker.Client) gin.HandlerFunc {
+func GetAlertsAnalysis(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		logger.Info("Getting CrowdSec alerts with filters")
 
@@ -3044,7 +3074,7 @@ func GetAlertsAnalysis(dockerClient *docker.Client) gin.HandlerFunc {
 
 		logger.Debug("Executing alert analysis command", "cmd", cmd)
 
-		output, err := dockerClient.ExecCommand("crowdsec", cmd)
+		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, cmd)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
