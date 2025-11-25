@@ -1924,53 +1924,79 @@ func GetLatestBackup(backupMgr *backup.Manager) gin.HandlerFunc {
 // 8. UPDATE
 // =============================================================================
 
-// GetCurrentTags retrieves current Docker image tags from running containers
-func GetCurrentTags(dockerClient *docker.Client) gin.HandlerFunc {
+// CheckForUpdates checks for updates for all services
+func CheckForUpdates(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		logger.Info("Getting current image tags")
+		logger.Info("Checking for updates")
 
-		tags := models.ImageTags{
-			Pangolin: "latest",
-			Gerbil:   "latest",
-			Traefik:  "latest",
-			CrowdSec: "latest",
+		type ServiceUpdateStatus struct {
+			CurrentTag      string `json:"current_tag"`
+			LatestWarning   bool   `json:"latest_warning"`
+			UpdateAvailable bool   `json:"update_available"`
+			Error           string `json:"error,omitempty"`
 		}
 
-		// Container name to field mapping
-		containerMapping := map[string]*string{
-			"pangolin": &tags.Pangolin,
-			"gerbil":   &tags.Gerbil,
-			"traefik":  &tags.Traefik,
-			"crowdsec": &tags.CrowdSec,
+		status := make(map[string]ServiceUpdateStatus)
+
+		// Map service names to container names and image names
+		services := map[string]struct {
+			containerName string
+			imageName     string
+		}{
+			"pangolin": {cfg.PangolinContainerName, "fosrl/pangolin"},
+			"gerbil":   {cfg.GerbilContainerName, "fosrl/gerbil"},
+			"traefik":  {cfg.TraefikContainerName, "traefik"},
+			"crowdsec": {cfg.CrowdsecContainerName, "crowdsecurity/crowdsec"},
 		}
 
-		// Inspect each container to get its actual image tag
-		for containerName, tagField := range containerMapping {
-			inspect, err := dockerClient.InspectContainer(containerName)
+		for service, info := range services {
+			s := ServiceUpdateStatus{}
+
+			// Get current container info
+			inspect, err := dockerClient.InspectContainer(info.containerName)
 			if err != nil {
-				logger.Warn("Failed to inspect container", "name", containerName, "error", err)
+				logger.Warn("Failed to inspect container", "name", info.containerName, "error", err)
+				s.Error = fmt.Sprintf("Container not found: %v", err)
+				status[service] = s
 				continue
 			}
 
-			// Extract tag from image string
-			// Image format examples:
-			// - "docker.io/fosrl/pangolin:latest"
-			// - "docker.io/traefik:v3.5"
-			// - "crowdsecurity/crowdsec:latest"
+			// Extract tag
 			imageParts := strings.Split(inspect.Config.Image, ":")
 			if len(imageParts) >= 2 {
-				// Get the last part after the last colon (the tag)
-				*tagField = imageParts[len(imageParts)-1]
+				s.CurrentTag = imageParts[len(imageParts)-1]
 			} else {
-				logger.Warn("Could not parse image tag", "name", containerName, "image", inspect.Config.Image)
+				s.CurrentTag = "latest" // Default assumption
 			}
 
-			logger.Debug("Retrieved image tag", "container", containerName, "tag", *tagField)
+			// Check for "latest" tag warning
+			if s.CurrentTag == "latest" {
+				s.LatestWarning = true
+			}
+
+			// Check for updates
+			localDigest, err := dockerClient.GetLocalImageDigest(info.imageName, s.CurrentTag)
+			if err != nil {
+				logger.Warn("Failed to get local digest", "image", info.imageName, "tag", s.CurrentTag, "error", err)
+				s.Error = "Failed to get local image digest"
+			} else {
+				remoteDigest, err := dockerClient.GetRemoteImageDigest(info.imageName, s.CurrentTag)
+				if err != nil {
+					logger.Warn("Failed to get remote digest", "image", info.imageName, "tag", s.CurrentTag, "error", err)
+					s.Error = "Failed to check registry for updates"
+				} else {
+					if localDigest != remoteDigest {
+						s.UpdateAvailable = true
+					}
+				}
+			}
+
+			status[service] = s
 		}
 
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
-			Data:    tags,
+			Data:    status,
 		})
 	}
 }
@@ -2608,6 +2634,40 @@ func EnrollCrowdSec(dockerClient *docker.Client, cfg *config.Config) gin.Handler
 			Success: true,
 			Message: "CrowdSec enrolled successfully",
 			Data:    gin.H{"output": output},
+		})
+	}
+}
+
+// GetCrowdSecEnrollmentStatus checks the enrollment status
+func GetCrowdSecEnrollmentStatus(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
+			"cscli", "console", "status", "-o", "json",
+		})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to check status: %v", err),
+			})
+			return
+		}
+
+		// Parse JSON output
+		// Example output: {"context":{},"enrolled":true,"manual":false,"validated":true}
+		var status struct {
+			Enrolled  bool `json:"enrolled"`
+			Validated bool `json:"validated"`
+		}
+		if err := json.Unmarshal([]byte(output), &status); err != nil {
+			logger.Warn("Failed to parse console status JSON", "error", err, "output", output)
+			// Fallback to simple string check if JSON parsing fails
+			status.Enrolled = strings.Contains(output, "enrolled: true")
+			status.Validated = strings.Contains(output, "validated: true")
+		}
+
+		c.JSON(http.StatusOK, models.Response{
+			Success: true,
+			Data:    status,
 		})
 	}
 }

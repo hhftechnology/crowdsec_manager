@@ -454,3 +454,33 @@ func (c *Client) RecreateContainer(name string) error {
 
 	return nil
 }
+
+// GetLocalImageDigest retrieves the digest of a local image
+func (c *Client) GetLocalImageDigest(imageName, tag string) (string, error) {
+	fullImage := imageName + ":" + tag
+	inspect, _, err := c.cli.ImageInspectWithRaw(c.ctx, fullImage)
+	if err != nil {
+		return "", fmt.Errorf("failed to inspect local image %s: %w", fullImage, err)
+	}
+
+	if len(inspect.RepoDigests) > 0 {
+		// RepoDigests format is "image@sha256:digest"
+		parts := strings.Split(inspect.RepoDigests[0], "@")
+		if len(parts) == 2 {
+			return parts[1], nil
+		}
+	}
+
+	return "", fmt.Errorf("no digest found for local image %s", fullImage)
+}
+
+// GetRemoteImageDigest retrieves the digest of an image from the registry
+func (c *Client) GetRemoteImageDigest(imageName, tag string) (string, error) {
+	fullImage := imageName + ":" + tag
+	distributionInspect, err := c.cli.DistributionInspect(c.ctx, fullImage, "")
+	if err != nil {
+		return "", fmt.Errorf("failed to inspect remote image %s: %w", fullImage, err)
+	}
+
+	return string(distributionInspect.Descriptor.Digest), nil
+}

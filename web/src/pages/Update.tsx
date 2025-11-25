@@ -1,14 +1,14 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import api, { UpdateRequest } from '@/lib/api'
+import api, { UpdateRequest, ServiceUpdateStatus } from '@/lib/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
-import { RefreshCw, AlertTriangle, Info, Package } from 'lucide-react'
+import { RefreshCw, AlertTriangle, Info, Package, AlertCircle, ArrowUpCircle } from 'lucide-react'
 
 export default function Update() {
   const queryClient = useQueryClient()
@@ -17,10 +17,10 @@ export default function Update() {
   const [traefikTag, setTraefikTag] = useState('')
   const [crowdsecTag, setCrowdsecTag] = useState('')
 
-  const { data: currentTags, isLoading } = useQuery({
-    queryKey: ['current-tags'],
+  const { data: updateStatus, isLoading } = useQuery({
+    queryKey: ['update-check'],
     queryFn: async () => {
-      const response = await api.update.getCurrentTags()
+      const response = await api.update.checkForUpdates()
       return response.data.data
     },
   })
@@ -29,7 +29,7 @@ export default function Update() {
     mutationFn: (data: UpdateRequest) => api.update.updateWithCrowdSec(data),
     onSuccess: () => {
       toast.success('Update with CrowdSec completed successfully')
-      queryClient.invalidateQueries({ queryKey: ['current-tags'] })
+      queryClient.invalidateQueries({ queryKey: ['update-check'] })
       // Reset form
       setPangolinTag('')
       setGerbilTag('')
@@ -45,7 +45,7 @@ export default function Update() {
     mutationFn: (data: UpdateRequest) => api.update.updateWithoutCrowdSec(data),
     onSuccess: () => {
       toast.success('Update without CrowdSec completed successfully')
-      queryClient.invalidateQueries({ queryKey: ['current-tags'] })
+      queryClient.invalidateQueries({ queryKey: ['update-check'] })
       // Reset form
       setPangolinTag('')
       setGerbilTag('')
@@ -107,47 +107,38 @@ export default function Update() {
               <div className="h-16 bg-muted animate-pulse rounded" />
               <div className="h-16 bg-muted animate-pulse rounded" />
             </div>
-          ) : currentTags ? (
+          ) : updateStatus ? (
             <div className="grid gap-4 md:grid-cols-2">
-              <div className="p-4 border rounded-lg">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Pangolin</p>
-                    <p className="font-mono text-sm mt-1">{currentTags.pangolin || 'N/A'}</p>
+              {Object.entries(updateStatus).map(([service, status]) => (
+                <div key={service} className="p-4 border rounded-lg">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm font-medium capitalize">{service}</p>
+                    <div className="flex gap-2">
+                      {status.update_available && (
+                        <Badge variant="default" className="bg-green-500 hover:bg-green-600">
+                          <ArrowUpCircle className="w-3 h-3 mr-1" />
+                          Update Available
+                        </Badge>
+                      )}
+                      <Badge variant="secondary">Current</Badge>
+                    </div>
                   </div>
-                  <Badge variant="secondary">Current</Badge>
-                </div>
-              </div>
-
-              <div className="p-4 border rounded-lg">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Gerbil</p>
-                    <p className="font-mono text-sm mt-1">{currentTags.gerbil || 'N/A'}</p>
+                  
+                  <div className="flex items-center justify-between">
+                    <p className="font-mono text-sm">{status.current_tag || 'N/A'}</p>
+                    {status.latest_warning && (
+                      <div className="flex items-center text-orange-500 text-xs" title="Using 'latest' tag is not recommended for production">
+                        <AlertCircle className="w-3 h-3 mr-1" />
+                        'latest' tag warning
+                      </div>
+                    )}
                   </div>
-                  <Badge variant="secondary">Current</Badge>
+                  
+                  {status.error && (
+                    <p className="text-xs text-red-500 mt-2">{status.error}</p>
+                  )}
                 </div>
-              </div>
-
-              <div className="p-4 border rounded-lg">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Traefik</p>
-                    <p className="font-mono text-sm mt-1">{currentTags.traefik || 'N/A'}</p>
-                  </div>
-                  <Badge variant="secondary">Current</Badge>
-                </div>
-              </div>
-
-              <div className="p-4 border rounded-lg">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">CrowdSec</p>
-                    <p className="font-mono text-sm mt-1">{currentTags.crowdsec || 'N/A'}</p>
-                  </div>
-                  <Badge variant="secondary">Current</Badge>
-                </div>
-              </div>
+              ))}
             </div>
           ) : (
             <p className="text-center text-muted-foreground py-8">

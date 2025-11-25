@@ -365,9 +365,16 @@ export const backupAPI = {
 // 8. UPDATE (3 endpoints)
 // =============================================================================
 
+export interface ServiceUpdateStatus {
+  current_tag: string
+  latest_warning: boolean
+  update_available: boolean
+  error?: string
+}
+
 export const updateAPI = {
-  getCurrentTags: () =>
-    api.get<ApiResponse<ImageTags>>('/update/current-tags'),
+  checkForUpdates: () =>
+    api.get<ApiResponse<Record<string, ServiceUpdateStatus>>>('/update/check'),
 
   updateWithCrowdSec: (data: UpdateRequest) =>
     api.post<ApiResponse>('/update/with-crowdsec', data),

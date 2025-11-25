@@ -93,7 +93,7 @@ func RegisterBackupRoutes(router *gin.RouterGroup, backupMgr *backup.Manager, do
 func RegisterUpdateRoutes(router *gin.RouterGroup, dockerClient *docker.Client, cfg *config.Config) {
 	update := router.Group("/update")
 	{
-		update.GET("/current-tags", handlers.GetCurrentTags(dockerClient))
+		update.GET("/check", handlers.CheckForUpdates(dockerClient, cfg))
 		update.POST("/with-crowdsec", handlers.UpdateWithCrowdSec(dockerClient, cfg))
 		update.POST("/without-crowdsec", handlers.UpdateWithoutCrowdSec(dockerClient, cfg))
 	}
