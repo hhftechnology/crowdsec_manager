@@ -16,6 +16,7 @@ import (
 	"crowdsec-manager/internal/api"
 	"crowdsec-manager/internal/backup"
 	"crowdsec-manager/internal/config"
+	"crowdsec-manager/internal/crowdsec"
 	"crowdsec-manager/internal/database"
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
@@ -54,6 +55,9 @@ func main() {
 	// Initialize backup manager
 	backupManager := backup.NewManager(cfg.BackupDir, cfg.RetentionDays)
 
+	// Initialize CrowdSec LAPI client
+	csClient := crowdsec.NewClient(cfg.CrowdSecLAPIKey, cfg.CrowdSecLAPIUrl)
+
 	// Setup Gin router
 	if cfg.Environment == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -81,8 +85,8 @@ func main() {
 	// API routes
 	apiGroup := router.Group("/api")
 	{
-		api.RegisterHealthRoutes(apiGroup, dockerClient, db, cfg)
-		api.RegisterIPRoutes(apiGroup, dockerClient, cfg)
+		api.RegisterHealthRoutes(apiGroup, dockerClient, db, cfg, csClient)
+		api.RegisterIPRoutes(apiGroup, dockerClient, cfg, csClient)
 		api.RegisterWhitelistRoutes(apiGroup, dockerClient, cfg)
 		api.RegisterAllowlistRoutes(apiGroup, dockerClient)
 		api.RegisterScenarioRoutes(apiGroup, dockerClient, cfg.ConfigDir, cfg)
@@ -91,7 +95,7 @@ func main() {
 		api.RegisterBackupRoutes(apiGroup, backupManager, dockerClient)
 		api.RegisterUpdateRoutes(apiGroup, dockerClient, cfg)
 		api.RegisterCronRoutes(apiGroup)
-		api.RegisterServicesRoutes(apiGroup, dockerClient, db, cfg)
+		api.RegisterServicesRoutes(apiGroup, dockerClient, db, cfg, csClient)
 		api.RegisterNotificationRoutes(apiGroup, dockerClient, db, cfg)
 	}
 

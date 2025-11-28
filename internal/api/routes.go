@@ -4,6 +4,7 @@ import (
 	"crowdsec-manager/internal/api/handlers"
 	"crowdsec-manager/internal/backup"
 	"crowdsec-manager/internal/config"
+	"crowdsec-manager/internal/crowdsec"
 	"crowdsec-manager/internal/database"
 	"crowdsec-manager/internal/docker"
 
@@ -11,23 +12,23 @@ import (
 )
 
 // RegisterHealthRoutes registers health check routes
-func RegisterHealthRoutes(router *gin.RouterGroup, dockerClient *docker.Client, db *database.Database, cfg *config.Config) {
+func RegisterHealthRoutes(router *gin.RouterGroup, dockerClient *docker.Client, db *database.Database, cfg *config.Config, csClient *crowdsec.Client) {
 	health := router.Group("/health")
 	{
 		health.GET("/stack", handlers.CheckStackHealth(dockerClient, cfg))
-		health.GET("/crowdsec", handlers.CheckCrowdSecHealth(dockerClient, cfg))
+		health.GET("/crowdsec", handlers.CheckCrowdSecHealth(dockerClient, cfg, csClient))
 		health.GET("/complete", handlers.RunCompleteDiagnostics(dockerClient, db, cfg))
 	}
 }
 
 // RegisterIPRoutes registers IP management routes
-func RegisterIPRoutes(router *gin.RouterGroup, dockerClient *docker.Client, cfg *config.Config) {
+func RegisterIPRoutes(router *gin.RouterGroup, dockerClient *docker.Client, cfg *config.Config, csClient *crowdsec.Client) {
 	ip := router.Group("/ip")
 	{
 		ip.GET("/public", handlers.GetPublicIP())
-		ip.GET("/blocked/:ip", handlers.IsIPBlocked(dockerClient, cfg))
-		ip.GET("/security/:ip", handlers.CheckIPSecurity(dockerClient, cfg))
-		ip.POST("/unban", handlers.UnbanIP(dockerClient, cfg))
+		ip.GET("/blocked/:ip", handlers.IsIPBlocked(dockerClient, cfg, csClient))
+
+		ip.POST("/unban", handlers.UnbanIP(dockerClient, cfg, csClient))
 	}
 }
 
@@ -124,7 +125,7 @@ func RegisterAllowlistRoutes(router *gin.RouterGroup, dockerClient *docker.Clien
 }
 
 // RegisterServicesRoutes registers service management routes
-func RegisterServicesRoutes(router *gin.RouterGroup, dockerClient *docker.Client, db *database.Database, cfg *config.Config) {
+func RegisterServicesRoutes(router *gin.RouterGroup, dockerClient *docker.Client, db *database.Database, cfg *config.Config, csClient *crowdsec.Client) {
 	services := router.Group("/services")
 	{
 		services.GET("/verify", handlers.VerifyServices(dockerClient, cfg))
@@ -137,10 +138,12 @@ func RegisterServicesRoutes(router *gin.RouterGroup, dockerClient *docker.Client
 	crowdsec := router.Group("/crowdsec")
 	{
 		crowdsec.GET("/bouncers", handlers.GetBouncers(dockerClient, cfg))
-		crowdsec.GET("/decisions", handlers.GetDecisions(dockerClient, cfg))
-		crowdsec.GET("/decisions/analysis", handlers.GetDecisionsAnalysis(dockerClient, cfg))
-		crowdsec.GET("/alerts/analysis", handlers.GetAlertsAnalysis(dockerClient, cfg))
-		crowdsec.GET("/metrics", handlers.GetMetrics(dockerClient, cfg))
+		crowdsec.POST("/bouncers", handlers.AddBouncer(dockerClient, cfg))
+		crowdsec.DELETE("/bouncers/:name", handlers.DeleteBouncer(dockerClient, cfg))
+		crowdsec.GET("/decisions", handlers.GetDecisions(dockerClient, cfg, csClient))
+		crowdsec.GET("/decisions/analysis", handlers.GetDecisionsAnalysis(dockerClient, cfg, csClient))
+		crowdsec.GET("/alerts/analysis", handlers.GetAlertsAnalysis(dockerClient, cfg, csClient))
+		crowdsec.GET("/metrics", handlers.GetMetrics(dockerClient, cfg, csClient))
 		crowdsec.POST("/enroll", handlers.EnrollCrowdSec(dockerClient, cfg))
 		crowdsec.GET("/status", handlers.GetCrowdSecEnrollmentStatus(dockerClient, cfg))
 	}

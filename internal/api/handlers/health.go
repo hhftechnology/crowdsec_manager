@@ -1,32 +1,27 @@
 package handlers
 
 import (
+	"crowdsec-manager/internal/config"
+	"crowdsec-manager/internal/crowdsec"
+	"crowdsec-manager/internal/database"
+	"crowdsec-manager/internal/docker"
+	"crowdsec-manager/internal/logger"
+	"crowdsec-manager/internal/models"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
-	"crowdsec-manager/internal/config"
-	"crowdsec-manager/internal/database"
-	"crowdsec-manager/internal/docker"
-	"crowdsec-manager/internal/logger"
-	"crowdsec-manager/internal/models"
-
 	"github.com/gin-gonic/gin"
 )
 
-// =============================================================================
-// 1. HEALTH & DIAGNOSTICS
-// =============================================================================
-
-// CheckCrowdSecHealth performs a comprehensive health check of the CrowdSec Security Engine
-func CheckCrowdSecHealth(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
+// CheckCrowdSecHealth checks the health of the CrowdSec container and LAPI
+func CheckCrowdSecHealth(dockerClient *docker.Client, cfg *config.Config, csClient *crowdsec.Client) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		logger.Info("Checking CrowdSec Security Engine health")
+		logger.Info("Checking CrowdSec health")
 
 		healthCheck := models.CrowdSecHealthCheck{
-			Timestamp: time.Now(),
 			Status:    "healthy",
 			Checks:    make(map[string]models.HealthCheckItem),
 		}

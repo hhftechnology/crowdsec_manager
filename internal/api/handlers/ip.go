@@ -1,15 +1,16 @@
 package handlers
 
 import (
-	"fmt"
-	"io"
-	"net/http"
-	"strings"
-
 	"crowdsec-manager/internal/config"
+	"crowdsec-manager/internal/crowdsec"
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
 	"crowdsec-manager/internal/models"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -64,98 +65,57 @@ func GetPublicIP() gin.HandlerFunc {
 
 		logger.Info("Public IP retrieved", "ip", publicIP)
 		c.JSON(http.StatusOK, models.Response{
+
 			Success: true,
 			Data:    gin.H{"ip": publicIP},
 		})
 	}
 }
 
-// IsIPBlocked checks if an IP is blocked by CrowdSec
-func IsIPBlocked(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
+
+// IsIPBlocked checks if an IP is blocked
+func IsIPBlocked(dockerClient *docker.Client, cfg *config.Config, csClient *crowdsec.Client) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ip := c.Param("ip")
-		logger.Info("Checking if IP is blocked", "ip", ip)
-
-		// Check CrowdSec decisions
-		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
-			"cscli", "decisions", "list", "-i", ip, "-o", "json",
-		})
-		if err != nil {
-			logger.Error("Failed to check IP decisions", "ip", ip, "error", err)
-			c.JSON(http.StatusInternalServerError, models.Response{
+		if ip == "" {
+			c.JSON(http.StatusBadRequest, models.Response{
 				Success: false,
-				Error:   fmt.Sprintf("Failed to check IP: %v", err),
+				Error:   "IP address is required",
 			})
 			return
 		}
 
-		isBlocked := strings.Contains(output, ip) && !strings.Contains(output, "[]")
+		logger.Info("Checking if IP is blocked via LAPI", "ip", ip)
+
+		decisions, err := csClient.GetDecisions(url.Values{"ip": []string{ip}})
+		if err != nil {
+			logger.Error("Failed to check IP block status", "error", err)
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to check IP status: %v", err),
+			})
+			return
+		}
+
+		blocked := len(decisions) > 0
+		var reason string
+		if blocked {
+			reason = decisions[0].Scenario
+		}
 
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
 			Data: gin.H{
 				"ip":      ip,
-				"blocked": isBlocked,
-				"details": output,
+				"blocked": blocked,
+				"reason":  reason,
 			},
 		})
 	}
 }
 
-// CheckIPSecurity performs comprehensive IP security check
-func CheckIPSecurity(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		ip := c.Param("ip")
-		logger.Info("Performing security check", "ip", ip)
-
-		ipInfo := models.IPInfo{
-			IP:            ip,
-			IsBlocked:     false,
-			IsWhitelisted: false,
-			InCrowdSec:    false,
-			InTraefik:     false,
-		}
-
-		// Check CrowdSec decisions
-		decisionOutput, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
-			"cscli", "decisions", "list", "-i", ip,
-		})
-		if err == nil {
-			ipInfo.IsBlocked = strings.Contains(decisionOutput, ip) &&
-				strings.Contains(decisionOutput, "ban")
-		}
-
-		// Check CrowdSec whitelist
-		whitelistOutput, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
-			"cat", "/etc/crowdsec/parsers/s02-enrich/mywhitelists.yaml",
-		})
-		if err == nil {
-			ipInfo.InCrowdSec = strings.Contains(whitelistOutput, ip)
-			if ipInfo.InCrowdSec {
-				ipInfo.IsWhitelisted = true
-			}
-		}
-
-		// Check Traefik whitelist
-		traefikConfig, err := dockerClient.ExecCommand(cfg.TraefikContainerName, []string{
-			"cat", "/etc/traefik/dynamic_config.yml",
-		})
-		if err == nil {
-			ipInfo.InTraefik = strings.Contains(traefikConfig, ip)
-			if ipInfo.InTraefik {
-				ipInfo.IsWhitelisted = true
-			}
-		}
-
-		c.JSON(http.StatusOK, models.Response{
-			Success: true,
-			Data:    ipInfo,
-		})
-	}
-}
-
-// UnbanIP unbans an IP address from CrowdSec
-func UnbanIP(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
+// UnbanIP unbans an IP address
+func UnbanIP(dockerClient *docker.Client, cfg *config.Config, csClient *crowdsec.Client) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req models.UnbanRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -166,14 +126,11 @@ func UnbanIP(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 			return
 		}
 
-		logger.Info("Unbanning IP", "ip", req.IP)
+		logger.Info("Unbanning IP via LAPI", "ip", req.IP)
 
-		// Delete decisions for the IP
-		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
-			"cscli", "decisions", "delete", "--ip", req.IP,
-		})
+		err := csClient.DeleteDecision(req.IP, "")
 		if err != nil {
-			logger.Error("Failed to unban IP", "ip", req.IP, "error", err)
+			logger.Error("Failed to unban IP", "error", err)
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
 				Error:   fmt.Sprintf("Failed to unban IP: %v", err),
@@ -181,11 +138,9 @@ func UnbanIP(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 			return
 		}
 
-		logger.Info("IP unbanned successfully", "ip", req.IP)
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
-			Message: fmt.Sprintf("IP %s has been unbanned", req.IP),
-			Data:    gin.H{"output": output},
+			Message: fmt.Sprintf("IP %s unbanned successfully", req.IP),
 		})
 	}
 }
