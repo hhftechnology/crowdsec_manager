@@ -315,3 +315,10 @@ type DiscordConfig struct {
 	CTIKey            string `json:"cti_key"`
 	CrowdSecRestarted bool   `json:"crowdsec_restarted,omitempty"` // Status flag
 }
+
+// ConsoleStatus represents the CrowdSec Console enrollment status
+type ConsoleStatus struct {
+	Enrolled  bool `json:"enrolled"`
+	Validated bool `json:"validated"`
+	Manual    bool `json:"manual"`
+}

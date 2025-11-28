@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import api, { ServiceActionRequest, EnrollRequest } from '@/lib/api'
@@ -16,7 +16,7 @@ export default function Services() {
   const [enrollmentKey, setEnrollmentKey] = useState('')
   const [isEnrollDialogOpen, setIsEnrollDialogOpen] = useState(false)
   const [enrollmentStatus, setEnrollmentStatus] = useState<'idle' | 'enrolling' | 'waiting_approval' | 'success'>('idle')
-  const [pollInterval, setPollInterval] = useState<number | null>(null)
+
 
   const { data: servicesData, isLoading } = useQuery({
     queryKey: ['services'],
@@ -28,27 +28,47 @@ export default function Services() {
   })
 
   // Poll for enrollment status
-  useQuery({
+  const { data: enrollmentData } = useQuery({
     queryKey: ['crowdsec-enrollment-status'],
     queryFn: async () => {
-      if (enrollmentStatus !== 'waiting_approval') return null
       const response = await api.crowdsec.getStatus()
-      
-      if (response.data.data?.enrolled && response.data.data?.validated) {
-        setEnrollmentStatus('success')
-        setPollInterval(null)
-        toast.success('CrowdSec instance successfully enrolled and validated!')
-        setTimeout(() => {
-          setIsEnrollDialogOpen(false)
-          setEnrollmentStatus('idle')
-          setEnrollmentKey('')
-        }, 2000)
-      }
       return response.data.data
     },
-    enabled: enrollmentStatus === 'waiting_approval',
-    refetchInterval: 2000, // Poll every 2 seconds
+    refetchInterval: (data) => {
+      // Poll faster if waiting for approval
+      if (data?.enrolled && !data.validated) return 2000
+      return 5000
+    },
   })
+
+  // Sync state with data
+  useEffect(() => {
+    if (!enrollmentData) return
+
+    if (enrollmentData.enrolled && enrollmentData.validated) {
+      if (enrollmentStatus !== 'success') {
+        setEnrollmentStatus('success')
+        // Only show toast if we were previously enrolling or waiting
+        if (enrollmentStatus === 'enrolling' || enrollmentStatus === 'waiting_approval') {
+          toast.success('CrowdSec instance successfully enrolled and validated!')
+          setTimeout(() => {
+            setIsEnrollDialogOpen(false)
+            setEnrollmentStatus('idle')
+            setEnrollmentKey('')
+          }, 2000)
+        }
+      }
+    } else if (enrollmentData.enrolled && !enrollmentData.validated) {
+      if (enrollmentStatus !== 'waiting_approval' && enrollmentStatus !== 'enrolling') {
+        setEnrollmentStatus('waiting_approval')
+      }
+    } else {
+      // Not enrolled
+      if (enrollmentStatus === 'waiting_approval' || enrollmentStatus === 'success') {
+        setEnrollmentStatus('idle')
+      }
+    }
+  }, [enrollmentData, enrollmentStatus])
 
   const actionMutation = useMutation({
     mutationFn: (data: ServiceActionRequest) => api.services.action(data),
@@ -106,8 +126,7 @@ export default function Services() {
   }
 
   const handleCancelEnrollment = () => {
-    setEnrollmentStatus('idle')
-    setPollInterval(null)
+    setIsEnrollDialogOpen(false)
   }
 
   const getServiceStatus = (service: any): 'running' | 'stopped' | 'unknown' => {

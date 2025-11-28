@@ -135,30 +135,22 @@ func CheckCrowdSecHealth(dockerClient *docker.Client, cfg *config.Config) gin.Ha
 		}
 
 		// 5. Check console enrollment status
-		statusOutput, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
-			"cscli", "console", "status", "-o", "json",
-		})
+		consoleStatus, err := GetConsoleStatusHelper(dockerClient, cfg.CrowdsecContainerName)
 		if err == nil {
-			var consoleStatus struct {
-				Enrolled  bool `json:"enrolled"`
-				Validated bool `json:"validated"`
-			}
-			if err := json.Unmarshal([]byte(statusOutput), &consoleStatus); err == nil {
-				if consoleStatus.Enrolled && consoleStatus.Validated {
-					healthCheck.Checks["console"] = models.HealthCheckItem{
-						Status:  "healthy",
-						Message: "Enrolled and validated with CrowdSec Console",
-					}
-				} else if consoleStatus.Enrolled {
-					healthCheck.Checks["console"] = models.HealthCheckItem{
-						Status:  "warning",
-						Message: "Enrolled but not yet validated",
-					}
-				} else {
-					healthCheck.Checks["console"] = models.HealthCheckItem{
-						Status:  "info",
-						Message: "Not enrolled with CrowdSec Console",
-					}
+			if consoleStatus.Enrolled && consoleStatus.Validated {
+				healthCheck.Checks["console"] = models.HealthCheckItem{
+					Status:  "healthy",
+					Message: "Enrolled and validated with CrowdSec Console",
+				}
+			} else if consoleStatus.Enrolled {
+				healthCheck.Checks["console"] = models.HealthCheckItem{
+					Status:  "warning",
+					Message: "Enrolled but not yet validated",
+				}
+			} else {
+				healthCheck.Checks["console"] = models.HealthCheckItem{
+					Status:  "info",
+					Message: "Not enrolled with CrowdSec Console",
 				}
 			}
 		}

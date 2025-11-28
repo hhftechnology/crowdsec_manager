@@ -221,7 +221,7 @@ func EnrollCrowdSec(dockerClient *docker.Client, cfg *config.Config) gin.Handler
 
 		// Check if output indicates success or failure
 		outputLower := strings.ToLower(output)
-		if strings.Contains(outputLower, "error") || strings.Contains(outputLower, "failed") {
+		if strings.Contains(outputLower, "error") || strings.Contains(outputLower, "failed") || strings.Contains(outputLower, "fatal") {
 			logger.Warn("Enrollment may have failed", "output", output)
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
@@ -241,30 +241,14 @@ func EnrollCrowdSec(dockerClient *docker.Client, cfg *config.Config) gin.Handler
 // GetCrowdSecEnrollmentStatus checks the enrollment status
 func GetCrowdSecEnrollmentStatus(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
-			"cscli", "console", "status", "-o", "json",
-		})
+		status, err := GetConsoleStatusHelper(dockerClient, cfg.CrowdsecContainerName)
 		if err != nil {
-			logger.Error("Failed to get console status", "error", err, "output", output)
+			logger.Error("Failed to get console status", "error", err)
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
 				Error:   fmt.Sprintf("Failed to check status: %v", err),
 			})
 			return
-		}
-
-		// Parse JSON output
-		// Example output: {"context":{},"enrolled":true,"manual":false,"validated":true}
-		var status struct {
-			Enrolled  bool `json:"enrolled"`
-			Validated bool `json:"validated"`
-			Manual    bool `json:"manual"`
-		}
-		if err := json.Unmarshal([]byte(output), &status); err != nil {
-			logger.Warn("Failed to parse console status JSON", "error", err, "output", output)
-			// Fallback to simple string check if JSON parsing fails
-			status.Enrolled = strings.Contains(output, "enrolled: true") || strings.Contains(output, `"enrolled":true`)
-			status.Validated = strings.Contains(output, "validated: true") || strings.Contains(output, `"validated":true`)
 		}
 
 		logger.Debug("Console status retrieved", "enrolled", status.Enrolled, "validated", status.Validated, "manual", status.Manual)

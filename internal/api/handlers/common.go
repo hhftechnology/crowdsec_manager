@@ -1,7 +1,11 @@
 package handlers
 
 import (
+	"encoding/json"
+	"strings"
 	"time"
+
+	"crowdsec-manager/internal/models"
 
 	"github.com/gin-gonic/gin"
 )
@@ -85,4 +89,26 @@ func activeFilters(c *gin.Context) map[string]string {
 		}
 	}
 	return filters
+}
+
+// GetConsoleStatusHelper executes the console status command and parses the result
+func GetConsoleStatusHelper(dockerClient interface {
+	ExecCommand(containerName string, cmd []string) (string, error)
+}, containerName string) (models.ConsoleStatus, error) {
+	output, err := dockerClient.ExecCommand(containerName, []string{
+		"cscli", "console", "status", "-o", "json",
+	})
+	if err != nil {
+		return models.ConsoleStatus{}, err
+	}
+
+	var status models.ConsoleStatus
+	if err := json.Unmarshal([]byte(output), &status); err != nil {
+		// Fallback to simple string check if JSON parsing fails
+		// This handles cases where older versions might not output valid JSON or other issues
+		status.Enrolled = strings.Contains(output, "enrolled: true") || strings.Contains(output, `"enrolled":true`)
+		status.Validated = strings.Contains(output, "validated: true") || strings.Contains(output, `"validated":true`)
+	}
+
+	return status, nil
 }
