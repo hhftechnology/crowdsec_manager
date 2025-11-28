@@ -291,11 +291,13 @@ func updateProfilesYaml(path string, enable bool) error {
 			}
 			return os.WriteFile(path, []byte(strings.Join(newLines, "\n")), 0644)
 		} else {
-			// If no notifications section, we might need to add it to the default profile.
-			// This is getting complicated. Let's append to the end if we can't find it?
-			// No, that's risky.
-			// Let's assume standard profiles.yaml has "notifications:"
-			return fmt.Errorf("could not find 'notifications:' section in profiles.yaml")
+			// If no notifications section, append it to the end
+			newContent := content
+			if !strings.HasSuffix(newContent, "\n") {
+				newContent += "\n"
+			}
+			newContent += "notifications:\n  - discord\n"
+			return os.WriteFile(path, []byte(newContent), 0644)
 		}
 	} else if !enable && hasDiscord {
 		// Remove discord
