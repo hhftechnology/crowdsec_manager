@@ -211,6 +211,7 @@ func GetDecisionsAnalysis(dockerClient *docker.Client, cfg *config.Config, csCli
 
 		decisions, err := csClient.GetDecisions(opts)
 		if err != nil {
+			logger.Error("Failed to get decisions analysis", "error", err)
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
 				Error:   fmt.Sprintf("Failed to get decisions: %v", err),
@@ -285,6 +286,7 @@ func GetAlertsAnalysis(dockerClient *docker.Client, cfg *config.Config, csClient
 
 		alerts, err := csClient.GetAlerts(opts)
 		if err != nil {
+			logger.Error("Failed to get alerts analysis", "error", err)
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
 				Error:   fmt.Sprintf("Failed to get alerts: %v", err),
