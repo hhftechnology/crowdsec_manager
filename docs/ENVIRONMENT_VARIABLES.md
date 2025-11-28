@@ -48,7 +48,9 @@ The CrowdSec Manager application is configured using the following environment v
 | Variable | Description | Default Value | Required |
 |----------|-------------|---------------|----------|
 | `CROWDSEC_LAPI_URL` | URL of the CrowdSec Local API. | `http://crowdsec:8080` | No |
-| `CROWDSEC_LAPI_KEY` | API Key for the CrowdSec Local API. | `""` | Yes (if using LAPI features) |
+| `CROWDSEC_LAPI_KEY` | API Key for the CrowdSec Local API (Bouncer). | `""` | Yes (if using Bouncer mode) |
+| `CROWDSEC_LAPI_MACHINE_ID` | Machine ID for LAPI (Watcher). | `""` | Yes (if using Machine mode) |
+| `CROWDSEC_LAPI_PASSWORD` | Password for LAPI (Watcher). | `""` | Yes (if using Machine mode) |
 
 ## File Paths (Internal)
 

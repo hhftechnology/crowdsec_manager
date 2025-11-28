@@ -56,7 +56,7 @@ func main() {
 	backupManager := backup.NewManager(cfg.BackupDir, cfg.RetentionDays)
 
 	// Initialize CrowdSec LAPI client
-	csClient := crowdsec.NewClient(cfg.CrowdSecLAPIKey, cfg.CrowdSecLAPIUrl)
+	csClient := crowdsec.NewClient(cfg.CrowdSecLAPIKey, cfg.CrowdSecLAPIMachineID, cfg.CrowdSecLAPIPassword, cfg.CrowdSecLAPIUrl)
 
 	// Setup Gin router
 	if cfg.Environment == "production" {
@@ -148,7 +148,7 @@ func checkPrerequisites(client *docker.Client, cfg *config.Config) error {
 	if err := client.Ping(); err != nil {
 		return fmt.Errorf("docker daemon not running: %w", err)
 	}
-	logger.Info(" Docker daemon is running")
+	logger.Info("  Docker daemon is running")
 
 	// Check required containers exist
 	containers := []string{cfg.CrowdsecContainerName, cfg.TraefikContainerName, cfg.PangolinContainerName, cfg.GerbilContainerName}
@@ -159,9 +159,9 @@ func checkPrerequisites(client *docker.Client, cfg *config.Config) error {
 			continue
 		}
 		if exists {
-			logger.Info(" Container exists", "name", name)
+			logger.Info("  Container exists", "name", name)
 		} else {
-			logger.Warn(" Container not found", "name", name)
+			logger.Warn("  Container not found", "name", name)
 		}
 	}
 

@@ -1,6 +1,7 @@
 package crowdsec
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -12,18 +13,79 @@ import (
 type Client struct {
 	BaseURL    string
 	APIKey     string
+	MachineID  string
+	Password   string
+	Token      string
 	HTTPClient *http.Client
 }
 
 // NewClient creates a new CrowdSec LAPI client
-func NewClient(apiKey string, baseURL string) *Client {
+func NewClient(apiKey, machineID, password, baseURL string) *Client {
 	return &Client{
-		BaseURL: baseURL,
-		APIKey:  apiKey,
+		BaseURL:   baseURL,
+		APIKey:    apiKey,
+		MachineID: machineID,
+		Password:  password,
 		HTTPClient: &http.Client{
 			Timeout: 10 * time.Second,
 		},
 	}
+}
+
+// Login authenticates with LAPI to get a JWT token
+func (c *Client) Login() error {
+	if c.MachineID == "" || c.Password == "" {
+		return fmt.Errorf("machine_id and password are required for login")
+	}
+
+	endpoint := fmt.Sprintf("%s/v1/watchers/login", c.BaseURL)
+	body := map[string]string{
+		"machine_id": c.MachineID,
+		"password":   c.Password,
+	}
+	jsonBody, _ := json.Marshal(body)
+
+	req, err := http.NewRequest("POST", endpoint, bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("login failed with status: %d", resp.StatusCode)
+	}
+
+	var result struct {
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return err
+	}
+
+	c.Token = result.Token
+	return nil
+}
+
+// ensureAuth ensures we have a valid token or API key
+func (c *Client) ensureAuth(req *http.Request) error {
+	if c.APIKey != "" {
+		req.Header.Add("X-Api-Key", c.APIKey)
+		return nil
+	}
+
+	if c.Token == "" {
+		if err := c.Login(); err != nil {
+			return err
+		}
+	}
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", c.Token))
+	return nil
 }
 
 // Decision represents a CrowdSec decision
@@ -64,13 +126,26 @@ func (c *Client) GetDecisions(opts url.Values) ([]Decision, error) {
 		req.URL.RawQuery = opts.Encode()
 	}
 
-	req.Header.Add("X-Api-Key", c.APIKey)
+	if err := c.ensureAuth(req); err != nil {
+		return nil, err
+	}
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusUnauthorized && c.Token != "" {
+		// Token might be expired, retry once
+		c.Token = ""
+		if err := c.ensureAuth(req); err == nil {
+			if respRetry, errRetry := c.HTTPClient.Do(req); errRetry == nil {
+				defer respRetry.Body.Close()
+				resp = respRetry
+			}
+		}
+	}
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("LAPI returned status: %d", resp.StatusCode)
@@ -102,7 +177,9 @@ func (c *Client) DeleteDecision(ip string, id string) error {
 		req.URL.RawQuery = q.Encode()
 	}
 
-	req.Header.Add("X-Api-Key", c.APIKey)
+	if err := c.ensureAuth(req); err != nil {
+		return err
+	}
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
@@ -130,7 +207,9 @@ func (c *Client) GetAlerts(opts url.Values) ([]Alert, error) {
 		req.URL.RawQuery = opts.Encode()
 	}
 
-	req.Header.Add("X-Api-Key", c.APIKey)
+	if err := c.ensureAuth(req); err != nil {
+		return nil, err
+	}
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {

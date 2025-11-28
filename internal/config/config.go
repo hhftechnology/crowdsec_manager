@@ -44,15 +44,17 @@ type Config struct {
 	TraefikContainerName  string
 
 	// CrowdSec LAPI Configuration
-	CrowdSecLAPIUrl string
-	CrowdSecLAPIKey string
+	CrowdSecLAPIUrl       string
+	CrowdSecLAPIKey       string
+	CrowdSecLAPIMachineID string
+	CrowdSecLAPIPassword  string
 
 	// Services
 	Services             []string
 	ServicesWithCrowdsec []string
-	IncludeCrowdsec bool
-	IncludePangolin bool
-	IncludeGerbil   bool
+	IncludeCrowdsec      bool
+	IncludePangolin      bool
+	IncludeGerbil        bool
 
 	// Timeouts
 	ShutdownTimeout time.Duration
@@ -60,46 +62,40 @@ type Config struct {
 	WriteTimeout    time.Duration
 }
 
-// Load loads configuration from environment variables with defaults
+// Load loads configuration from environment variables
 func Load() (*Config, error) {
 	cfg := &Config{
-		Port:        getEnvAsInt("PORT", 8080),
-		Environment: getEnv("ENVIRONMENT", "development"),
-		LogLevel:    getEnv("LOG_LEVEL", "info"),
-		LogFile:     getEnv("LOG_FILE", "./logs/crowdsec-manager.log"),
-
-		DockerHost:  getEnv("DOCKER_HOST", ""),
-		ComposeFile: getEnv("COMPOSE_FILE", "./docker-compose.yml"),
-		PangolinDir: getEnv("PANGOLIN_DIR", "."),
-		ConfigDir:   getEnv("CONFIG_DIR", "./config"),
-
-		DatabasePath: getEnv("DATABASE_PATH", "./data/settings.db"),
-
-		TraefikDynamicConfig: getEnv("TRAEFIK_DYNAMIC_CONFIG", "/etc/traefik/dynamic_config.yml"),
-		TraefikStaticConfig:  getEnv("TRAEFIK_STATIC_CONFIG", "/etc/traefik/traefik_config.yml"),
-		TraefikAccessLog:     getEnv("TRAEFIK_ACCESS_LOG", "/var/log/traefik/access.log"),
-		TraefikErrorLog:      getEnv("TRAEFIK_ERROR_LOG", "/var/log/traefik/traefik.log"),
-		CrowdSecAcquisFile:   getEnv("CROWDSEC_ACQUIS_FILE", "/etc/crowdsec/acquis.yaml"),
-
-		BackupDir:     getEnv("BACKUP_DIR", "./backups"),
-		RetentionDays: getEnvAsInt("RETENTION_DAYS", 60),
-		BackupItems:   []string{"docker-compose.yml", "config"},
-
+		Port:                  getEnvAsInt("PORT", 8080),
+		Environment:           getEnv("ENVIRONMENT", "development"),
+		LogLevel:              getEnv("LOG_LEVEL", "info"),
+		LogFile:               getEnv("LOG_FILE", "./logs/crowdsec-manager.log"),
+		DockerHost:            getEnv("DOCKER_HOST", ""),
+		ComposeFile:           getEnv("COMPOSE_FILE", "./docker-compose.yml"),
+		PangolinDir:           getEnv("PANGOLIN_DIR", "."),
+		ConfigDir:             getEnv("CONFIG_DIR", "./config"),
+		DatabasePath:          getEnv("DATABASE_PATH", "./data/settings.db"),
+		TraefikDynamicConfig:  getEnv("TRAEFIK_DYNAMIC_CONFIG", "/etc/traefik/dynamic_config.yml"),
+		TraefikStaticConfig:   getEnv("TRAEFIK_STATIC_CONFIG", "/etc/traefik/traefik_config.yml"),
+		TraefikAccessLog:      getEnv("TRAEFIK_ACCESS_LOG", "/var/log/traefik/access.log"),
+		TraefikErrorLog:       getEnv("TRAEFIK_ERROR_LOG", "/var/log/traefik/traefik.log"),
+		CrowdSecAcquisFile:    getEnv("CROWDSEC_ACQUIS_FILE", "/etc/crowdsec/acquis.yaml"),
+		BackupDir:             getEnv("BACKUP_DIR", "./backups"),
+		RetentionDays:         getEnvAsInt("RETENTION_DAYS", 60),
+		BackupItems:           []string{"docker-compose.yml", "config"},
 		CrowdsecContainerName: getEnv("CROWDSEC_CONTAINER_NAME", "crowdsec"),
 		PangolinContainerName: getEnv("PANGOLIN_CONTAINER_NAME", "pangolin"),
 		GerbilContainerName:   getEnv("GERBIL_CONTAINER_NAME", "gerbil"),
 		TraefikContainerName:  getEnv("TRAEFIK_CONTAINER_NAME", "traefik"),
-
-		CrowdSecLAPIUrl: getEnv("CROWDSEC_LAPI_URL", "http://crowdsec:8080"),
-		CrowdSecLAPIKey: getEnv("CROWDSEC_LAPI_KEY", ""),
-
-		IncludeCrowdsec: getEnvAsBool("INCLUDE_CROWDSEC", true),
-		IncludePangolin: getEnvAsBool("INCLUDE_PANGOLIN", true),
-		IncludeGerbil:   getEnvAsBool("INCLUDE_GERBIL", true),
-
-		ShutdownTimeout: time.Duration(getEnvAsInt("SHUTDOWN_TIMEOUT", 30)) * time.Second,
-		ReadTimeout:     time.Duration(getEnvAsInt("READ_TIMEOUT", 15)) * time.Second,
-		WriteTimeout:    time.Duration(getEnvAsInt("WRITE_TIMEOUT", 15)) * time.Second,
+		CrowdSecLAPIUrl:       getEnv("CROWDSEC_LAPI_URL", "http://crowdsec:8080"),
+		CrowdSecLAPIKey:       getEnv("CROWDSEC_LAPI_KEY", ""),
+		CrowdSecLAPIMachineID: getEnv("CROWDSEC_LAPI_MACHINE_ID", ""),
+		CrowdSecLAPIPassword:  getEnv("CROWDSEC_LAPI_PASSWORD", ""),
+		IncludeCrowdsec:       getEnvAsBool("INCLUDE_CROWDSEC", true),
+		IncludePangolin:       getEnvAsBool("INCLUDE_PANGOLIN", true),
+		IncludeGerbil:         getEnvAsBool("INCLUDE_GERBIL", true),
+		ShutdownTimeout:       time.Duration(getEnvAsInt("SHUTDOWN_TIMEOUT", 30)) * time.Second,
+		ReadTimeout:           time.Duration(getEnvAsInt("READ_TIMEOUT", 15)) * time.Second,
+		WriteTimeout:          time.Duration(getEnvAsInt("WRITE_TIMEOUT", 15)) * time.Second,
 	}
 
 	// Build services list dynamically
