@@ -21,6 +21,7 @@ interface HealthCheckItem {
   message: string
   error?: string
   details?: string
+  metrics?: Record<string, any>
 }
 
 interface CrowdSecHealthData {
@@ -202,12 +203,36 @@ export default function CrowdSecHealth() {
                   </Alert>
                 )}
 
-                {check.details && (
-                  <div className="p-3 bg-muted rounded-md">
-                    <p className="text-xs font-mono text-muted-foreground">
-                      {check.details}
-                    </p>
+                {checkName === 'metrics' && check.metrics ? (
+                  <div className="space-y-4 mt-4">
+                    {Object.entries(check.metrics).map(([category, metrics]) => (
+                      <div key={category} className="border rounded-md p-3 bg-card">
+                        <h4 className="font-semibold text-sm mb-2 capitalize border-b pb-1">
+                          {category.replace(/_/g, ' ')}
+                        </h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {Object.entries(metrics as Record<string, any>).map(([key, value]) => (
+                            <div key={key} className="flex justify-between items-center text-sm">
+                              <span className="text-muted-foreground truncate mr-2" title={key}>
+                                {key}
+                              </span>
+                              <span className="font-mono font-medium">
+                                {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
                   </div>
+                ) : (
+                  check.details && (
+                    <div className="p-3 bg-muted rounded-md overflow-x-auto">
+                      <pre className="text-xs font-mono text-muted-foreground whitespace-pre-wrap">
+                        {check.details}
+                      </pre>
+                    </div>
+                  )
                 )}
               </CardContent>
             </Card>

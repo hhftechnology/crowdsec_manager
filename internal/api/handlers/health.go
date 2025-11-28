@@ -84,8 +84,9 @@ func CheckCrowdSecHealth(dockerClient *docker.Client, cfg *config.Config) gin.Ha
 		}
 
 		// 3. Check metrics availability
+		// 3. Check metrics availability
 		metricsOutput, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
-			"cscli", "metrics", "--url", "http://localhost:6060/metrics",
+			"cscli", "metrics", "-o", "json", "--url", "http://localhost:6060/metrics",
 		})
 		if err != nil {
 			healthCheck.Status = "degraded"
@@ -95,10 +96,21 @@ func CheckCrowdSecHealth(dockerClient *docker.Client, cfg *config.Config) gin.Ha
 				Error:   fmt.Sprintf("%v", err),
 			}
 		} else {
-			healthCheck.Checks["metrics"] = models.HealthCheckItem{
-				Status:  "healthy",
-				Message: "Metrics endpoint is accessible",
-				Details: truncateString(metricsOutput, 200),
+			// Parse metrics JSON
+			var metricsData map[string]interface{}
+			if err := json.Unmarshal([]byte(metricsOutput), &metricsData); err == nil {
+				healthCheck.Checks["metrics"] = models.HealthCheckItem{
+					Status:  "healthy",
+					Message: "Metrics endpoint is accessible",
+					Metrics: metricsData,
+				}
+			} else {
+				// Fallback if JSON parsing fails (or if output isn't JSON)
+				healthCheck.Checks["metrics"] = models.HealthCheckItem{
+					Status:  "healthy",
+					Message: "Metrics endpoint is accessible (raw output)",
+					Details: truncateString(metricsOutput, 200),
+				}
 			}
 		}
 

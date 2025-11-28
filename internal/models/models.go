@@ -27,10 +27,11 @@ type HealthStatus struct {
 
 // HealthCheckItem represents a single health check item
 type HealthCheckItem struct {
-	Status  string `json:"status"`            // healthy, unhealthy, degraded, warning, info
-	Message string `json:"message"`           // Human-readable message
-	Error   string `json:"error,omitempty"`   // Error details if check failed
-	Details string `json:"details,omitempty"` // Additional details
+	Status  string                 `json:"status"`            // healthy, unhealthy, degraded, warning, info
+	Message string                 `json:"message"`           // Human-readable message
+	Error   string                 `json:"error,omitempty"`   // Error details if check failed
+	Details string                 `json:"details,omitempty"` // Additional details
+	Metrics map[string]interface{} `json:"metrics,omitempty"` // Structured metrics data
 }
 
 // CrowdSecHealthCheck represents the complete CrowdSec Security Engine health status
