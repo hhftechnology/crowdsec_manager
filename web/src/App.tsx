@@ -6,6 +6,7 @@ import Layout from './components/Layout'
 // Lazy load pages
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const Health = lazy(() => import('./pages/Health'))
+const CrowdSecHealth = lazy(() => import('./pages/CrowdSecHealth'))
 const IPManagement = lazy(() => import('./pages/IPManagement'))
 const Whitelist = lazy(() => import('./pages/Whitelist'))
 const Allowlist = lazy(() => import('./pages/Allowlist'))
@@ -29,6 +30,7 @@ function App() {
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/health" element={<Health />} />
+            <Route path="/crowdsec-health" element={<CrowdSecHealth />} />
             <Route path="/ip-management" element={<IPManagement />} />
             <Route path="/whitelist" element={<Whitelist />} />
             <Route path="/allowlist" element={<Allowlist />} />

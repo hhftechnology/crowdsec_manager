@@ -186,6 +186,7 @@ export interface ServiceActionRequest {
 
 export interface EnrollRequest {
   enrollment_key: string
+  name?: string
 }
 
 export interface ConfigPathRequest {
@@ -241,6 +242,9 @@ export interface AllowlistInspectResponse {
 export const healthAPI = {
   checkStack: () =>
     api.get<ApiResponse<HealthStatus>>('/health/stack'),
+
+  crowdsecHealth: () =>
+    api.get<ApiResponse>('/health/crowdsec'),
 
   completeDiagnostics: () =>
     api.get<ApiResponse<DiagnosticResult>>('/health/complete'),

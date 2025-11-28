@@ -19,6 +19,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Bell,
+  HeartPulse,
 } from 'lucide-react'
 import { Separator } from './ui/separator'
 import { Button } from './ui/button'
@@ -27,6 +28,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/t
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Health & Diagnostics', href: '/health', icon: Activity },
+  { name: 'CrowdSec Health', href: '/crowdsec-health', icon: HeartPulse },
   { name: 'IP Management', href: '/ip-management', icon: Network },
   { name: 'Whitelist', href: '/whitelist', icon: ListFilter },
   { name: 'Allowlist', href: '/allowlist', icon: ListChecks },

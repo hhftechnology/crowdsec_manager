@@ -187,6 +187,7 @@ func EnrollCrowdSec(dockerClient *docker.Client, cfg *config.Config) gin.Handler
 	return func(c *gin.Context) {
 		var req struct {
 			EnrollmentKey string `json:"enrollment_key" binding:"required"`
+			Name          string `json:"name"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, models.Response{
@@ -196,12 +197,18 @@ func EnrollCrowdSec(dockerClient *docker.Client, cfg *config.Config) gin.Handler
 			return
 		}
 
-		logger.Info("Enrolling CrowdSec with console")
+		logger.Info("Enrolling CrowdSec with console", "has_name", req.Name != "")
 
-		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
-			"cscli", "console", "enroll", req.EnrollmentKey,
-		})
+		// Build command with optional name parameter
+		cmd := []string{"cscli", "console", "enroll"}
+		if req.Name != "" {
+			cmd = append(cmd, "--name", req.Name)
+		}
+		cmd = append(cmd, req.EnrollmentKey)
+
+		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, cmd)
 		if err != nil {
+			logger.Error("Enrollment command failed", "error", err, "output", output)
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
 				Error:   fmt.Sprintf("Failed to enroll: %v", err),
@@ -209,9 +216,23 @@ func EnrollCrowdSec(dockerClient *docker.Client, cfg *config.Config) gin.Handler
 			return
 		}
 
+		// Log the full output for debugging
+		logger.Info("Enrollment command completed", "output", output)
+
+		// Check if output indicates success or failure
+		outputLower := strings.ToLower(output)
+		if strings.Contains(outputLower, "error") || strings.Contains(outputLower, "failed") {
+			logger.Warn("Enrollment may have failed", "output", output)
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Enrollment failed: %s", output),
+			})
+			return
+		}
+
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
-			Message: "CrowdSec enrolled successfully",
+			Message: "Enrollment key submitted. Please approve the request in your CrowdSec Console at https://app.crowdsec.net/",
 			Data:    gin.H{"output": output},
 		})
 	}
@@ -224,6 +245,7 @@ func GetCrowdSecEnrollmentStatus(dockerClient *docker.Client, cfg *config.Config
 			"cscli", "console", "status", "-o", "json",
 		})
 		if err != nil {
+			logger.Error("Failed to get console status", "error", err, "output", output)
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
 				Error:   fmt.Sprintf("Failed to check status: %v", err),
@@ -236,13 +258,16 @@ func GetCrowdSecEnrollmentStatus(dockerClient *docker.Client, cfg *config.Config
 		var status struct {
 			Enrolled  bool `json:"enrolled"`
 			Validated bool `json:"validated"`
+			Manual    bool `json:"manual"`
 		}
 		if err := json.Unmarshal([]byte(output), &status); err != nil {
 			logger.Warn("Failed to parse console status JSON", "error", err, "output", output)
 			// Fallback to simple string check if JSON parsing fails
-			status.Enrolled = strings.Contains(output, "enrolled: true")
-			status.Validated = strings.Contains(output, "validated: true")
+			status.Enrolled = strings.Contains(output, "enrolled: true") || strings.Contains(output, `"enrolled":true`)
+			status.Validated = strings.Contains(output, "validated: true") || strings.Contains(output, `"validated":true`)
 		}
+
+		logger.Debug("Console status retrieved", "enrolled", status.Enrolled, "validated", status.Validated, "manual", status.Manual)
 
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,

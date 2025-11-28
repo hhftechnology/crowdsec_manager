@@ -15,6 +15,7 @@ func RegisterHealthRoutes(router *gin.RouterGroup, dockerClient *docker.Client, 
 	health := router.Group("/health")
 	{
 		health.GET("/stack", handlers.CheckStackHealth(dockerClient, cfg))
+		health.GET("/crowdsec", handlers.CheckCrowdSecHealth(dockerClient, cfg))
 		health.GET("/complete", handlers.RunCompleteDiagnostics(dockerClient, db, cfg))
 	}
 }

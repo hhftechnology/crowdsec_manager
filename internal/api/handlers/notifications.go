@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"text/template"
 
 	"crowdsec-manager/internal/config"
 	"crowdsec-manager/internal/database"
@@ -222,21 +221,15 @@ func generateDiscordYaml(path string, config models.DiscordConfig) error {
 		return err
 	}
 
-	// Parse template
-	tmpl, err := template.New("discord").Parse(DiscordTemplate)
-	if err != nil {
-		return err
-	}
+	// Don't use Go template parsing - the template contains CrowdSec-specific functions
+	// that Go's template engine doesn't recognize (CrowdsecCTI, mulf, floor, etc.)
+	// Instead, do simple string replacement for the webhook credentials
+	content := DiscordTemplate
+	content = strings.Replace(content, "{{.WebhookID}}", config.WebhookID, -1)
+	content = strings.Replace(content, "{{.WebhookToken}}", config.WebhookToken, -1)
 
-	// Create file
-	f, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	// Execute template
-	return tmpl.Execute(f, config)
+	// Write to file
+	return os.WriteFile(path, []byte(content), 0644)
 }
 
 func isDiscordEnabled(path string) (bool, error) {

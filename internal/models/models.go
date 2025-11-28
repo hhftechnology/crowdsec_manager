@@ -25,6 +25,21 @@ type HealthStatus struct {
 	Timestamp  time.Time   `json:"timestamp"`
 }
 
+// HealthCheckItem represents a single health check item
+type HealthCheckItem struct {
+	Status  string `json:"status"`            // healthy, unhealthy, degraded, warning, info
+	Message string `json:"message"`           // Human-readable message
+	Error   string `json:"error,omitempty"`   // Error details if check failed
+	Details string `json:"details,omitempty"` // Additional details
+}
+
+// CrowdSecHealthCheck represents the complete CrowdSec Security Engine health status
+type CrowdSecHealthCheck struct {
+	Status    string                     `json:"status"`    // Overall status: healthy, degraded, unhealthy
+	Timestamp time.Time                  `json:"timestamp"` // When the check was performed
+	Checks    map[string]HealthCheckItem `json:"checks"`    // Individual health checks
+}
+
 // Decision represents a CrowdSec decision
 type Decision struct {
 	ID        int64  `json:"id"`
