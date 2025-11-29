@@ -6,11 +6,17 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Bell, Plus, Search } from "lucide-react"
 import { useLocation } from "react-router-dom"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { User, LogOut, Settings } from "lucide-react"
 
 export default function Header() {
   const location = useLocation()
@@ -18,7 +24,7 @@ export default function Header() {
   // Generate breadcrumbs from path
   const pathSegments = location.pathname.split('/').filter(Boolean)
   const breadcrumbs = [
-    { name: 'Security Stack', href: '/' },
+    { name: 'Home', href: '/' },
     ...pathSegments.map((segment, index) => {
       const href = `/${pathSegments.slice(0, index + 1).join('/')}`
       return {
@@ -52,32 +58,33 @@ export default function Header() {
         </Breadcrumb>
       </div>
 
-      {/* Right Section: Search & Actions */}
+      {/* Right Section: User Profile */}
       <div className="flex items-center gap-4">
-        {/* Search Bar */}
-        <div className="relative w-64">
-          <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Search for anything..." className="pl-8 bg-muted/50 border-muted-foreground/20" />
-          <div className="absolute right-2 top-2.5 flex items-center gap-1">
-             <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100">
-              <span className="text-xs">^</span>K
-            </kbd>
-          </div>
-        </div>
-
-        {/* Actions */}
-        <div className="flex items-center gap-2 border-l border-border pl-4">
-          <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground">
-            <Bell className="h-5 w-5" />
-          </Button>
-          <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground">
-            <Plus className="h-5 w-5" />
-          </Button>
-          <Avatar className="h-8 w-8 ml-2">
-            <AvatarImage src="https://github.com/shadcn.png" />
-            <AvatarFallback>CN</AvatarFallback>
-          </Avatar>
-        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Avatar className="h-8 w-8 cursor-pointer hover:opacity-80 transition-opacity">
+              <AvatarImage src="https://github.com/shadcn.png" />
+              <AvatarFallback>CN</AvatarFallback>
+            </Avatar>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuLabel>My Account</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem>
+              <User className="mr-2 h-4 w-4" />
+              <span>Profile</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem>
+              <Settings className="mr-2 h-4 w-4" />
+              <span>Settings</span>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem className="text-destructive focus:text-destructive">
+              <LogOut className="mr-2 h-4 w-4" />
+              <span>Log out</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </header>
   )

@@ -1,4 +1,4 @@
-import { ReactNode } from 'react'
+import { ReactNode, useState } from 'react'
 import Sidebar from './Sidebar'
 import Header from './Header'
 
@@ -7,15 +7,16 @@ interface LayoutProps {
 }
 
 export default function Layout({ children }: LayoutProps) {
+  const [isCollapsed, setIsCollapsed] = useState(false)
+
   return (
     <div className="flex h-screen bg-background overflow-hidden">
-      <Sidebar />
+      <Sidebar isCollapsed={isCollapsed} setIsCollapsed={setIsCollapsed} />
       <div className="flex flex-col flex-1 overflow-hidden">
         <Header />
-        <main className="flex-1 overflow-y-auto bg-[#0B1120] p-6">
+        <main className="flex-1 overflow-y-auto bg-background p-6">
           {children}
         </main>
-        {/* Footer removed from layout as it's now in Sidebar or not needed in main area */}
       </div>
     </div>
   )
