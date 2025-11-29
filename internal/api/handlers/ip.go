@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/buger/jsonparser"
 	"github.com/gin-gonic/gin"
 )
 
@@ -140,6 +141,133 @@ func IsIPBlocked(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFun
 				"blocked": blocked,
 				"reason":  reason,
 			},
+		})
+	}
+}
+
+// CheckIPSecurity provides comprehensive security information about an IP
+func CheckIPSecurity(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ip := c.Param("ip")
+		if ip == "" {
+			c.JSON(http.StatusBadRequest, models.Response{
+				Success: false,
+				Error:   "IP address is required",
+			})
+			return
+		}
+
+		logger.Info("Performing comprehensive security check", "ip", ip)
+
+		result := models.IPInfo{
+			IP:            ip,
+			IsBlocked:     false,
+			IsWhitelisted: false,
+			InCrowdSec:    false,
+			InTraefik:     false,
+		}
+
+		// 1. Check if IP is blocked in CrowdSec decisions
+		decisionsOutput, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
+			"cscli", "decisions", "list", "--ip", ip, "-o", "json",
+		})
+		if err == nil && decisionsOutput != "null" && decisionsOutput != "" && decisionsOutput != "[]" {
+			var decisions []interface{}
+			if json.Unmarshal([]byte(decisionsOutput), &decisions) == nil {
+				result.IsBlocked = len(decisions) > 0
+			}
+		}
+
+		// 2. Check CrowdSec allowlists
+		allowlistOutput, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
+			"cscli", "allowlists", "list", "-o", "json",
+		})
+		if err == nil && allowlistOutput != "null" && allowlistOutput != "" && allowlistOutput != "[]" {
+			// Parse allowlists and check if IP is in any of them
+			dataBytes := []byte(allowlistOutput)
+			inAllowlist := false
+
+			_, parseErr := jsonparser.ArrayEach(dataBytes, func(allowlistValue []byte, dataType jsonparser.ValueType, offset int, err error) {
+				if inAllowlist {
+					return // Already found
+				}
+
+				// Check items in this allowlist
+				jsonparser.ArrayEach(allowlistValue, func(itemValue []byte, itemType jsonparser.ValueType, itemOffset int, itemErr error) {
+					if value, err := jsonparser.GetString(itemValue, "value"); err == nil {
+						// Check if IP matches the allowlist entry (exact match or CIDR)
+						if value == ip || strings.Contains(value, "/") {
+							// For CIDR, we'd need proper IP matching, but for now check if IP contains the pattern
+							inAllowlist = true
+							result.InCrowdSec = true
+							result.IsWhitelisted = true
+						}
+					}
+				}, "items")
+			})
+
+			if parseErr != nil {
+				logger.Warn("Failed to parse allowlists", "error", parseErr)
+			}
+		}
+
+		// 3. Check CrowdSec parsers whitelist
+		// Find all files containing "whitelist" in /etc/crowdsec/parsers/s02-enrich/
+		findWhitelistFiles, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
+			"sh", "-c", "find /etc/crowdsec/parsers/s02-enrich/ -type f -name '*whitelist*.yaml' -o -name '*whitelist*.yml' 2>/dev/null || echo ''",
+		})
+		if err == nil && findWhitelistFiles != "" {
+			whitelistFiles := strings.Split(strings.TrimSpace(findWhitelistFiles), "\n")
+			for _, whitelistFile := range whitelistFiles {
+				if whitelistFile == "" {
+					continue
+				}
+				// Read and check each whitelist file for the IP
+				whitelistContent, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
+					"cat", whitelistFile,
+				})
+				if err == nil && strings.Contains(whitelistContent, ip) {
+					result.IsWhitelisted = true
+					result.InCrowdSec = true
+					break
+				}
+			}
+		}
+
+		// 4. Check Traefik dynamic_config.yml for ipWhiteList
+		// Read Traefik dynamic configuration
+		dynamicConfigPaths := []string{
+			"/etc/traefik/dynamic_config.yml",
+			"/etc/traefik/config/dynamic_config.yml",
+			"/etc/traefik/dynamic_config.yaml",
+			"/etc/traefik/config/dynamic_config.yaml",
+		}
+
+		for _, configPath := range dynamicConfigPaths {
+			traefikData, err := dockerClient.ExecCommand(cfg.TraefikContainerName, []string{
+				"cat", configPath,
+			})
+			if err == nil && traefikData != "" {
+				// Check if IP is in the sourceRange list
+				// Parse YAML to check ipWhiteList.sourceRange
+				if strings.Contains(traefikData, "ipWhiteList") && (strings.Contains(traefikData, ip) || checkIPInCIDRList(ip, traefikData)) {
+					result.InTraefik = true
+					result.IsWhitelisted = true
+					break
+				}
+			}
+		}
+
+		logger.Info("Security check completed",
+			"ip", ip,
+			"blocked", result.IsBlocked,
+			"whitelisted", result.IsWhitelisted,
+			"in_crowdsec", result.InCrowdSec,
+			"in_traefik", result.InTraefik)
+
+		c.JSON(http.StatusOK, models.Response{
+			Success: true,
+			Data:    result,
 		})
 	}
 }

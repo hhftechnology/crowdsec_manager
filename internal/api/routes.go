@@ -27,6 +27,7 @@ func RegisterIPRoutes(router *gin.RouterGroup, dockerClient *docker.Client, cfg 
 	{
 		ip.GET("/public", handlers.GetPublicIP())
 		ip.GET("/blocked/:ip", handlers.IsIPBlocked(dockerClient, cfg))
+		ip.GET("/security/:ip", handlers.CheckIPSecurity(dockerClient, cfg))
 
 		ip.POST("/unban", handlers.UnbanIP(dockerClient, cfg))
 	}
