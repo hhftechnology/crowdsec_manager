@@ -53,6 +53,7 @@ export default function EnrollDialog({ trigger, open: controlledOpen, onOpenChan
     if (!enrollmentData) return
 
     if (enrollmentData.enrolled && enrollmentData.validated) {
+      // Successfully enrolled and validated
       if (enrollmentStatus !== 'success') {
         setEnrollmentStatus('success')
         // Only show toast if we were previously enrolling or waiting
@@ -66,15 +67,14 @@ export default function EnrollDialog({ trigger, open: controlledOpen, onOpenChan
         }
       }
     } else if (enrollmentData.enrolled && !enrollmentData.validated) {
-      if (enrollmentStatus !== 'waiting_approval' && enrollmentStatus !== 'enrolling') {
+      // Enrolled but not yet validated - keep waiting
+      if (enrollmentStatus === 'idle') {
         setEnrollmentStatus('waiting_approval')
       }
-    } else {
-      // Not enrolled
-      if (enrollmentStatus === 'waiting_approval' || enrollmentStatus === 'success') {
-        setEnrollmentStatus('idle')
-      }
     }
+    // Don't reset to idle automatically - only when user cancels or closes dialog
+    // This prevents race conditions where status query returns enrolled=false
+    // right after submitting the enrollment key
   }, [enrollmentData, enrollmentStatus])
 
   const enrollMutation = useMutation({
@@ -105,7 +105,35 @@ export default function EnrollDialog({ trigger, open: controlledOpen, onOpenChan
 
   const handleCancelEnrollment = () => {
     setIsOpen(false)
+    setEnrollmentStatus('idle')
+    setEnrollmentKey('')
   }
+
+  // Check status when dialog first opens
+  useEffect(() => {
+    if (isOpen && enrollmentData && enrollmentStatus === 'idle') {
+      // If already enrolled and validated, show success immediately
+      if (enrollmentData.enrolled && enrollmentData.validated) {
+        setEnrollmentStatus('success')
+      }
+      // If enrolled but not validated, show waiting state
+      else if (enrollmentData.enrolled && !enrollmentData.validated) {
+        setEnrollmentStatus('waiting_approval')
+      }
+    }
+  }, [isOpen, enrollmentData, enrollmentStatus])
+
+  // Reset state when dialog closes (unless successfully enrolled)
+  useEffect(() => {
+    if (!isOpen && enrollmentStatus !== 'success') {
+      // Delay reset to allow dialog close animation
+      const timer = setTimeout(() => {
+        setEnrollmentStatus('idle')
+        setEnrollmentKey('')
+      }, 300)
+      return () => clearTimeout(timer)
+    }
+  }, [isOpen, enrollmentStatus])
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -175,6 +203,17 @@ export default function EnrollDialog({ trigger, open: controlledOpen, onOpenChan
                   Your instance has been successfully enrolled and validated.
                 </p>
               </div>
+              <Button
+                type="button"
+                onClick={() => {
+                  setIsOpen(false)
+                  setEnrollmentStatus('idle')
+                  setEnrollmentKey('')
+                }}
+                className="w-full"
+              >
+                Close
+              </Button>
             </div>
           )}
         </form>
