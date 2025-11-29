@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 
@@ -196,11 +197,22 @@ func CheckIPSecurity(dockerClient *docker.Client, cfg *config.Config) gin.Handle
 				jsonparser.ArrayEach(allowlistValue, func(itemValue []byte, itemType jsonparser.ValueType, itemOffset int, itemErr error) {
 					if value, err := jsonparser.GetString(itemValue, "value"); err == nil {
 						// Check if IP matches the allowlist entry (exact match or CIDR)
-						if value == ip || strings.Contains(value, "/") {
-							// For CIDR, we'd need proper IP matching, but for now check if IP contains the pattern
+						if value == ip {
+							// Exact IP match
 							inAllowlist = true
 							result.InCrowdSec = true
 							result.IsWhitelisted = true
+						} else if strings.Contains(value, "/") {
+							// CIDR range - use proper CIDR matching
+							targetIP := net.ParseIP(ip)
+							if targetIP != nil {
+								_, ipNet, err := net.ParseCIDR(value)
+								if err == nil && ipNet.Contains(targetIP) {
+									inAllowlist = true
+									result.InCrowdSec = true
+									result.IsWhitelisted = true
+								}
+							}
 						}
 					}
 				}, "items")
@@ -308,4 +320,54 @@ func UnbanIP(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 			Data:    gin.H{"output": output},
 		})
 	}
+}
+
+// Helper function to check if an IP is in any CIDR range from the YAML content
+func checkIPInCIDRList(ip, yamlContent string) bool {
+	// Parse the target IP
+	targetIP := net.ParseIP(ip)
+	if targetIP == nil {
+		return false
+	}
+
+	// Extract CIDR ranges from sourceRange list in YAML
+	// Look for patterns like "- 10.0.0.0/8"
+	lines := strings.Split(yamlContent, "\n")
+	inSourceRange := false
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+
+		// Check if we're in a sourceRange section
+		if strings.Contains(trimmed, "sourceRange:") {
+			inSourceRange = true
+			continue
+		}
+
+		// If we're in sourceRange and find a list item
+		if inSourceRange && strings.HasPrefix(trimmed, "- ") {
+			cidr := strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))
+			// Remove quotes if present
+			cidr = strings.Trim(cidr, "\"'")
+
+			// Check if it's a CIDR range (contains /)
+			if strings.Contains(cidr, "/") {
+				// Use net.ParseCIDR for proper CIDR matching
+				_, ipNet, err := net.ParseCIDR(cidr)
+				if err == nil && ipNet.Contains(targetIP) {
+					return true
+				}
+			} else {
+				// Exact IP match (no CIDR notation)
+				if cidr == ip {
+					return true
+				}
+			}
+		} else if inSourceRange && !strings.HasPrefix(trimmed, "- ") && trimmed != "" {
+			// Exit sourceRange section if we hit something else
+			inSourceRange = false
+		}
+	}
+
+	return false
 }
