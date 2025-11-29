@@ -2,14 +2,13 @@ package handlers
 
 import (
 	"crowdsec-manager/internal/config"
-	"crowdsec-manager/internal/crowdsec"
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
 	"crowdsec-manager/internal/models"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -74,7 +73,7 @@ func GetPublicIP() gin.HandlerFunc {
 
 
 // IsIPBlocked checks if an IP is blocked
-func IsIPBlocked(dockerClient *docker.Client, cfg *config.Config, csClient *crowdsec.Client) gin.HandlerFunc {
+func IsIPBlocked(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ip := c.Param("ip")
 		if ip == "" {
@@ -85,9 +84,12 @@ func IsIPBlocked(dockerClient *docker.Client, cfg *config.Config, csClient *crow
 			return
 		}
 
-		logger.Info("Checking if IP is blocked via LAPI", "ip", ip)
+		logger.Info("Checking if IP is blocked via cscli", "ip", ip)
 
-		decisions, err := csClient.GetDecisions(url.Values{"ip": []string{ip}})
+		// Use cscli decisions list with JSON output
+		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
+			"cscli", "decisions", "list", "--ip", ip, "-o", "json",
+		})
 		if err != nil {
 			logger.Error("Failed to check IP block status", "error", err)
 			c.JSON(http.StatusInternalServerError, models.Response{
@@ -97,10 +99,38 @@ func IsIPBlocked(dockerClient *docker.Client, cfg *config.Config, csClient *crow
 			return
 		}
 
+		// Parse the JSON output
+		var decisions []models.DecisionRaw
+		if err := json.Unmarshal([]byte(output), &decisions); err != nil {
+			// If output is empty or "null", it means no decisions (not blocked)
+			if output == "null" || output == "" {
+				c.JSON(http.StatusOK, models.Response{
+					Success: true,
+					Data: gin.H{
+						"ip":      ip,
+						"blocked": false,
+						"reason":  "",
+					},
+				})
+				return
+			}
+
+			logger.Error("Failed to parse decisions JSON", "error", err, "output", output)
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to parse response: %v", err),
+			})
+			return
+		}
+
 		blocked := len(decisions) > 0
 		var reason string
 		if blocked {
+			// Use the first decision's scenario/reason
 			reason = decisions[0].Scenario
+			if reason == "" {
+				reason = decisions[0].Reason
+			}
 		}
 
 		c.JSON(http.StatusOK, models.Response{
@@ -115,7 +145,7 @@ func IsIPBlocked(dockerClient *docker.Client, cfg *config.Config, csClient *crow
 }
 
 // UnbanIP unbans an IP address
-func UnbanIP(dockerClient *docker.Client, cfg *config.Config, csClient *crowdsec.Client) gin.HandlerFunc {
+func UnbanIP(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req models.UnbanRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -126,12 +156,14 @@ func UnbanIP(dockerClient *docker.Client, cfg *config.Config, csClient *crowdsec
 			return
 		}
 
-		logger.Info("Unbanning IP via LAPI", "ip", req.IP)
+		logger.Info("Unbanning IP via cscli", "ip", req.IP)
 
-		// Use DeleteDecisions with IP filter
-		err := csClient.DeleteDecisions(url.Values{"ip": []string{req.IP}})
+		// Use cscli decisions delete
+		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
+			"cscli", "decisions", "delete", "--ip", req.IP,
+		})
 		if err != nil {
-			logger.Error("Failed to unban IP", "error", err)
+			logger.Error("Failed to unban IP", "error", err, "output", output)
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
 				Error:   fmt.Sprintf("Failed to unban IP: %v", err),
@@ -139,9 +171,13 @@ func UnbanIP(dockerClient *docker.Client, cfg *config.Config, csClient *crowdsec
 			return
 		}
 
+		// Check output for success/failure if needed, but usually exit code is enough
+		// cscli outputs "No decision(s) deleted" if nothing found, which is fine
+
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
 			Message: fmt.Sprintf("IP %s unbanned successfully", req.IP),
+			Data:    gin.H{"output": output},
 		})
 	}
 }

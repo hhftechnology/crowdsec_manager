@@ -18,7 +18,6 @@ import (
 	"crowdsec-manager/internal/backup"
 	"crowdsec-manager/internal/config"
 	"crowdsec-manager/internal/cron"
-	"crowdsec-manager/internal/crowdsec"
 	"crowdsec-manager/internal/database"
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
@@ -52,9 +51,6 @@ func main() {
 	}
 	defer dockerClient.Close()
 
-	// Initialize CrowdSec client
-	csClient := crowdsec.NewClient(cfg.CrowdSecLAPIKey, cfg.CrowdSecLAPIMachineID, cfg.CrowdSecLAPIPassword, cfg.CrowdSecLAPIUrl)
-
 	// Initialize Backup Manager
 	backupManager := backup.NewManager(filepath.Join(dataDir, "backups"), 7)
 
@@ -85,8 +81,8 @@ func main() {
 	// API routes
 	apiGroup := router.Group("/api")
 	{
-		api.RegisterHealthRoutes(apiGroup, dockerClient, db, cfg, csClient)
-		api.RegisterIPRoutes(apiGroup, dockerClient, cfg, csClient)
+		api.RegisterHealthRoutes(apiGroup, dockerClient, db, cfg)
+		api.RegisterIPRoutes(apiGroup, dockerClient, cfg)
 		api.RegisterWhitelistRoutes(apiGroup, dockerClient, cfg)
 		api.RegisterAllowlistRoutes(apiGroup, dockerClient)
 		api.RegisterScenarioRoutes(apiGroup, dockerClient, cfg.ConfigDir, cfg)
@@ -95,7 +91,7 @@ func main() {
 		api.RegisterBackupRoutes(apiGroup, backupManager, dockerClient)
 		api.RegisterUpdateRoutes(apiGroup, dockerClient, cfg)
 		api.RegisterCronRoutes(apiGroup, cronScheduler)
-		api.RegisterServicesRoutes(apiGroup, dockerClient, db, cfg, csClient)
+		api.RegisterServicesRoutes(apiGroup, dockerClient, db, cfg)
 		api.RegisterNotificationRoutes(apiGroup, dockerClient, db, cfg)
 	}
 

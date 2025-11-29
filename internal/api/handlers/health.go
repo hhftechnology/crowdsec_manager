@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"crowdsec-manager/internal/config"
-	"crowdsec-manager/internal/crowdsec"
 	"crowdsec-manager/internal/database"
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
@@ -17,7 +16,7 @@ import (
 )
 
 // CheckCrowdSecHealth checks the health of the CrowdSec container and LAPI
-func CheckCrowdSecHealth(dockerClient *docker.Client, cfg *config.Config, csClient *crowdsec.Client) gin.HandlerFunc {
+func CheckCrowdSecHealth(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		logger.Info("Checking CrowdSec health")
 
