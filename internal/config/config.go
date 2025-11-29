@@ -45,7 +45,6 @@ type Config struct {
 
 	// CrowdSec LAPI Configuration
 	CrowdSecLAPIUrl       string
-	CrowdSecLAPIKey       string
 	CrowdSecLAPIMachineID string
 	CrowdSecLAPIPassword  string
 
@@ -87,7 +86,6 @@ func Load() (*Config, error) {
 		GerbilContainerName:   getEnv("GERBIL_CONTAINER_NAME", "gerbil"),
 		TraefikContainerName:  getEnv("TRAEFIK_CONTAINER_NAME", "traefik"),
 		CrowdSecLAPIUrl:       getEnv("CROWDSEC_LAPI_URL", "http://crowdsec:8080"),
-		CrowdSecLAPIKey:       getEnv("CROWDSEC_LAPI_KEY", ""),
 		CrowdSecLAPIMachineID: getEnv("CROWDSEC_LAPI_MACHINE_ID", ""),
 		CrowdSecLAPIPassword:  getEnv("CROWDSEC_LAPI_PASSWORD", ""),
 		IncludeCrowdsec:       getEnvAsBool("INCLUDE_CROWDSEC", true),
