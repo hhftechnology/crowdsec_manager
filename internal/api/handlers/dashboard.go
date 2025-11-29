@@ -20,11 +20,14 @@ import (
 // =============================================================================
 
 // GetDecisions retrieves CrowdSec decisions
-func GetDecisions(dockerClient *docker.Client, cfg *config.Config, csClient *crowdsec.Client) gin.HandlerFunc {
+// GetDecisions retrieves CrowdSec decisions
+func GetDecisions(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		logger.Info("Getting CrowdSec decisions via LAPI")
+		logger.Info("Getting CrowdSec decisions via cscli")
 
-		decisions, err := csClient.GetDecisions(nil)
+		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
+			"cscli", "decisions", "list", "-o", "json",
+		})
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
@@ -33,28 +36,37 @@ func GetDecisions(dockerClient *docker.Client, cfg *config.Config, csClient *cro
 			return
 		}
 
-		// Convert to models.Decision
-		var modelDecisions []models.Decision
-		for _, d := range decisions {
-			modelDecisions = append(modelDecisions, models.Decision{
-				ID:        int64(d.ID),
-				Source:    d.Origin,
-				Type:      d.Type,
-				Scope:     d.Scope,
-				Value:     d.Value,
-				Duration:  d.Duration,
-				Scenario:  d.Scenario,
-				Origin:    d.Origin,
-				Reason:    d.Scenario,
-				// CreatedAt is not in crowdsec.Decision struct yet, might need to add it or ignore
+		// Parse the JSON
+		var rawDecisions []models.DecisionRaw
+		if err := json.Unmarshal([]byte(output), &rawDecisions); err != nil {
+			// If output is empty or "null", it means no decisions
+			if output == "null" || output == "" {
+				c.JSON(http.StatusOK, models.Response{
+					Success: true,
+					Data:    []models.Decision{},
+				})
+				return
+			}
+			
+			logger.Warn("Failed to parse decisions JSON", "error", err, "output_preview", truncateString(output, 100))
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to parse decisions JSON: %v", err),
 			})
+			return
 		}
 
-		logger.Debug("Decisions API retrieved successfully", "count", len(modelDecisions))
+		// Convert to models.Decision
+		var decisions []models.Decision
+		for _, d := range rawDecisions {
+			decisions = append(decisions, d.Normalize())
+		}
+
+		logger.Debug("Decisions retrieved successfully", "count", len(decisions))
 
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
-			Data:    modelDecisions,
+			Data:    decisions,
 		})
 	}
 }
@@ -173,76 +185,84 @@ func GetCrowdSecEnrollmentStatus(dockerClient *docker.Client, cfg *config.Config
 }
 
 // GetDecisionsAnalysis retrieves CrowdSec decisions with advanced filtering
-func GetDecisionsAnalysis(dockerClient *docker.Client, cfg *config.Config, csClient *crowdsec.Client) gin.HandlerFunc {
+// GetDecisionsAnalysis retrieves CrowdSec decisions with advanced filtering
+func GetDecisionsAnalysis(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		logger.Info("Getting CrowdSec decisions analysis via LAPI")
+		logger.Info("Getting CrowdSec decisions analysis via cscli")
 
-		opts := url.Values{}
-		if v := c.Query("since"); v != "" {
-			opts.Add("since", v)
-		}
-		if v := c.Query("until"); v != "" {
-			opts.Add("until", v)
-		}
-		if v := c.Query("type"); v != "" && v != "all" {
-			opts.Add("type", v)
-		}
-		if v := c.Query("scope"); v != "" && v != "all" {
-			opts.Add("scope", v)
-		}
-		if v := c.Query("origin"); v != "" && v != "all" {
-			opts.Add("origin", v)
-		}
-		if v := c.Query("value"); v != "" {
-			opts.Add("value", v)
-		}
-		if v := c.Query("scenario"); v != "" {
-			opts.Add("scenario", v)
-		}
+		cmd := []string{"cscli", "decisions", "list", "-o", "json"}
+
+		// Add filters based on query parameters
 		if v := c.Query("ip"); v != "" {
-			opts.Add("ip", v)
+			cmd = append(cmd, "--ip", v)
 		}
 		if v := c.Query("range"); v != "" {
-			opts.Add("range", v)
+			cmd = append(cmd, "--range", v)
+		}
+		if v := c.Query("type"); v != "" && v != "all" {
+			cmd = append(cmd, "--type", v)
+		}
+		if v := c.Query("scope"); v != "" && v != "all" {
+			cmd = append(cmd, "--scope", v)
+		}
+		if v := c.Query("value"); v != "" {
+			cmd = append(cmd, "--value", v)
+		}
+		if v := c.Query("scenario"); v != "" {
+			cmd = append(cmd, "--scenario", v)
+		}
+		if v := c.Query("origin"); v != "" && v != "all" {
+			cmd = append(cmd, "--origin", v)
+		}
+		if v := c.Query("until"); v != "" {
+			cmd = append(cmd, "--until", v)
 		}
 		if v := c.Query("includeAll"); v == "true" {
-			opts.Add("include_capi", "true")
+			cmd = append(cmd, "-a")
 		}
 
-		decisions, err := csClient.GetDecisions(opts)
+		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, cmd)
 		if err != nil {
-			logger.Error("Failed to get decisions analysis", "error", err)
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
-				Error:   fmt.Sprintf("Failed to get decisions: %v", err),
+				Error:   fmt.Sprintf("Failed to get decisions analysis: %v", err),
+			})
+			return
+		}
+
+		// Parse the JSON
+		var rawDecisions []models.DecisionRaw
+		if err := json.Unmarshal([]byte(output), &rawDecisions); err != nil {
+			// If output is empty or "null", it means no decisions
+			if output == "null" || output == "" {
+				c.JSON(http.StatusOK, models.Response{
+					Success: true,
+					Data:    []models.Decision{},
+				})
+				return
+			}
+			
+			logger.Warn("Failed to parse decisions analysis JSON", "error", err, "output_preview", truncateString(output, 100))
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to parse decisions analysis JSON: %v", err),
 			})
 			return
 		}
 
 		// Convert to models.Decision
-		var modelDecisions []models.Decision
-		for _, d := range decisions {
-			modelDecisions = append(modelDecisions, models.Decision{
-				ID:        int64(d.ID),
-				Source:    d.Origin,
-				Type:      d.Type,
-				Scope:     d.Scope,
-				Value:     d.Value,
-				Duration:  d.Duration,
-				Scenario:  d.Scenario,
-				Origin:    d.Origin,
-				Reason:    d.Scenario,
-			})
+		var decisions []models.Decision
+		for _, d := range rawDecisions {
+			decisions = append(decisions, d.Normalize())
 		}
 
-		logger.Info("Decisions retrieved successfully",
-			"count", len(modelDecisions),
-			"filters_applied", len(opts))
+		logger.Info("Decisions analysis retrieved successfully",
+			"count", len(decisions),
+			"cmd", cmd)
 
-		// Return properly formatted data
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
-			Data:    modelDecisions,
+			Data:    decisions,
 		})
 	}
 }

@@ -95,8 +95,23 @@ func AddBouncer(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc
 			return
 		}
 
-		// cscli bouncers add returns the API key in JSON format
-		// [ { "name": "...", "api_key": "..." } ]
+		// cscli bouncers add returns the API key as a JSON string or an object depending on version
+		// Log output: "72iDIWLzUIm6Bwd2uLh2Pg6mo7FaDl+YV00etlpuyHA"
+		var apiKey string
+		if err := json.Unmarshal([]byte(output), &apiKey); err == nil {
+			// Successfully parsed as string
+			c.JSON(http.StatusOK, models.Response{
+				Success: true,
+				Message: "Bouncer added successfully",
+				Data: map[string]string{
+					"name":    req.Name,
+					"api_key": apiKey,
+				},
+			})
+			return
+		}
+
+		// Try parsing as array of objects (older versions or different output format)
 		var result []map[string]string
 		if err := json.Unmarshal([]byte(output), &result); err != nil {
 			logger.Error("Failed to parse add bouncer output", "error", err, "output", output)
