@@ -32,21 +32,65 @@ func ListAllowlists(dockerClient *docker.Client) gin.HandlerFunc {
 			return
 		}
 
-		// Log the raw output for debugging
-		logger.Info("Allowlists list output", "output", output)
+		// Check if output is empty or null
+		if output == "null" || output == "" || output == "[]" {
+			c.JSON(http.StatusOK, models.Response{
+				Success: true,
+				Data:    gin.H{"allowlists": []models.Allowlist{}, "count": 0},
+				Message: "No allowlists found",
+			})
+			return
+		}
 
+		// Parse allowlists using jsonparser
 		var allowlists []models.Allowlist
-		if err := json.Unmarshal([]byte(output), &allowlists); err != nil {
-			// If output is empty or "null", it means no allowlists
-			if output == "null" || output == "" {
-				c.JSON(http.StatusOK, models.Response{
-					Success: true,
-					Data:    gin.H{"allowlists": []models.Allowlist{}, "count": 0},
-					Message: "No allowlists found",
-				})
-				return
+		dataBytes := []byte(output)
+
+		_, err = jsonparser.ArrayEach(dataBytes, func(value []byte, dataType jsonparser.ValueType, offset int, err error) {
+			var allowlist models.Allowlist
+
+			// Extract fields
+			if name, err := jsonparser.GetString(value, "name"); err == nil {
+				allowlist.Name = name
+			}
+			if desc, err := jsonparser.GetString(value, "description"); err == nil {
+				allowlist.Description = desc
+			}
+			if createdAt, err := jsonparser.GetString(value, "created_at"); err == nil {
+				allowlist.CreatedAt = createdAt
+			}
+			if updatedAt, err := jsonparser.GetString(value, "updated_at"); err == nil {
+				allowlist.UpdatedAt = updatedAt
 			}
 
+			// Parse items array
+			var items []models.AllowlistEntry
+			jsonparser.ArrayEach(value, func(itemValue []byte, itemType jsonparser.ValueType, itemOffset int, itemErr error) {
+				var entry models.AllowlistEntry
+
+				if val, err := jsonparser.GetString(itemValue, "value"); err == nil {
+					entry.Value = val
+				}
+				if exp, err := jsonparser.GetString(itemValue, "expiration"); err == nil {
+					entry.Expiration = exp
+				}
+				if createdAt, err := jsonparser.GetString(itemValue, "created_at"); err == nil {
+					// Parse time
+					if t, err := time.Parse(time.RFC3339, createdAt); err == nil {
+						entry.CreatedAt = t
+					}
+				}
+
+				items = append(items, entry)
+			}, "items")
+
+			allowlist.Items = items
+			allowlist.Size = len(items)
+
+			allowlists = append(allowlists, allowlist)
+		})
+
+		if err != nil {
 			logger.Error("Failed to parse allowlists JSON", "error", err, "output", output)
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
@@ -55,11 +99,8 @@ func ListAllowlists(dockerClient *docker.Client) gin.HandlerFunc {
 			return
 		}
 
+		logger.Debug("Allowlists retrieved successfully", "count", len(allowlists))
 
-	// Compute Size field from Items length for each allowlist
-	for i := range allowlists {
-		allowlists[i].Size = len(allowlists[i].Items)
-	}
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
 			Data:    gin.H{"allowlists": allowlists, "count": len(allowlists)},
@@ -67,6 +108,7 @@ func ListAllowlists(dockerClient *docker.Client) gin.HandlerFunc {
 		})
 	}
 }
+
 
 // CreateAllowlist creates a new CrowdSec allowlist
 func CreateAllowlist(dockerClient *docker.Client) gin.HandlerFunc {
@@ -121,18 +163,52 @@ func InspectAllowlist(dockerClient *docker.Client) gin.HandlerFunc {
 			return
 		}
 
+		// Parse response using jsonparser
+		dataBytes := []byte(output)
 		var response models.AllowlistInspectResponse
-		if err := json.Unmarshal([]byte(output), &response); err != nil {
-			logger.Error("Failed to parse allowlist JSON", "error", err, "output", output)
-			c.JSON(http.StatusInternalServerError, models.Response{
-				Success: false,
-				Error:   fmt.Sprintf("Failed to parse allowlist data: %v", err),
-			})
-			return
+
+		// Extract top-level fields
+		if n, err := jsonparser.GetString(dataBytes, "name"); err == nil {
+			response.Name = n
+		}
+		if desc, err := jsonparser.GetString(dataBytes, "description"); err == nil {
+			response.Description = desc
+		}
+		if createdAt, err := jsonparser.GetString(dataBytes, "created_at"); err == nil {
+			if t, err := time.Parse(time.RFC3339, createdAt); err == nil {
+				response.CreatedAt = t
+			}
+		}
+		if updatedAt, err := jsonparser.GetString(dataBytes, "updated_at"); err == nil {
+			if t, err := time.Parse(time.RFC3339, updatedAt); err == nil {
+				response.UpdatedAt = t
+			}
 		}
 
-		// Calculate count from items length (CrowdSec doesn't provide it directly in top level sometimes)
-		response.Count = len(response.Items)
+		// Parse items array
+		var items []models.AllowlistEntry
+		jsonparser.ArrayEach(dataBytes, func(itemValue []byte, itemType jsonparser.ValueType, itemOffset int, itemErr error) {
+			var entry models.AllowlistEntry
+
+			if val, err := jsonparser.GetString(itemValue, "value"); err == nil {
+				entry.Value = val
+			}
+			if exp, err := jsonparser.GetString(itemValue, "expiration"); err == nil {
+				entry.Expiration = exp
+			}
+			if createdAt, err := jsonparser.GetString(itemValue, "created_at"); err == nil {
+				if t, err := time.Parse(time.RFC3339, createdAt); err == nil {
+					entry.CreatedAt = t
+				}
+			}
+
+			items = append(items, entry)
+		}, "items")
+
+		response.Items = items
+		response.Count = len(items)
+
+		logger.Debug("Allowlist inspected successfully", "name", name, "count", response.Count)
 
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
@@ -141,6 +217,7 @@ func InspectAllowlist(dockerClient *docker.Client) gin.HandlerFunc {
 		})
 	}
 }
+
 
 // AddAllowlistEntries adds entries to an allowlist
 func AddAllowlistEntries(dockerClient *docker.Client) gin.HandlerFunc {

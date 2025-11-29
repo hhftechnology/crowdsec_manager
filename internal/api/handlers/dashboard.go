@@ -5,11 +5,13 @@ import (
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
 	"crowdsec-manager/internal/models"
-	"encoding/json"
+	"encoding/json" // Used for arbitrary JSON in GetMetrics
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
+	"github.com/buger/jsonparser"
 	"github.com/gin-gonic/gin"
 )
 
@@ -34,36 +36,75 @@ func GetDecisions(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFu
 			return
 		}
 
-		// Parse the JSON as alerts (CrowdSec returns array of alerts, each containing decisions)
-		var alerts []models.Alert
-		if err := json.Unmarshal([]byte(output), &alerts); err != nil {
-			// If output is empty or "null", it means no decisions
-			if output == "null" || output == "" || output == "[]" {
-				c.JSON(http.StatusOK, models.Response{
-					Success: true,
-					Data:    []models.Decision{},
-				})
-				return
+		// Check if output is empty or null
+		if output == "null" || output == "" || output == "[]" {
+			c.JSON(http.StatusOK, models.Response{
+				Success: true,
+				Data:    gin.H{"decisions": []models.Decision{}, "count": 0},
+			})
+			return
+		}
+
+		// Parse alerts using jsonparser
+		var decisions []models.Decision
+		dataBytes := []byte(output)
+
+		_, err = jsonparser.ArrayEach(dataBytes, func(alertValue []byte, alertType jsonparser.ValueType, alertOffset int, alertErr error) {
+			// Get alert's created_at for fallback
+			var alertCreatedAt string
+			if createdAt, err := jsonparser.GetString(alertValue, "created_at"); err == nil {
+				alertCreatedAt = createdAt
 			}
 
-			logger.Warn("Failed to parse alerts JSON", "error", err, "output_preview", truncateString(output, 200))
+			// Parse decisions array within this alert
+			jsonparser.ArrayEach(alertValue, func(decisionValue []byte, decisionType jsonparser.ValueType, decisionOffset int, decisionErr error) {
+				var decision models.Decision
+
+				// Extract decision fields
+				if id, err := jsonparser.GetInt(decisionValue, "id"); err == nil {
+					decision.ID = id
+				}
+				if origin, err := jsonparser.GetString(decisionValue, "origin"); err == nil {
+					decision.Origin = origin
+				}
+				if decisionType, err := jsonparser.GetString(decisionValue, "type"); err == nil {
+					decision.Type = decisionType
+				}
+				if scope, err := jsonparser.GetString(decisionValue, "scope"); err == nil {
+					decision.Scope = scope
+				}
+				if value, err := jsonparser.GetString(decisionValue, "value"); err == nil {
+					decision.Value = value
+				}
+				if duration, err := jsonparser.GetString(decisionValue, "duration"); err == nil {
+					decision.Duration = duration
+				}
+				if scenario, err := jsonparser.GetString(decisionValue, "scenario"); err == nil {
+					decision.Scenario = scenario
+				}
+				if simulated, err := jsonparser.GetBoolean(decisionValue, "simulated"); err == nil {
+					decision.Simulated = simulated
+				}
+				if createdAt, err := jsonparser.GetString(decisionValue, "created_at"); err == nil {
+					decision.CreatedAt = createdAt
+				}
+
+				// Set created_at from alert if not present in decision
+				if decision.CreatedAt == "" {
+					decision.CreatedAt = alertCreatedAt
+				}
+
+				decisions = append(decisions, decision)
+			}, "decisions")
+		})
+
+		if err != nil {
+			logger.Error("Failed to parse alerts JSON", "error", err, "output_preview", truncateString(output, 200))
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
 				Error:   fmt.Sprintf("Failed to parse decisions JSON: %v", err),
 			})
 			return
-		}
-
-		// Extract all decisions from all alerts
-		var decisions []models.Decision
-		for _, alert := range alerts {
-			for _, decision := range alert.Decisions {
-				// Set created_at from alert if not present in decision
-				if decision.CreatedAt == "" {
-					decision.CreatedAt = alert.CreatedAt
-				}
-				decisions = append(decisions, decision)
-			}
 		}
 
 		logger.Debug("Decisions retrieved successfully", "count", len(decisions))
@@ -233,36 +274,75 @@ func GetDecisionsAnalysis(dockerClient *docker.Client, cfg *config.Config) gin.H
 			return
 		}
 
-		// Parse the JSON as alerts (CrowdSec returns array of alerts, each containing decisions)
-		var alerts []models.Alert
-		if err := json.Unmarshal([]byte(output), &alerts); err != nil {
-			// If output is empty or "null", it means no decisions
-			if output == "null" || output == "" || output == "[]" {
-				c.JSON(http.StatusOK, models.Response{
-					Success: true,
-					Data:    gin.H{"decisions": []models.Decision{}, "count": 0},
-				})
-				return
+		// Check if output is empty or null
+		if output == "null" || output == "" || output == "[]" {
+			c.JSON(http.StatusOK, models.Response{
+				Success: true,
+				Data:    gin.H{"decisions": []models.Decision{}, "count": 0},
+			})
+			return
+		}
+
+		// Parse alerts using jsonparser
+		var decisions []models.Decision
+		dataBytes := []byte(output)
+
+		_, err = jsonparser.ArrayEach(dataBytes, func(alertValue []byte, alertType jsonparser.ValueType, alertOffset int, alertErr error) {
+			// Get alert's created_at for fallback
+			var alertCreatedAt string
+			if createdAt, err := jsonparser.GetString(alertValue, "created_at"); err == nil {
+				alertCreatedAt = createdAt
 			}
-	
-			logger.Warn("Failed to parse decisions analysis JSON", "error", err, "output_preview", truncateString(output, 200))
+
+			// Parse decisions array within this alert
+			jsonparser.ArrayEach(alertValue, func(decisionValue []byte, decisionType jsonparser.ValueType, decisionOffset int, decisionErr error) {
+				var decision models.Decision
+
+				// Extract decision fields
+				if id, err := jsonparser.GetInt(decisionValue, "id"); err == nil {
+					decision.ID = id
+				}
+				if origin, err := jsonparser.GetString(decisionValue, "origin"); err == nil {
+					decision.Origin = origin
+				}
+				if decisionType, err := jsonparser.GetString(decisionValue, "type"); err == nil {
+					decision.Type = decisionType
+				}
+				if scope, err := jsonparser.GetString(decisionValue, "scope"); err == nil {
+					decision.Scope = scope
+				}
+				if value, err := jsonparser.GetString(decisionValue, "value"); err == nil {
+					decision.Value = value
+				}
+				if duration, err := jsonparser.GetString(decisionValue, "duration"); err == nil {
+					decision.Duration = duration
+				}
+				if scenario, err := jsonparser.GetString(decisionValue, "scenario"); err == nil {
+					decision.Scenario = scenario
+				}
+				if simulated, err := jsonparser.GetBoolean(decisionValue, "simulated"); err == nil {
+					decision.Simulated = simulated
+				}
+				if createdAt, err := jsonparser.GetString(decisionValue, "created_at"); err == nil {
+					decision.CreatedAt = createdAt
+				}
+
+				// Set created_at from alert if not present in decision
+				if decision.CreatedAt == "" {
+					decision.CreatedAt = alertCreatedAt
+				}
+
+				decisions = append(decisions, decision)
+			}, "decisions")
+		})
+
+		if err != nil {
+			logger.Error("Failed to parse decisions analysis JSON", "error", err, "output_preview", truncateString(output, 200))
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
 				Error:   fmt.Sprintf("Failed to parse decisions JSON: %v", err),
 			})
 			return
-		}
-	
-		// Extract all decisions from all alerts
-		var decisions []models.Decision
-		for _, alert := range alerts {
-			for _, decision := range alert.Decisions {
-				// Set created_at from alert if not present in decision
-				if decision.CreatedAt == "" {
-					decision.CreatedAt = alert.CreatedAt
-				}
-				decisions = append(decisions, decision)
-			}
 		}
 	
 

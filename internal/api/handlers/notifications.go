@@ -15,7 +15,7 @@ import (
 	"crowdsec-manager/internal/models"
 
 	"github.com/gin-gonic/gin"
-	"gopkg.in/yaml.v3"
+	"github.com/goccy/go-yaml"
 )
 
 // DiscordTemplate is the template for discord.yaml

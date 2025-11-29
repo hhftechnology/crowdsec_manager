@@ -6,12 +6,13 @@ import (
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
 	"crowdsec-manager/internal/models"
-	"encoding/json"
+	"encoding/json" // Used for arbitrary JSON (metrics, raw decisions)
 	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/buger/jsonparser"
 	"github.com/gin-gonic/gin"
 )
 
@@ -119,23 +120,63 @@ func CheckCrowdSecHealth(dockerClient *docker.Client, cfg *config.Config) gin.Ha
 				Error:   fmt.Sprintf("%v", err),
 			}
 		} else {
-			var bouncers []models.Bouncer
-			if err := json.Unmarshal([]byte(bouncersOutput), &bouncers); err == nil {
-				activeBouncers := 0
-				for _, b := range bouncers {
-					if time.Since(b.LastPull) <= 5*time.Minute {
-						activeBouncers++
-					}
-				}
+			// Check if output is empty or null
+			if bouncersOutput == "null" || bouncersOutput == "" || bouncersOutput == "[]" {
 				healthCheck.Checks["bouncers"] = models.HealthCheckItem{
 					Status:  "healthy",
-					Message: fmt.Sprintf("%d active bouncer(s) out of %d total", activeBouncers, len(bouncers)),
-					Details: fmt.Sprintf("Active: %d, Total: %d", activeBouncers, len(bouncers)),
+					Message: "No bouncers registered",
+					Details: "Active: 0, Total: 0",
 				}
 			} else {
-				healthCheck.Checks["bouncers"] = models.HealthCheckItem{
-					Status:  "degraded",
-					Message: "Unable to parse bouncers data",
+				// Parse bouncers using jsonparser
+				var bouncers []models.Bouncer
+				dataBytes := []byte(bouncersOutput)
+
+				_, err := jsonparser.ArrayEach(dataBytes, func(value []byte, dataType jsonparser.ValueType, offset int, err error) {
+					var bouncer models.Bouncer
+
+					if name, err := jsonparser.GetString(value, "name"); err == nil {
+						bouncer.Name = name
+					}
+					if ipAddr, err := jsonparser.GetString(value, "ip_address"); err == nil {
+						bouncer.IPAddress = ipAddr
+					}
+					if valid, err := jsonparser.GetBoolean(value, "valid"); err == nil {
+						bouncer.Valid = valid
+					}
+					if lastPull, err := jsonparser.GetString(value, "last_pull"); err == nil {
+						if t, err := time.Parse(time.RFC3339, lastPull); err == nil {
+							bouncer.LastPull = t
+						}
+					}
+					if bouncerType, err := jsonparser.GetString(value, "type"); err == nil {
+						bouncer.Type = bouncerType
+					}
+					if version, err := jsonparser.GetString(value, "version"); err == nil {
+						bouncer.Version = version
+					}
+
+					bouncers = append(bouncers, bouncer)
+				})
+
+				if err == nil {
+					activeBouncers := 0
+					for _, b := range bouncers {
+						if time.Since(b.LastPull) <= 5*time.Minute {
+							activeBouncers++
+						}
+					}
+					healthCheck.Checks["bouncers"] = models.HealthCheckItem{
+						Status:  "healthy",
+						Message: fmt.Sprintf("%d active bouncer(s) out of %d total", activeBouncers, len(bouncers)),
+						Details: fmt.Sprintf("Active: %d, Total: %d", activeBouncers, len(bouncers)),
+					}
+				} else {
+					healthCheck.Checks["bouncers"] = models.HealthCheckItem{
+						Status:  "degraded",
+						Message: "Failed to parse bouncers data",
+						Error:   fmt.Sprintf("%v", err),
+					}
 				}
 			}
 		}
@@ -289,30 +330,55 @@ func RunCompleteDiagnostics(dockerClient *docker.Client, db *database.Database, 
 		// Get bouncers
 		var bouncers []models.Bouncer
 		bouncerOutput, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{"cscli", "bouncers", "list", "-o", "json"})
-		if err == nil {
-			// Parse bouncer JSON output
-			if err := json.Unmarshal([]byte(bouncerOutput), &bouncers); err != nil {
+		if err == nil && bouncerOutput != "null" && bouncerOutput != "" && bouncerOutput != "[]" {
+			// Parse bouncer JSON output using jsonparser
+			dataBytes := []byte(bouncerOutput)
+
+			_, parseErr := jsonparser.ArrayEach(dataBytes, func(value []byte, dataType jsonparser.ValueType, offset int, err error) {
+				var bouncer models.Bouncer
+
+				if name, err := jsonparser.GetString(value, "name"); err == nil {
+					bouncer.Name = name
+				}
+				if ipAddr, err := jsonparser.GetString(value, "ip_address"); err == nil {
+					bouncer.IPAddress = ipAddr
+				}
+				if valid, err := jsonparser.GetBoolean(value, "valid"); err == nil {
+					bouncer.Valid = valid
+				}
+				if lastPull, err := jsonparser.GetString(value, "last_pull"); err == nil {
+					if t, err := time.Parse(time.RFC3339, lastPull); err == nil {
+						bouncer.LastPull = t
+					}
+				}
+				if bouncerType, err := jsonparser.GetString(value, "type"); err == nil {
+					bouncer.Type = bouncerType
+				}
+				if version, err := jsonparser.GetString(value, "version"); err == nil {
+					bouncer.Version = version
+				}
+
+				// Compute status for each bouncer
+				if time.Since(bouncer.LastPull) <= 5*time.Minute {
+					bouncer.Status = "connected"
+				} else if bouncer.Valid {
+					bouncer.Status = "stale"
+				} else {
+					bouncer.Status = "disconnected"
+				}
+
+				bouncers = append(bouncers, bouncer)
+			})
+
+			if parseErr != nil {
 				logger.Warn("Failed to parse bouncers JSON",
-					"error", err,
+					"error", parseErr,
 					"output_length", len(bouncerOutput),
 					"output_preview", truncateString(bouncerOutput, 100))
 			} else {
-				// Compute status for each bouncer
-				for i := range bouncers {
-					// Primary indicator: if last pull was recent (within 5 minutes), bouncer is connected
-					if time.Since(bouncers[i].LastPull) <= 5*time.Minute {
-						bouncers[i].Status = "connected"
-					} else if bouncers[i].Valid {
-						// Last pull is old but key is valid - bouncer exists but inactive
-						bouncers[i].Status = "stale"
-					} else {
-						// Key is invalid - bouncer is disconnected
-						bouncers[i].Status = "disconnected"
-					}
-				}
 				logger.Debug("Bouncers retrieved successfully", "count", len(bouncers))
 			}
-		} else {
+		} else if err != nil {
 			logger.Warn("Failed to execute bouncers command", "error", err)
 		}
 
