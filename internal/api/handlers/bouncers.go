@@ -64,7 +64,7 @@ func GetBouncers(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFun
 		// Return properly formatted data
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
-			Data:    bouncers,
+			Data:    gin.H{"bouncers": bouncers, "count": len(bouncers)},
 		})
 	}
 }
@@ -153,19 +153,34 @@ func DeleteBouncer(dockerClient *docker.Client, cfg *config.Config) gin.HandlerF
 
 		logger.Info("Deleting bouncer", "name", name)
 
-		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
-			"cscli", "bouncers", "delete", name,
-		})
+		// Execute delete command
+		cmd := []string{"cscli", "bouncers", "delete", name}
+		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, cmd)
+		
+		// Log the output for debugging
+		logger.Info("Delete command executed", "cmd", cmd, "output", output, "error", err)
+
 		if err != nil {
 			logger.Error("Failed to delete bouncer", "error", err, "output", output)
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
-				Error:   fmt.Sprintf("Failed to delete bouncer: %v", err),
+				Error:   fmt.Sprintf("Failed to delete bouncer: %v. Output: %s", err, output),
 			})
 			return
 		}
 
-		logger.Info("Bouncer deleted successfully", "name", name, "output", output)
+		// Verify deletion by checking if bouncer still exists
+		// We can't easily check specific bouncer existence without parsing list, 
+		// but we can rely on the fact that if cscli delete succeeded, it should be gone.
+		// However, since we had issues with silent failures, let's check the output.
+		
+		if strings.Contains(strings.ToLower(output), "error") || strings.Contains(strings.ToLower(output), "failed") {
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Bouncer deletion failed: %s", output),
+			})
+			return
+		}
 
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,

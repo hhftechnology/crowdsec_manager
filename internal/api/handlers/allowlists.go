@@ -32,9 +32,22 @@ func ListAllowlists(dockerClient *docker.Client) gin.HandlerFunc {
 			return
 		}
 
+		// Log the raw output for debugging
+		logger.Info("Allowlists list output", "output", output)
+
 		var allowlists []models.Allowlist
 		if err := json.Unmarshal([]byte(output), &allowlists); err != nil {
-			logger.Error("Failed to parse allowlists JSON", "error", err)
+			// If output is empty or "null", it means no allowlists
+			if output == "null" || output == "" {
+				c.JSON(http.StatusOK, models.Response{
+					Success: true,
+					Data:    gin.H{"allowlists": []models.Allowlist{}, "count": 0},
+					Message: "No allowlists found",
+				})
+				return
+			}
+
+			logger.Error("Failed to parse allowlists JSON", "error", err, "output", output)
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
 				Error:   fmt.Sprintf("Failed to parse allowlists: %v", err),
@@ -44,7 +57,7 @@ func ListAllowlists(dockerClient *docker.Client) gin.HandlerFunc {
 
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
-			Data:    allowlists,
+			Data:    gin.H{"allowlists": allowlists, "count": len(allowlists)},
 			Message: fmt.Sprintf("Found %d allowlists", len(allowlists)),
 		})
 	}
@@ -80,7 +93,7 @@ func CreateAllowlist(dockerClient *docker.Client) gin.HandlerFunc {
 			Data: models.Allowlist{
 				Name:        req.Name,
 				Description: req.Description,
-				CreatedAt:   time.Now(),
+				CreatedAt:   time.Now().Format(time.RFC3339),
 			},
 			Message: fmt.Sprintf("Allowlist '%s' created successfully", req.Name),
 		})

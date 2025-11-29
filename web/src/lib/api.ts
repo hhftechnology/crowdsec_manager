@@ -501,7 +501,7 @@ export const traefikAPI = {
 
 export const allowlistAPI = {
   list: () =>
-    api.get<ApiResponse<Allowlist[]>>('/allowlist/list'),
+    api.get<ApiResponse<{ allowlists: Allowlist[]; count: number }>>('/allowlist/list'),
 
   create: (data: AllowlistCreateRequest) =>
     api.post<ApiResponse<Allowlist>>('/allowlist/create', data),

@@ -289,7 +289,7 @@ type ConfigPathRequest struct {
 type Allowlist struct {
 	Name        string    `json:"name"`
 	Description string    `json:"description"`
-	CreatedAt   time.Time `json:"created_at,omitempty"`
+	CreatedAt   string    `json:"created_at,omitempty"`
 }
 
 // AllowlistEntry represents an entry in an allowlist
@@ -326,8 +326,8 @@ type AllowlistInspectResponse struct {
 	Name        string           `json:"name"`
 	Description string           `json:"description"`
 	Items       []AllowlistEntry `json:"items"`      // CrowdSec uses "items", not "entries"
-	CreatedAt   time.Time        `json:"created_at"` // When the allowlist was created
-	UpdatedAt   time.Time        `json:"updated_at"` // When the allowlist was last updated
+	CreatedAt   string           `json:"created_at"` // When the allowlist was created
+	UpdatedAt   string           `json:"updated_at"` // When the allowlist was last updated
 	Count       int              `json:"-"`          // Computed field, not in JSON
 }
 

@@ -66,7 +66,7 @@ func GetDecisions(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFu
 
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
-			Data:    decisions,
+			Data:    gin.H{"decisions": decisions, "count": len(decisions)},
 		})
 	}
 }
@@ -262,7 +262,7 @@ func GetDecisionsAnalysis(dockerClient *docker.Client, cfg *config.Config) gin.H
 
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
-			Data:    decisions,
+			Data:    gin.H{"decisions": decisions, "count": len(decisions)},
 		})
 	}
 }
