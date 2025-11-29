@@ -98,7 +98,7 @@ format: |
       }
     ]
   }
-url: https://discord.com/api/webhooks/{{.WebhookID}}/{{.WebhookToken}}
+url: https://discord.com/api/webhooks/${DISCORD_WEBHOOK_ID}/${DISCORD_WEBHOOK_TOKEN}
 method: POST
 headers:
   Content-Type: application/json
@@ -233,7 +233,7 @@ func UpdateDiscordConfig(db *database.Database, cfg *config.Config, dockerClient
 			return
 		}
 
-		// Generate discord.yaml
+		// 1. Generate discord.yaml
 		discordPath := filepath.Join(cfg.ConfigDir, "crowdsec", "notifications", "discord.yaml")
 		if err := generateDiscordYaml(discordPath, req); err != nil {
 			c.JSON(http.StatusInternalServerError, models.Response{
@@ -243,7 +243,41 @@ func UpdateDiscordConfig(db *database.Database, cfg *config.Config, dockerClient
 			return
 		}
 
-		// Update profiles.yaml
+		// 2. Update docker-compose.yml with environment variables (actual values) and volume mount
+		composeFiles := []string{
+			"docker-compose.yml",
+			"docker-compose.pangolin.yml",
+			"docker-compose.dev.yml",
+		}
+		var composeErr error
+		for _, composeFile := range composeFiles {
+			composePath := filepath.Join(cfg.ConfigDir, "..", composeFile)
+			if _, err := os.Stat(composePath); err == nil {
+				logger.Info("Updating docker-compose file", "file", composeFile)
+				if err := updateDockerCompose(composePath, req); err != nil {
+					logger.Warn("Failed to update docker-compose", "file", composeFile, "error", err)
+					composeErr = err
+				} else {
+					logger.Info("Successfully updated docker-compose", "file", composeFile)
+					break // Success, no need to try other files
+				}
+			}
+		}
+
+		if composeErr != nil {
+			logger.Warn("Could not update any docker-compose file", "error", composeErr)
+		}
+
+		// 3. Update config.yaml for CTI API if CTI key is provided
+		if req.CTIKey != "" {
+			configPath := filepath.Join(cfg.ConfigDir, "crowdsec", "config.yaml")
+			if err := updateCrowdSecConfig(configPath, true); err != nil {
+				logger.Warn("Failed to update config.yaml for CTI", "error", err)
+				// Don't fail the request, CTI is optional
+			}
+		}
+
+		// 4. Update profiles.yaml
 		profilesPath := filepath.Join(cfg.ConfigDir, "crowdsec", "profiles.yaml")
 		if err := updateProfilesYaml(profilesPath, req.Enabled); err != nil {
 			c.JSON(http.StatusInternalServerError, models.Response{
@@ -253,7 +287,7 @@ func UpdateDiscordConfig(db *database.Database, cfg *config.Config, dockerClient
 			return
 		}
 
-		// Restart CrowdSec if requested
+		// 5. Restart CrowdSec if requested
 		restarted := false
 		if req.CrowdSecRestarted {
 			if err := dockerClient.RestartContainerWithTimeout(cfg.CrowdsecContainerName, 30); err != nil {
@@ -265,9 +299,23 @@ func UpdateDiscordConfig(db *database.Database, cfg *config.Config, dockerClient
 		}
 
 		req.CrowdSecRestarted = restarted
+
+		// Build success message
+		message := "Discord configuration updated successfully. "
+		if req.Enabled {
+			message += "Created discord.yaml and updated docker-compose.yml with environment variables and volume mount. "
+			if restarted {
+				message += "CrowdSec container restarted. Run 'docker-compose up -d' to apply docker-compose.yml changes."
+			} else {
+				message += "Run 'docker-compose up -d' to apply changes."
+			}
+		} else {
+			message += "Discord notifications disabled in profiles.yaml."
+		}
+
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
-			Message: "Discord configuration updated successfully",
+			Message: message,
 			Data:    req,
 		})
 	}
@@ -282,15 +330,9 @@ func generateDiscordYaml(path string, config models.DiscordConfig) error {
 		return err
 	}
 
-	// Don't use Go template parsing - the template contains CrowdSec-specific functions
-	// that Go's template engine doesn't recognize (CrowdsecCTI, mulf, floor, etc.)
-	// Instead, do simple string replacement for the webhook credentials
-	content := DiscordTemplate
-	content = strings.Replace(content, "{{.WebhookID}}", config.WebhookID, -1)
-	content = strings.Replace(content, "{{.WebhookToken}}", config.WebhookToken, -1)
-
-	// Write to file
-	return os.WriteFile(path, []byte(content), 0644)
+	// Write the template as-is - it uses environment variables ${DISCORD_WEBHOOK_ID}
+	// which are provided via docker-compose.yml environment section
+	return os.WriteFile(path, []byte(DiscordTemplate), 0644)
 }
 
 func isDiscordEnabled(path string) (bool, error) {
@@ -371,6 +413,210 @@ func updateProfilesYaml(path string, enable bool) error {
 			newLines = append(newLines, line)
 		}
 		return os.WriteFile(path, []byte(strings.Join(newLines, "\n")), 0644)
+	}
+
+	return nil
+}
+
+// updateDockerCompose updates docker-compose.yml to add Discord notification environment variables and volume mount
+func updateDockerCompose(composePath string, config models.DiscordConfig) error {
+	// Read docker-compose.yml
+	data, err := os.ReadFile(composePath)
+	if err != nil {
+		return fmt.Errorf("failed to read docker-compose.yml: %w", err)
+	}
+
+	// Parse YAML
+	var compose map[string]interface{}
+	if err := yaml.Unmarshal(data, &compose); err != nil {
+		return fmt.Errorf("failed to parse docker-compose.yml: %w", err)
+	}
+
+	// Navigate to services -> crowdsec
+	services, ok := compose["services"].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("services section not found in docker-compose.yml")
+	}
+
+	crowdsec, ok := services["crowdsec"].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("crowdsec service not found in docker-compose.yml")
+	}
+
+	// Update environment variables
+	env, ok := crowdsec["environment"]
+	if !ok {
+		// Create environment map if it doesn't exist
+		crowdsec["environment"] = make(map[string]interface{})
+		env = crowdsec["environment"]
+	}
+
+	envMap, ok := env.(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("environment section has unexpected format")
+	}
+
+	// Add/update environment variables with actual values
+	envMap["GEOAPIFY_API_KEY"] = config.GeoapifyKey
+	envMap["DISCORD_WEBHOOK_ID"] = config.WebhookID
+	envMap["DISCORD_WEBHOOK_TOKEN"] = config.WebhookToken
+	if config.CTIKey != "" {
+		envMap["CTI_API_KEY"] = config.CTIKey
+	}
+
+	// Update volumes to include discord.yaml mount
+	volumes, ok := crowdsec["volumes"]
+	if !ok {
+		crowdsec["volumes"] = []interface{}{}
+		volumes = crowdsec["volumes"]
+	}
+
+	volumesList, ok := volumes.([]interface{})
+	if !ok {
+		return fmt.Errorf("volumes section has unexpected format")
+	}
+
+	// Check if discord.yaml volume already exists
+	discordVolumeExists := false
+	discordVolume := "./notifications/discord.yaml:/etc/crowdsec/notifications/discord.yaml"
+	for _, vol := range volumesList {
+		if volStr, ok := vol.(string); ok {
+			if strings.Contains(volStr, "/etc/crowdsec/notifications/discord.yaml") {
+				discordVolumeExists = true
+				break
+			}
+		}
+	}
+
+	// Add discord.yaml volume if it doesn't exist
+	if !discordVolumeExists {
+		volumesList = append(volumesList, discordVolume)
+		crowdsec["volumes"] = volumesList
+	}
+
+	// Write back to file
+	updatedData, err := yaml.Marshal(compose)
+	if err != nil {
+		return fmt.Errorf("failed to marshal docker-compose.yml: %w", err)
+	}
+
+	if err := os.WriteFile(composePath, updatedData, 0644); err != nil {
+		return fmt.Errorf("failed to write docker-compose.yml: %w", err)
+	}
+
+	return nil
+}
+
+// createOrUpdateEnvFile creates or updates the .env file with Discord notification variables
+func createOrUpdateEnvFile(envPath string, config models.DiscordConfig) error {
+	// Read existing .env file if it exists
+	var envVars map[string]string
+	data, err := os.ReadFile(envPath)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to read .env file: %w", err)
+	}
+
+	// Parse existing env vars
+	envVars = make(map[string]string)
+	if len(data) > 0 {
+		lines := strings.Split(string(data), "\n")
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+			parts := strings.SplitN(line, "=", 2)
+			if len(parts) == 2 {
+				envVars[parts[0]] = parts[1]
+			}
+		}
+	}
+
+	// Update Discord-related variables
+	envVars["GEOAPIFY_API_KEY"] = config.GeoapifyKey
+	envVars["DISCORD_WEBHOOK_ID"] = config.WebhookID
+	envVars["DISCORD_WEBHOOK_TOKEN"] = config.WebhookToken
+	if config.CTIKey != "" {
+		envVars["CTI_API_KEY"] = config.CTIKey
+	}
+
+	// Build new .env content
+	var lines []string
+	lines = append(lines, "# Discord Notification Configuration")
+	lines = append(lines, fmt.Sprintf("GEOAPIFY_API_KEY=%s", envVars["GEOAPIFY_API_KEY"]))
+	lines = append(lines, fmt.Sprintf("DISCORD_WEBHOOK_ID=%s", envVars["DISCORD_WEBHOOK_ID"]))
+	lines = append(lines, fmt.Sprintf("DISCORD_WEBHOOK_TOKEN=%s", envVars["DISCORD_WEBHOOK_TOKEN"]))
+	if config.CTIKey != "" {
+		lines = append(lines, fmt.Sprintf("CTI_API_KEY=%s", envVars["CTI_API_KEY"]))
+	}
+	lines = append(lines, "")
+
+	// Append other non-Discord variables
+	for key, value := range envVars {
+		if key != "GEOAPIFY_API_KEY" && key != "DISCORD_WEBHOOK_ID" &&
+		   key != "DISCORD_WEBHOOK_TOKEN" && key != "CTI_API_KEY" {
+			lines = append(lines, fmt.Sprintf("%s=%s", key, value))
+		}
+	}
+
+	// Write back to file
+	content := strings.Join(lines, "\n")
+	if err := os.WriteFile(envPath, []byte(content), 0644); err != nil {
+		return fmt.Errorf("failed to write .env file: %w", err)
+	}
+
+	return nil
+}
+
+// updateCrowdSecConfig updates CrowdSec config.yaml to enable CTI API if CTI key is provided
+func updateCrowdSecConfig(configPath string, enableCTI bool) error {
+	if !enableCTI {
+		return nil // Skip if not enabling CTI
+	}
+
+	// Read config.yaml
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return fmt.Errorf("failed to read config.yaml: %w", err)
+	}
+
+	// Parse YAML
+	var config map[string]interface{}
+	if err := yaml.Unmarshal(data, &config); err != nil {
+		return fmt.Errorf("failed to parse config.yaml: %w", err)
+	}
+
+	// Navigate to api section
+	api, ok := config["api"]
+	if !ok {
+		config["api"] = make(map[string]interface{})
+		api = config["api"]
+	}
+
+	apiMap, ok := api.(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("api section has unexpected format")
+	}
+
+	// Add CTI configuration
+	ctiConfig := map[string]interface{}{
+		"key":           "${CTI_API_KEY}",
+		"cache_timeout": "60m",
+		"cache_size":    50,
+		"enabled":       true,
+		"log_level":     "debug",
+	}
+
+	apiMap["cti"] = ctiConfig
+
+	// Write back to file
+	updatedData, err := yaml.Marshal(config)
+	if err != nil {
+		return fmt.Errorf("failed to marshal config.yaml: %w", err)
+	}
+
+	if err := os.WriteFile(configPath, updatedData, 0644); err != nil {
+		return fmt.Errorf("failed to write config.yaml: %w", err)
 	}
 
 	return nil

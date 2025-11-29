@@ -97,7 +97,19 @@ export default function Header() {
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Avatar className="h-8 w-8 cursor-pointer hover:opacity-80 transition-opacity">
-              <AvatarImage src="https://app.crowdsec.net/vectors/logo-outlined.svg" className="p-1" />
+              <div 
+                className="aspect-square h-full w-full bg-primary dark:bg-white" 
+                style={{ 
+                  maskImage: 'url(/fingerprint.svg)', 
+                  maskSize: 'contain', 
+                  maskRepeat: 'no-repeat', 
+                  maskPosition: 'center',
+                  WebkitMaskImage: 'url(/fingerprint.svg)', 
+                  WebkitMaskSize: 'contain', 
+                  WebkitMaskRepeat: 'no-repeat', 
+                  WebkitMaskPosition: 'center' 
+                }} 
+              />
               <AvatarFallback>CS</AvatarFallback>
             </Avatar>
           </DropdownMenuTrigger>
