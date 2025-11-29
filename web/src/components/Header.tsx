@@ -100,11 +100,11 @@ export default function Header() {
               <div 
                 className="aspect-square h-full w-full bg-primary dark:bg-white" 
                 style={{ 
-                  maskImage: 'url(/fingerprint.svg)', 
+                  maskImage: 'url(/custom-logo.svg)', 
                   maskSize: 'contain', 
                   maskRepeat: 'no-repeat', 
                   maskPosition: 'center',
-                  WebkitMaskImage: 'url(/fingerprint.svg)', 
+                  WebkitMaskImage: 'url(/custom-logo.svg)', 
                   WebkitMaskSize: 'contain', 
                   WebkitMaskRepeat: 'no-repeat', 
                   WebkitMaskPosition: 'center' 
