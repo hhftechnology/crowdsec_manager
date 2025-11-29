@@ -112,7 +112,7 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
               <span>CrowdSec</span>
               <span className="text-sm font-normal text-muted-foreground">Manager</span>
               <Badge variant="secondary" className="text-[10px] px-1 py-0 h-5 mt-1 w-fit whitespace-nowrap">
-                Beta-version - v0.0.1
+              Beta-version - v0.0.1
               </Badge>
             </div>
           </div>
