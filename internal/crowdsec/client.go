@@ -72,19 +72,25 @@ func (c *Client) Login() error {
 	return nil
 }
 
-// ensureAuth ensures we have a valid token or API key
-func (c *Client) ensureAuth(req *http.Request) error {
-	if c.APIKey != "" {
-		req.Header.Add("X-Api-Key", c.APIKey)
-		return nil
-	}
-
+// authMachine ensures the request is authenticated as a Machine (Watcher)
+func (c *Client) authMachine(req *http.Request) error {
+	// If no token, try to login
 	if c.Token == "" {
 		if err := c.Login(); err != nil {
-			return err
+			return fmt.Errorf("failed to login: %w", err)
 		}
 	}
-	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", c.Token))
+
+	req.Header.Set("Authorization", "Bearer "+c.Token)
+	return nil
+}
+
+// authBouncer ensures the request is authenticated as a Bouncer
+func (c *Client) authBouncer(req *http.Request) error {
+	if c.APIKey == "" {
+		return fmt.Errorf("API key is required for bouncer operations")
+	}
+	req.Header.Set("X-Api-Key", c.APIKey)
 	return nil
 }
 
@@ -113,20 +119,20 @@ type Alert struct {
 	Decisions []Decision `json:"decisions"`
 }
 
-// GetDecisions fetches decisions from LAPI
+// GetDecisions fetches active decisions (requires Bouncer API Key)
 func (c *Client) GetDecisions(opts url.Values) ([]Decision, error) {
 	endpoint := fmt.Sprintf("%s/v1/decisions", c.BaseURL)
-	
+	if len(opts) > 0 {
+		endpoint += "?" + opts.Encode()
+	}
+
 	req, err := http.NewRequest("GET", endpoint, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	if opts != nil {
-		req.URL.RawQuery = opts.Encode()
-	}
-
-	if err := c.ensureAuth(req); err != nil {
+	// Decisions endpoint requires Bouncer authentication
+	if err := c.authBouncer(req); err != nil {
 		return nil, err
 	}
 
@@ -135,17 +141,6 @@ func (c *Client) GetDecisions(opts url.Values) ([]Decision, error) {
 		return nil, err
 	}
 	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusUnauthorized && c.Token != "" {
-		// Token might be expired, retry once
-		c.Token = ""
-		if err := c.ensureAuth(req); err == nil {
-			if respRetry, errRetry := c.HTTPClient.Do(req); errRetry == nil {
-				defer respRetry.Body.Close()
-				resp = respRetry
-			}
-		}
-	}
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("LAPI returned status: %d", resp.StatusCode)
@@ -159,25 +154,16 @@ func (c *Client) GetDecisions(opts url.Values) ([]Decision, error) {
 	return decisions, nil
 }
 
-// DeleteDecision deletes a decision via LAPI
-func (c *Client) DeleteDecision(ip string, id string) error {
-	endpoint := fmt.Sprintf("%s/v1/decisions", c.BaseURL)
-	if id != "" {
-		endpoint = fmt.Sprintf("%s/%s", endpoint, id)
-	}
-
+// DeleteDecision deletes a decision by ID (requires Machine Auth)
+func (c *Client) DeleteDecision(decisionID string) error {
+	endpoint := fmt.Sprintf("%s/v1/decisions/%s", c.BaseURL, decisionID)
 	req, err := http.NewRequest("DELETE", endpoint, nil)
 	if err != nil {
 		return err
 	}
 
-	if id == "" && ip != "" {
-		q := req.URL.Query()
-		q.Add("ip", ip)
-		req.URL.RawQuery = q.Encode()
-	}
-
-	if err := c.ensureAuth(req); err != nil {
+	// Delete requires Machine authentication
+	if err := c.authMachine(req); err != nil {
 		return err
 	}
 
@@ -187,27 +173,42 @@ func (c *Client) DeleteDecision(ip string, id string) error {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		// Try to refresh token and retry once
+		if err := c.Login(); err != nil {
+			return fmt.Errorf("re-login failed: %w", err)
+		}
+		if err := c.authMachine(req); err != nil {
+			return err
+		}
+		resp, err = c.HTTPClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+	}
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
 		return fmt.Errorf("LAPI returned status: %d", resp.StatusCode)
 	}
 
 	return nil
 }
 
-// GetAlerts fetches alerts from LAPI
+// GetAlerts fetches alerts (requires Machine Auth)
 func (c *Client) GetAlerts(opts url.Values) ([]Alert, error) {
 	endpoint := fmt.Sprintf("%s/v1/alerts", c.BaseURL)
+	if len(opts) > 0 {
+		endpoint += "?" + opts.Encode()
+	}
 
 	req, err := http.NewRequest("GET", endpoint, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	if opts != nil {
-		req.URL.RawQuery = opts.Encode()
-	}
-
-	if err := c.ensureAuth(req); err != nil {
+	// Alerts endpoint requires Machine authentication
+	if err := c.authMachine(req); err != nil {
 		return nil, err
 	}
 
@@ -216,6 +217,21 @@ func (c *Client) GetAlerts(opts url.Values) ([]Alert, error) {
 		return nil, err
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		// Try to refresh token and retry once
+		if err := c.Login(); err != nil {
+			return nil, fmt.Errorf("re-login failed: %w", err)
+		}
+		if err := c.authMachine(req); err != nil {
+			return nil, err
+		}
+		resp, err = c.HTTPClient.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+	}
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("LAPI returned status: %d", resp.StatusCode)
@@ -229,65 +245,7 @@ func (c *Client) GetAlerts(opts url.Values) ([]Alert, error) {
 	return alerts, nil
 }
 
-// GetMetrics fetches metrics from Prometheus endpoint
+// GetMetrics fetches metrics (Not implemented in client, handled via cscli in handler)
 func (c *Client) GetMetrics() (map[string]interface{}, error) {
-	// Note: Metrics are usually exposed on port 6060, not the LAPI port (8080)
-	// We might need a separate URL for metrics if it differs from BaseURL
-	// For now, assuming we can construct it or pass it.
-	// Actually, the plan said GET /metrics (Prometheus).
-	// If BaseURL is http://crowdsec:8080, metrics might be http://crowdsec:6060/metrics
-	
-	// Let's assume the user configures the full LAPI URL, but metrics is separate.
-	// For simplicity, let's try to derive it or use a separate config if needed.
-	// But `cscli metrics` uses http://localhost:6060/metrics by default.
-	
-	u, err := url.Parse(c.BaseURL)
-	if err != nil {
-		return nil, err
-	}
-	
-	// Hack: Change port to 6060 for metrics if it's 8080
-	// This is a simplification. Ideally, we'd have a separate config.
-	// But for now, let's stick to what `cscli` does (it defaults to localhost:6060)
-	
-	metricsURL := fmt.Sprintf("%s://%s:6060/metrics", u.Scheme, u.Hostname())
-	
-	req, err := http.NewRequest("GET", metricsURL, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := c.HTTPClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("metrics returned status: %d", resp.StatusCode)
-	}
-
-	// Prometheus format is text, not JSON by default unless we use a specific endpoint or parser.
-	// Wait, cscli metrics -o json parses it.
-	// We need to parse Prometheus text format to JSON or map.
-	// Or we can just return the raw string if we want to mimic the previous behavior?
-	// But the plan said "Parse JSON metrics".
-	// `cscli metrics -o json` does the parsing.
-	// If we hit the endpoint directly, we get text.
-	// We might need a prometheus parser.
-	
-	// For now, let's return an error saying not implemented fully or just return raw data?
-	// Actually, `cscli metrics` is complex.
-	// Maybe we should stick to `cscli metrics -o json` for now as per the "Non-Migratable" list?
-	// Wait, the plan said "Migratable? Yes".
-	// But parsing prometheus metrics in Go without a library is annoying.
-	// Let's stick to `cscli metrics -o json` for metrics for now to avoid complexity, 
-	// OR we can use a simple parser if we really want to remove cscli.
-	
-	// Re-reading plan: "Replace ExecCommand... with client.GetMetrics()".
-	// If I implement `GetMetrics` here, I need to parse it.
-	// Let's skip `GetMetrics` implementation in this file for now and keep using `cscli` for metrics 
-	// until we decide on a parser library, OR I can implement a basic parser.
-	
 	return nil, fmt.Errorf("not implemented")
 }

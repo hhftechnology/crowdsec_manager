@@ -451,6 +451,12 @@ export const crowdsecAPI = {
   getBouncers: () =>
      api.get<ApiResponse<{ bouncers: Bouncer[]; count: number }>>('/crowdsec/bouncers'),
 
+  addBouncer: (name: string) =>
+    api.post<ApiResponse<{ name: string; api_key: string }>>('/crowdsec/bouncers', { name }),
+
+  deleteBouncer: (name: string) =>
+    api.delete<ApiResponse>(`/crowdsec/bouncers/${name}`),
+
   getDecisions: () =>
     api.get<ApiResponse<{ decisions: Decision[]; count: number }>>('/crowdsec/decisions'),
 

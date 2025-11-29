@@ -20,6 +20,7 @@ import {
   ChevronRight,
   Bell,
   HeartPulse,
+  Users,
 } from 'lucide-react'
 import { Separator } from './ui/separator'
 import { Button } from './ui/button'
@@ -41,6 +42,7 @@ const navigation = [
   { name: 'Stack Update', href: '/update', icon: RefreshCw },
   { name: 'Cron Jobs', href: '/cron', icon: Clock },
   { name: 'Services', href: '/services', icon: Settings },
+  { name: 'Bouncers', href: '/bouncers', icon: Users },
   { name: 'Configuration', href: '/configuration', icon: Sliders },
   { name: 'Notifications', href: '/notifications', icon: Bell },
 ]

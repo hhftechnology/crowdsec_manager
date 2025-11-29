@@ -210,15 +210,28 @@ export default function CrowdSecHealth() {
                         <h4 className="font-semibold text-sm mb-2 capitalize border-b pb-1">
                           {category.replace(/_/g, ' ')}
                         </h4>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div className="grid grid-cols-1 gap-2">
                           {Object.entries(metrics as Record<string, any>).map(([key, value]) => (
-                            <div key={key} className="flex justify-between items-center text-sm">
-                              <span className="text-muted-foreground truncate mr-2" title={key}>
+                            <div key={key} className="flex flex-col text-sm border-b last:border-0 pb-2 last:pb-0">
+                              <span className="text-muted-foreground font-medium mb-1 truncate" title={key}>
                                 {key}
                               </span>
-                              <span className="font-mono font-medium">
-                                {typeof value === 'object' ? JSON.stringify(value) : String(value)}
-                              </span>
+                              <div className="pl-2">
+                                {typeof value === 'object' && value !== null ? (
+                                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1">
+                                    {Object.entries(value).map(([subKey, subValue]) => (
+                                      <div key={subKey} className="flex items-center gap-1">
+                                        <span className="text-xs text-muted-foreground">{subKey}:</span>
+                                        <span className="font-mono font-medium text-xs">
+                                          {String(subValue)}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <span className="font-mono font-medium">{String(value)}</span>
+                                )}
+                              </div>
                             </div>
                           ))}
                         </div>
