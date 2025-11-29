@@ -15,14 +15,14 @@ import (
 	"crowdsec-manager/internal/models"
 )
 
-// Manager handles backup operations
+// Manager handles backup creation, restoration, and retention management
 type Manager struct {
 	backupDir     string
 	retentionDays int
 	backupItems   []string
 }
 
-// NewManager creates a new backup manager
+// NewManager creates a backup manager with automatic retention cleanup
 func NewManager(backupDir string, retentionDays int) *Manager {
 	return &Manager{
 		backupDir:     backupDir,
@@ -31,7 +31,8 @@ func NewManager(backupDir string, retentionDays int) *Manager {
 	}
 }
 
-// Create creates a new backup
+// Create creates a timestamped tar.gz backup archive of configured items
+// Automatically cleans up old backups based on retention policy
 func (m *Manager) Create(dryRun bool) (*models.Backup, error) {
 	timestamp := time.Now().Format("20060102_150405")
 	backupName := fmt.Sprintf("pangolin_backup_%s", timestamp)
@@ -124,7 +125,7 @@ Items included:
 	}, nil
 }
 
-// List lists all available backups
+// List returns all backup archives sorted by creation time (newest first)
 func (m *Manager) List() ([]models.Backup, error) {
 	pattern := filepath.Join(m.backupDir, "pangolin_backup_*.tar.gz")
 	files, err := filepath.Glob(pattern)
@@ -176,7 +177,8 @@ func (m *Manager) Delete(backupID string) error {
 	return nil
 }
 
-// Restore restores from a backup
+// Restore extracts and applies a backup archive, creating a safety backup of current state first
+// Uses retry logic for reliability on file system operations
 func (m *Manager) Restore(backupID string) error {
 	backupPath := filepath.Join(m.backupDir, backupID+".tar.gz")
 
@@ -270,7 +272,8 @@ func (m *Manager) Restore(backupID string) error {
 	return nil
 }
 
-// retryOperation retries an operation with exponential backoff
+// retryOperation retries failed operations with exponential backoff for reliability
+// Useful for handling temporary file system locks or network issues
 func (m *Manager) retryOperation(op func() error, attempts int, delay time.Duration) error {
 	var err error
 	for i := 0; i < attempts; i++ {
@@ -283,7 +286,8 @@ func (m *Manager) retryOperation(op func() error, attempts int, delay time.Durat
 	return fmt.Errorf("operation failed after %d attempts: %w", attempts, err)
 }
 
-// CleanupOld removes backups older than retention period
+// CleanupOld removes backup archives older than configured retention period
+// Called automatically after each backup creation
 func (m *Manager) CleanupOld() error {
 	if m.retentionDays <= 0 {
 		return nil

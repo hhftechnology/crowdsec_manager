@@ -1,6 +1,7 @@
 package config
 
 import (
+	"crowdsec-manager/internal/compose"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -8,7 +9,7 @@ import (
 	"time"
 )
 
-// Config holds the application configuration
+// Config holds all application configuration loaded from environment variables with sensible defaults
 type Config struct {
 	// Server configuration
 	Port        int
@@ -61,7 +62,8 @@ type Config struct {
 	WriteTimeout    time.Duration
 }
 
-// Load loads configuration from environment variables
+// Load loads and validates application configuration from environment variables
+// It also creates required directories and dynamically builds service lists from compose file
 func Load() (*Config, error) {
 	cfg := &Config{
 		Port:                  getEnvAsInt("PORT", 8080),
@@ -96,19 +98,53 @@ func Load() (*Config, error) {
 		WriteTimeout:          time.Duration(getEnvAsInt("WRITE_TIMEOUT", 15)) * time.Second,
 	}
 
-	// Build services list dynamically
-	cfg.Services = []string{cfg.TraefikContainerName}
-	if cfg.IncludePangolin {
-		cfg.Services = append(cfg.Services, cfg.PangolinContainerName)
-	}
-	if cfg.IncludeGerbil {
-		cfg.Services = append(cfg.Services, cfg.GerbilContainerName)
-	}
+	// Build services list dynamically from compose file for accurate service discovery
+	if project, err := compose.LoadComposeFile(cfg.ComposeFile); err == nil {
+		allServices := project.GetServiceNames()
 
-	// Build ServicesWithCrowdsec list
-	cfg.ServicesWithCrowdsec = make([]string, len(cfg.Services))
-	copy(cfg.ServicesWithCrowdsec, cfg.Services)
-	cfg.ServicesWithCrowdsec = append(cfg.ServicesWithCrowdsec, cfg.CrowdsecContainerName)
+		// Filter to known/managed services only to avoid unintended service management
+		knownServices := map[string]bool{
+			cfg.TraefikContainerName:  true,
+			cfg.CrowdsecContainerName: true,
+			cfg.PangolinContainerName: true,
+			cfg.GerbilContainerName:   true,
+		}
+
+		cfg.Services = []string{}
+		cfg.ServicesWithCrowdsec = []string{}
+
+		for _, svc := range allServices {
+			if knownServices[svc] {
+				// Respect feature flags for optional services
+				if svc == cfg.PangolinContainerName && !cfg.IncludePangolin {
+					continue
+				}
+				if svc == cfg.GerbilContainerName && !cfg.IncludeGerbil {
+					continue
+				}
+
+				// Separate services list (without CrowdSec) from full services list (with CrowdSec)
+				if svc != cfg.CrowdsecContainerName {
+					cfg.Services = append(cfg.Services, svc)
+				}
+				cfg.ServicesWithCrowdsec = append(cfg.ServicesWithCrowdsec, svc)
+			}
+		}
+	} else {
+		// Fallback to manual service list construction if compose file is unavailable or invalid
+		cfg.Services = []string{cfg.TraefikContainerName}
+		if cfg.IncludePangolin {
+			cfg.Services = append(cfg.Services, cfg.PangolinContainerName)
+		}
+		if cfg.IncludeGerbil {
+			cfg.Services = append(cfg.Services, cfg.GerbilContainerName)
+		}
+
+		// Pre-allocate slice for better performance
+		cfg.ServicesWithCrowdsec = make([]string, len(cfg.Services))
+		copy(cfg.ServicesWithCrowdsec, cfg.Services)
+		cfg.ServicesWithCrowdsec = append(cfg.ServicesWithCrowdsec, cfg.CrowdsecContainerName)
+	}
 
 	// Ensure required directories exist
 	if err := cfg.createDirectories(); err != nil {
@@ -118,7 +154,7 @@ func Load() (*Config, error) {
 	return cfg, nil
 }
 
-// createDirectories ensures all required directories exist
+// createDirectories ensures all required application directories exist with proper permissions
 func (c *Config) createDirectories() error {
 	dirs := []string{
 		filepath.Dir(c.LogFile),
@@ -135,7 +171,7 @@ func (c *Config) createDirectories() error {
 	return nil
 }
 
-// GetServices returns the appropriate service list based on CrowdSec inclusion
+// GetServices returns the appropriate service list based on CrowdSec inclusion preference
 func (c *Config) GetServices() []string {
 	if c.IncludeCrowdsec {
 		return c.ServicesWithCrowdsec
@@ -143,7 +179,7 @@ func (c *Config) GetServices() []string {
 	return c.Services
 }
 
-// Helper functions
+// getEnv retrieves an environment variable or returns the default value if not set
 func getEnv(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
@@ -151,6 +187,7 @@ func getEnv(key, defaultValue string) string {
 	return defaultValue
 }
 
+// getEnvAsInt retrieves an environment variable as integer or returns default if not set or invalid
 func getEnvAsInt(key string, defaultValue int) int {
 	if valueStr := os.Getenv(key); valueStr != "" {
 		if value, err := strconv.Atoi(valueStr); err == nil {
@@ -160,6 +197,8 @@ func getEnvAsInt(key string, defaultValue int) int {
 	return defaultValue
 }
 
+// getEnvAsBool retrieves an environment variable as boolean or returns default if not set or invalid
+// Accepts: 1, t, T, TRUE, true, True, 0, f, F, FALSE, false, False
 func getEnvAsBool(key string, defaultValue bool) bool {
 	if valueStr := os.Getenv(key); valueStr != "" {
 		if value, err := strconv.ParseBool(valueStr); err == nil {

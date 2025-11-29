@@ -11,7 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// RegisterHealthRoutes registers health check routes
+// RegisterHealthRoutes configures endpoints for system and CrowdSec health monitoring
 func RegisterHealthRoutes(router *gin.RouterGroup, dockerClient *docker.Client, db *database.Database, cfg *config.Config) {
 	health := router.Group("/health")
 	{
@@ -21,7 +21,7 @@ func RegisterHealthRoutes(router *gin.RouterGroup, dockerClient *docker.Client, 
 	}
 }
 
-// RegisterIPRoutes registers IP management routes
+// RegisterIPRoutes configures endpoints for IP banning, unbanning, and public IP retrieval
 func RegisterIPRoutes(router *gin.RouterGroup, dockerClient *docker.Client, cfg *config.Config) {
 	ip := router.Group("/ip")
 	{
@@ -32,7 +32,7 @@ func RegisterIPRoutes(router *gin.RouterGroup, dockerClient *docker.Client, cfg 
 	}
 }
 
-// RegisterWhitelistRoutes registers whitelist management routes
+// RegisterWhitelistRoutes configures endpoints for adding IPs to CrowdSec and Traefik whitelists
 func RegisterWhitelistRoutes(router *gin.RouterGroup, dockerClient *docker.Client, cfg *config.Config) {
 	whitelist := router.Group("/whitelist")
 	{
@@ -46,7 +46,7 @@ func RegisterWhitelistRoutes(router *gin.RouterGroup, dockerClient *docker.Clien
 	}
 }
 
-// RegisterAllowlistRoutes registers allowlist management routes
+// RegisterAllowlistRoutes configures endpoints for managing CrowdSec allowlists (CRUD operations)
 func RegisterAllowlistRoutes(router *gin.RouterGroup, dockerClient *docker.Client) {
 	allowlist := router.Group("/allowlist")
 	{
@@ -57,7 +57,7 @@ func RegisterAllowlistRoutes(router *gin.RouterGroup, dockerClient *docker.Clien
 	}
 }
 
-// RegisterScenarioRoutes registers scenario management routes
+// RegisterScenarioRoutes configures endpoints for managing custom CrowdSec scenarios
 func RegisterScenarioRoutes(router *gin.RouterGroup, dockerClient *docker.Client, configDir string, cfg *config.Config) {
 	scenarios := router.Group("/scenarios")
 	{
@@ -68,7 +68,7 @@ func RegisterScenarioRoutes(router *gin.RouterGroup, dockerClient *docker.Client
 	}
 }
 
-// RegisterCaptchaRoutes registers captcha setup routes
+// RegisterCaptchaRoutes configures endpoints for CrowdSec captcha (AppSec) setup and status
 func RegisterCaptchaRoutes(router *gin.RouterGroup, dockerClient *docker.Client, db *database.Database, cfg *config.Config) {
 	captcha := router.Group("/captcha")
 	{
@@ -77,7 +77,7 @@ func RegisterCaptchaRoutes(router *gin.RouterGroup, dockerClient *docker.Client,
 	}
 }
 
-// RegisterLogRoutes registers log viewing routes
+// RegisterLogRoutes configures endpoints for viewing container logs and analyzing Traefik access logs
 func RegisterLogRoutes(router *gin.RouterGroup, dockerClient *docker.Client, db *database.Database, cfg *config.Config) {
 	logs := router.Group("/logs")
 	{
@@ -89,7 +89,7 @@ func RegisterLogRoutes(router *gin.RouterGroup, dockerClient *docker.Client, db 
 	}
 }
 
-// RegisterBackupRoutes registers backup management routes
+// RegisterBackupRoutes configures endpoints for creating, listing, restoring, and managing backups
 func RegisterBackupRoutes(router *gin.RouterGroup, backupMgr *backup.Manager, dockerClient *docker.Client) {
 	backupRoutes := router.Group("/backup")
 	{
@@ -102,7 +102,7 @@ func RegisterBackupRoutes(router *gin.RouterGroup, backupMgr *backup.Manager, do
 	}
 }
 
-// RegisterUpdateRoutes registers stack update routes
+// RegisterUpdateRoutes configures endpoints for checking and applying Docker image updates
 func RegisterUpdateRoutes(router *gin.RouterGroup, dockerClient *docker.Client, cfg *config.Config) {
 	update := router.Group("/update")
 	{
@@ -112,7 +112,7 @@ func RegisterUpdateRoutes(router *gin.RouterGroup, dockerClient *docker.Client, 
 	}
 }
 
-// RegisterServicesRoutes registers service management routes
+// RegisterServicesRoutes configures endpoints for Docker service management, CrowdSec operations, and Traefik config
 func RegisterServicesRoutes(router *gin.RouterGroup, dockerClient *docker.Client, db *database.Database, cfg *config.Config) {
 	services := router.Group("/services")
 	{
@@ -160,7 +160,7 @@ func RegisterServicesRoutes(router *gin.RouterGroup, dockerClient *docker.Client
 	}
 }
 
-// RegisterNotificationRoutes registers notification management routes
+// RegisterNotificationRoutes configures endpoints for Discord webhook notification management
 func RegisterNotificationRoutes(router *gin.RouterGroup, dockerClient *docker.Client, db *database.Database, cfg *config.Config) {
 	notifications := router.Group("/notifications")
 	{
@@ -169,7 +169,7 @@ func RegisterNotificationRoutes(router *gin.RouterGroup, dockerClient *docker.Cl
 	}
 }
 
-// RegisterCronRoutes registers cron job management routes
+// RegisterCronRoutes configures endpoints for creating, listing, and deleting scheduled cron jobs
 func RegisterCronRoutes(router *gin.RouterGroup, scheduler *cron.Scheduler) {
 	cronRoutes := router.Group("/cron")
 	{

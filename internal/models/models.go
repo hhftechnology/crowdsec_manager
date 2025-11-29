@@ -98,7 +98,7 @@ func (d *DecisionRaw) Normalize() Decision {
 		} else if typeStr, ok := v["type"].(string); ok {
 			sourceStr = typeStr
 		} else {
-			// Fallback to JSON representation or generic string
+			// Fallback to generic string, but we'll check Origin later
 			sourceStr = "unknown_source_object"
 		}
 	case nil:
@@ -107,10 +107,19 @@ func (d *DecisionRaw) Normalize() Decision {
 		sourceStr = fmt.Sprintf("%v", v)
 	}
 
-	// Use Source if Origin is empty
-	origin := sourceStr
-	if origin == "" && d.Origin != "" {
-		origin = d.Origin
+	// Use Origin if Source is empty or generic/unknown
+	origin := d.Origin
+	if origin == "" || sourceStr != "unknown_source_object" {
+		// If Origin is empty, OR if we found a good Source, use Source
+		// But if Source is "unknown_source_object" and we have an Origin, keep Origin
+		if sourceStr != "" && sourceStr != "unknown_source_object" {
+			origin = sourceStr
+		}
+	}
+	
+	// If we still have unknown source object and no origin, try to be cleaner
+	if origin == "" && sourceStr == "unknown_source_object" {
+		origin = "unknown"
 	}
 
 	return Decision{

@@ -170,16 +170,24 @@ func DeleteBouncer(dockerClient *docker.Client, cfg *config.Config) gin.HandlerF
 		}
 
 		// Verify deletion by checking if bouncer still exists
-		// We can't easily check specific bouncer existence without parsing list, 
-		// but we can rely on the fact that if cscli delete succeeded, it should be gone.
-		// However, since we had issues with silent failures, let's check the output.
-		
-		if strings.Contains(strings.ToLower(output), "error") || strings.Contains(strings.ToLower(output), "failed") {
-			c.JSON(http.StatusInternalServerError, models.Response{
-				Success: false,
-				Error:   fmt.Sprintf("Bouncer deletion failed: %s", output),
-			})
-			return
+		// We list bouncers and check if the name is still there
+		checkCmd := []string{"cscli", "bouncers", "list", "-o", "json"}
+		checkOutput, checkErr := dockerClient.ExecCommand(cfg.CrowdsecContainerName, checkCmd)
+		if checkErr == nil {
+			var bouncers []models.Bouncer
+			if jsonErr := json.Unmarshal([]byte(checkOutput), &bouncers); jsonErr == nil {
+				for _, b := range bouncers {
+					if b.Name == name {
+						// Bouncer still exists!
+						logger.Warn("Bouncer still exists after deletion", "name", name)
+						c.JSON(http.StatusInternalServerError, models.Response{
+							Success: false,
+							Error:   fmt.Sprintf("Bouncer deletion appeared to succeed but bouncer '%s' is still present. Please try again.", name),
+						})
+						return
+					}
+				}
+			}
 		}
 
 		c.JSON(http.StatusOK, models.Response{

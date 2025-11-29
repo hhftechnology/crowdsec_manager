@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"crowdsec-manager/internal/compose"
 	"crowdsec-manager/internal/config"
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
@@ -178,7 +179,7 @@ func UpdateWithCrowdSec(dockerClient *docker.Client, cfg *config.Config) gin.Han
 		}
 
 		if len(composeTags) > 0 {
-			if err := docker.UpdateComposeFileTags(composeFile, composeTags); err != nil {
+			if err := compose.UpdateComposeFileTags(composeFile, composeTags); err != nil {
 				logger.Error("Failed to update compose file", "error", err)
 				c.JSON(http.StatusInternalServerError, models.Response{
 					Success: false,
@@ -320,7 +321,7 @@ func UpdateWithoutCrowdSec(dockerClient *docker.Client, cfg *config.Config) gin.
 		}
 
 		if len(composeTags) > 0 {
-			if err := docker.UpdateComposeFileTags(composeFile, composeTags); err != nil {
+			if err := compose.UpdateComposeFileTags(composeFile, composeTags); err != nil {
 				logger.Error("Failed to update compose file", "error", err)
 				c.JSON(http.StatusInternalServerError, models.Response{
 					Success: false,

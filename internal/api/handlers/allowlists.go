@@ -126,7 +126,7 @@ func InspectAllowlist(dockerClient *docker.Client) gin.HandlerFunc {
 			return
 		}
 
-		// Calculate count from items length (CrowdSec doesn't provide it)
+		// Calculate count from items length (CrowdSec doesn't provide it directly in top level sometimes)
 		response.Count = len(response.Items)
 
 		c.JSON(http.StatusOK, models.Response{

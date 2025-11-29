@@ -16,13 +16,14 @@ import (
 	"github.com/docker/docker/pkg/stdcopy"
 )
 
-// Client wraps the Docker client with helper methods
+// Client wraps the Docker SDK client with convenience methods for container management
 type Client struct {
 	cli *client.Client
 	ctx context.Context
 }
 
-// NewClient creates a new Docker client
+// NewClient creates a new Docker API client with automatic version negotiation
+// Uses environment variables (DOCKER_HOST, DOCKER_API_VERSION, etc.) if set
 func NewClient() (*Client, error) {
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
@@ -35,18 +36,18 @@ func NewClient() (*Client, error) {
 	}, nil
 }
 
-// Close closes the Docker client
+// Close gracefully closes the Docker client connection
 func (c *Client) Close() error {
 	return c.cli.Close()
 }
 
-// Ping checks if the Docker daemon is accessible
+// Ping verifies connectivity to the Docker daemon
 func (c *Client) Ping() error {
 	_, err := c.cli.Ping(c.ctx)
 	return err
 }
 
-// ContainerExists checks if a container with the given name exists
+// ContainerExists checks if a container with the given name exists (running or stopped)
 func (c *Client) ContainerExists(name string) (bool, error) {
 	containers, err := c.cli.ContainerList(c.ctx, container.ListOptions{
 		All: true,
@@ -91,16 +92,17 @@ func (c *Client) GetContainerID(name string) (string, error) {
 	return containers[0].ID, nil
 }
 
-// ExecCommand executes a command in a container
+// ExecCommand executes a command inside a running container and returns stdout
+// Critical for running CrowdSec CLI commands (cscli) for managing decisions, bouncers, etc.
+// Properly handles Docker stream protocol to avoid corrupted JSON output
 func (c *Client) ExecCommand(containerName string, cmd []string) (string, error) {
 	containerID, err := c.GetContainerID(containerName)
 	if err != nil {
 		return "", err
 	}
 
-	// Create exec instance
-	// Tty: false ensures proper stream multiplexing without TTY control characters
-	// Env variables disable terminal formatting that can corrupt JSON output
+	// Configure exec without TTY to prevent control characters in output
+	// This is critical for commands that return JSON (like cscli)
 	execConfig := container.ExecOptions{
 		AttachStdout: true,
 		AttachStderr: true,
@@ -146,16 +148,16 @@ func (c *Client) ExecCommand(containerName string, cmd []string) (string, error)
 	return stripControlCharacters(stdout.String()), nil
 }
 
-// stripControlCharacters removes control characters from output as a defensive measure
-// This ensures clean JSON output even if control characters leak through
+// stripControlCharacters removes ANSI escape codes and control characters from command output
+// Essential for commands returning JSON to prevent parsing errors
+// Pre-allocates buffer for better performance
 func stripControlCharacters(s string) string {
-	// Build a new string without control characters
 	var result strings.Builder
 	result.Grow(len(s))
 
 	for _, r := range s {
-		// Keep printable characters and common whitespace
-		// Remove control characters (< 32) except newline, carriage return, and tab
+		// Keep printable characters and whitespace (newline, carriage return, tab)
+		// Filter out control characters that can corrupt JSON/structured output
 		if r >= 32 || r == '\n' || r == '\r' || r == '\t' {
 			result.WriteRune(r)
 		}
@@ -164,7 +166,7 @@ func stripControlCharacters(s string) string {
 	return result.String()
 }
 
-// GetContainerLogs retrieves logs from a container
+// GetContainerLogs retrieves and returns container logs with optional tail limit
 func (c *Client) GetContainerLogs(containerName string, tail string) (string, error) {
 	containerID, err := c.GetContainerID(containerName)
 	if err != nil {
@@ -211,12 +213,12 @@ func (c *Client) GetContainerLogs(containerName string, tail string) (string, er
 	return stripControlCharacters(result.String()), nil
 }
 
-// RestartContainer restarts a container
+// RestartContainer restarts a container with default 30-second timeout
 func (c *Client) RestartContainer(name string) error {
 	return c.RestartContainerWithTimeout(name, 30)
 }
 
-// RestartContainerWithTimeout restarts a container with a custom timeout
+// RestartContainerWithTimeout restarts a container with configurable graceful shutdown timeout
 func (c *Client) RestartContainerWithTimeout(name string, timeoutSecs int) error {
 	containerID, err := c.GetContainerID(name)
 	if err != nil {
@@ -327,7 +329,7 @@ func (c *Client) GetClient() *client.Client {
 	return c.cli
 }
 
-// FileExists checks if a file exists in a container
+// FileExists checks if a file or directory exists inside a container
 func (c *Client) FileExists(containerName, path string) (bool, error) {
 	containerID, err := c.GetContainerID(containerName)
 	if err != nil {
@@ -346,8 +348,9 @@ func (c *Client) FileExists(containerName, path string) (bool, error) {
 	return true, nil
 }
 
-// GetHostMountPath finds the host path that is mounted to a given container path
-// Returns the host path and true if found, or empty string and false if not found
+// GetHostMountPath maps a container path to its corresponding host mount path
+// Useful for accessing container files from the host filesystem
+// Returns: (hostPath, found, error)
 func (c *Client) GetHostMountPath(containerName, containerPath string) (string, bool, error) {
 	inspect, err := c.InspectContainer(containerName)
 	if err != nil {
@@ -368,7 +371,8 @@ func (c *Client) GetHostMountPath(containerName, containerPath string) (string, 
 	return "", false, nil
 }
 
-// ValidateImageTag validates if an image tag exists in the registry
+// ValidateImageTag verifies that an image:tag exists locally or in the registry
+// Checks local cache first, then queries registry without pulling
 func (c *Client) ValidateImageTag(imageName, tag string) error {
 	// Construct full image reference
 	fullImage := imageName + ":" + tag
@@ -391,7 +395,8 @@ func (c *Client) ValidateImageTag(imageName, tag string) error {
 	return nil
 }
 
-// PullImage pulls a Docker image from the registry
+// PullImage downloads a Docker image from the registry
+// Blocks until pull completes or fails
 func (c *Client) PullImage(imageName, tag string) error {
 	fullImage := imageName + ":" + tag
 

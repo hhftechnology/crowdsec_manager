@@ -14,27 +14,28 @@ import (
 	"github.com/robfig/cron/v3"
 )
 
-// Job represents a scheduled task
+// Job represents a scheduled recurring task with state tracking
 type Job struct {
-	ID        string    `json:"id"`
-	Schedule  string    `json:"schedule"`
-	Task      string    `json:"task"`
-	Enabled   bool      `json:"enabled"`
-	LastRun   time.Time `json:"last_run,omitempty"`
-	NextRun   time.Time `json:"next_run,omitempty"`
-	EntryID   cron.EntryID `json:"-"`
+	ID        string           `json:"id"`
+	Schedule  string           `json:"schedule"`  // Cron expression (e.g., "0 2 * * *")
+	Task      string           `json:"task"`      // Task type (e.g., "backup")
+	Enabled   bool             `json:"enabled"`
+	LastRun   time.Time        `json:"last_run,omitempty"`
+	NextRun   time.Time        `json:"next_run,omitempty"`
+	EntryID   cron.EntryID     `json:"-"` // Internal cron entry ID, not persisted
 }
 
-// Scheduler manages cron jobs
+// Scheduler manages recurring cron jobs with persistence to disk
+// Thread-safe for concurrent access
 type Scheduler struct {
 	cron      *cron.Cron
 	jobs      map[string]*Job
-	mutex     sync.RWMutex
+	mutex     sync.RWMutex // Protects jobs map
 	filePath  string
 	backupMgr *backup.Manager
 }
 
-// NewScheduler creates a new scheduler
+// NewScheduler creates a cron scheduler that persists jobs to JSON file
 func NewScheduler(dataPath string, backupMgr *backup.Manager) *Scheduler {
 	return &Scheduler{
 		cron:      cron.New(),
@@ -44,7 +45,8 @@ func NewScheduler(dataPath string, backupMgr *backup.Manager) *Scheduler {
 	}
 }
 
-// Start starts the scheduler
+// Start loads persisted jobs and starts the scheduler
+// Continues on load errors to ensure scheduler runs
 func (s *Scheduler) Start() error {
 	if err := s.load(); err != nil {
 		logger.Warn("Failed to load cron jobs", "error", err)
@@ -55,13 +57,13 @@ func (s *Scheduler) Start() error {
 	return nil
 }
 
-// Stop stops the scheduler
+// Stop gracefully stops the scheduler and all running jobs
 func (s *Scheduler) Stop() {
 	s.cron.Stop()
 	logger.Info("Cron scheduler stopped")
 }
 
-// AddJob adds a new job
+// AddJob creates and schedules a new recurring job with thread-safe persistence
 func (s *Scheduler) AddJob(schedule, task string) (*Job, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -105,14 +107,15 @@ func (s *Scheduler) DeleteJob(id string) error {
 	return nil
 }
 
-// ListJobs lists all jobs
+// ListJobs returns all jobs with updated next run times
+// Thread-safe for concurrent access
 func (s *Scheduler) ListJobs() []*Job {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 
 	jobs := make([]*Job, 0, len(s.jobs))
 	for _, job := range s.jobs {
-		// Update next run time
+		// Refresh next run time from live cron scheduler
 		if entry := s.cron.Entry(job.EntryID); entry.ID != 0 {
 			job.NextRun = entry.Next
 		}
@@ -121,6 +124,7 @@ func (s *Scheduler) ListJobs() []*Job {
 	return jobs
 }
 
+// scheduleJob registers a job with the cron scheduler based on task type
 func (s *Scheduler) scheduleJob(job *Job) error {
 	var cmd func()
 

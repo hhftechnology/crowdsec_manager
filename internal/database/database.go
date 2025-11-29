@@ -6,13 +6,15 @@ import (
 	"os"
 	"path/filepath"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "github.com/mattn/go-sqlite3" // SQLite driver
 )
 
+// Database wraps the SQL database connection with helper methods
 type Database struct {
 	db *sql.DB
 }
 
+// Settings represents application settings stored in the database
 type Settings struct {
 	ID                   int
 	TraefikDynamicConfig string
@@ -26,20 +28,24 @@ type Settings struct {
 	CTIKey               string
 }
 
-// New creates a new database connection
+// New creates a new SQLite database connection and initializes schema
+// Creates parent directories if they don't exist
 func New(dbPath string) (*Database, error) {
-	// Ensure directory exists
+	// Ensure parent directory exists before opening database
 	dir := filepath.Dir(dbPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create database directory: %w", err)
 	}
 
+	// Open SQLite database with default settings
 	db, err := sql.Open("sqlite3", dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 
 	d := &Database{db: db}
+
+	// Initialize schema and migrate existing databases
 	if err := d.initSchema(); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("failed to initialize schema: %w", err)
@@ -48,14 +54,15 @@ func New(dbPath string) (*Database, error) {
 	return d, nil
 }
 
-// Close closes the database connection
+// Close closes the database connection gracefully
 func (d *Database) Close() error {
 	return d.db.Close()
 }
 
-// initSchema initializes the database schema
+// initSchema initializes the database schema with automatic migrations
+// Handles both fresh installations and upgrades from older schema versions
 func (d *Database) initSchema() error {
-	// 1. Create table with full schema if it doesn't exist
+	// Create settings table with full schema for fresh installs
 	createTable := `
 	CREATE TABLE IF NOT EXISTS settings (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -73,9 +80,8 @@ func (d *Database) initSchema() error {
 		return fmt.Errorf("failed to create settings table: %w", err)
 	}
 
-	// 2. Migrate: Add columns if they don't exist (ignoring errors)
-	// This is necessary because if the table already existed with the old schema, 
-	// CREATE TABLE IF NOT EXISTS does nothing.
+	// Apply migrations for existing databases with older schemas
+	// Errors are intentionally ignored since columns may already exist
 	migrations := []string{
 		"ALTER TABLE settings ADD COLUMN discord_webhook_id TEXT NOT NULL DEFAULT ''",
 		"ALTER TABLE settings ADD COLUMN discord_webhook_token TEXT NOT NULL DEFAULT ''",
@@ -84,10 +90,10 @@ func (d *Database) initSchema() error {
 	}
 
 	for _, query := range migrations {
-		d.db.Exec(query) // Ignore error: column might already exist
+		d.db.Exec(query) // Ignore errors - column may already exist
 	}
 
-	// 3. Insert default settings if not exists
+	// Insert default settings row if database is empty
 	insertDefaults := `
 	INSERT OR IGNORE INTO settings (id, traefik_dynamic_config, traefik_static_config, traefik_access_log, traefik_error_log, crowdsec_acquis_file, discord_webhook_id, discord_webhook_token, geoapify_key, cti_key)
 	VALUES (1, '/etc/traefik/dynamic_config.yml', '/etc/traefik/traefik_config.yml', '/var/log/traefik/access.log', '/var/log/traefik/traefik.log', '/etc/crowdsec/acquis.yaml', '', '', '', '');
@@ -96,7 +102,8 @@ func (d *Database) initSchema() error {
 	return err
 }
 
-// GetSettings retrieves the current settings
+// GetSettings retrieves the current application settings from database
+// Returns default values if settings row doesn't exist
 func (d *Database) GetSettings() (*Settings, error) {
 	settings := &Settings{}
 	err := d.db.QueryRow(`
@@ -109,7 +116,7 @@ func (d *Database) GetSettings() (*Settings, error) {
 		&settings.DiscordWebhookID, &settings.DiscordWebhookToken, &settings.GeoapifyKey, &settings.CTIKey)
 
 	if err == sql.ErrNoRows {
-		// Return defaults
+		// Return sensible defaults if no settings row exists
 		return &Settings{
 			ID:                   1,
 			TraefikDynamicConfig: "/etc/traefik/dynamic_config.yml",
@@ -123,7 +130,7 @@ func (d *Database) GetSettings() (*Settings, error) {
 	return settings, err
 }
 
-// UpdateSettings updates the settings
+// UpdateSettings updates all application settings in database
 func (d *Database) UpdateSettings(settings *Settings) error {
 	_, err := d.db.Exec(`
 		UPDATE settings
@@ -143,7 +150,8 @@ func (d *Database) UpdateSettings(settings *Settings) error {
 	return err
 }
 
-// GetTraefikDynamicConfigPath returns the configured dynamic config path
+// GetTraefikDynamicConfigPath retrieves the configured Traefik dynamic config path
+// Returns default path on error for backward compatibility
 func (d *Database) GetTraefikDynamicConfigPath() (string, error) {
 	settings, err := d.GetSettings()
 	if err != nil {
@@ -152,7 +160,7 @@ func (d *Database) GetTraefikDynamicConfigPath() (string, error) {
 	return settings.TraefikDynamicConfig, nil
 }
 
-// SetTraefikDynamicConfigPath updates the dynamic config path
+// SetTraefikDynamicConfigPath updates only the Traefik dynamic config path
 func (d *Database) SetTraefikDynamicConfigPath(path string) error {
 	settings, err := d.GetSettings()
 	if err != nil {

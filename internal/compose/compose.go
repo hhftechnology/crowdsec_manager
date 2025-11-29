@@ -1,4 +1,4 @@
-package docker
+package compose
 
 import (
 	"context"
@@ -11,14 +11,15 @@ import (
 	"github.com/compose-spec/compose-go/v2/types"
 )
 
-// ComposeProject wraps a compose-go Project with helper methods
-type ComposeProject struct {
+// Project wraps the compose-go Project with convenience methods for manipulating compose files
+type Project struct {
 	*types.Project
 	FilePath string
 }
 
-// LoadComposeFile loads and validates a docker-compose.yml file using compose-go
-func LoadComposeFile(filePath string) (*ComposeProject, error) {
+// LoadComposeFile parses and validates a docker-compose.yml file with environment variable interpolation
+// Skips consistency checks to allow partial compose files
+func LoadComposeFile(filePath string) (*Project, error) {
 	ctx := context.Background()
 
 	// Get absolute path and working directory
@@ -57,14 +58,14 @@ func LoadComposeFile(filePath string) (*ComposeProject, error) {
 		return nil, fmt.Errorf("failed to load compose file: %w", err)
 	}
 
-	return &ComposeProject{
+	return &Project{
 		Project:  project,
 		FilePath: absPath,
 	}, nil
 }
 
-// SaveComposeFile saves the project back to the compose file
-func SaveComposeFile(filePath string, project *ComposeProject) error {
+// SaveComposeFile serializes and writes the project back to disk as YAML
+func SaveComposeFile(filePath string, project *Project) error {
 	// Marshal the project to YAML
 	data, err := project.MarshalYAML()
 	if err != nil {
@@ -79,7 +80,7 @@ func SaveComposeFile(filePath string, project *ComposeProject) error {
 }
 
 // UpdateServiceImage updates the image for a specific service
-func (p *ComposeProject) UpdateServiceImage(serviceName, imageName, tag string) error {
+func (p *Project) UpdateServiceImage(serviceName, imageName, tag string) error {
 	fullImage := imageName + ":" + tag
 
 	// Find and update the service
@@ -96,7 +97,7 @@ func (p *ComposeProject) UpdateServiceImage(serviceName, imageName, tag string) 
 }
 
 // GetServiceImage returns the current image for a service
-func (p *ComposeProject) GetServiceImage(serviceName string) (string, error) {
+func (p *Project) GetServiceImage(serviceName string) (string, error) {
 	svc, exists := p.Services[serviceName]
 	if !exists {
 		return "", fmt.Errorf("service '%s' not found in compose file", serviceName)
@@ -106,7 +107,7 @@ func (p *ComposeProject) GetServiceImage(serviceName string) (string, error) {
 }
 
 // GetService returns a service configuration by name
-func (p *ComposeProject) GetService(serviceName string) (*types.ServiceConfig, error) {
+func (p *Project) GetService(serviceName string) (*types.ServiceConfig, error) {
 	svc, exists := p.Services[serviceName]
 	if !exists {
 		return nil, fmt.Errorf("service '%s' not found in compose file", serviceName)
@@ -116,7 +117,7 @@ func (p *ComposeProject) GetService(serviceName string) (*types.ServiceConfig, e
 }
 
 // GetServiceNames returns a list of all service names
-func (p *ComposeProject) GetServiceNames() []string {
+func (p *Project) GetServiceNames() []string {
 	names := make([]string, 0, len(p.Services))
 	for name := range p.Services {
 		names = append(names, name)
@@ -125,7 +126,7 @@ func (p *ComposeProject) GetServiceNames() []string {
 }
 
 // GetServiceEnvironment returns the environment variables for a service
-func (p *ComposeProject) GetServiceEnvironment(serviceName string) (map[string]string, error) {
+func (p *Project) GetServiceEnvironment(serviceName string) (map[string]string, error) {
 	svc, err := p.GetService(serviceName)
 	if err != nil {
 		return nil, err
@@ -144,7 +145,7 @@ func (p *ComposeProject) GetServiceEnvironment(serviceName string) (map[string]s
 }
 
 // GetServiceVolumes returns the volume configurations for a service
-func (p *ComposeProject) GetServiceVolumes(serviceName string) ([]types.ServiceVolumeConfig, error) {
+func (p *Project) GetServiceVolumes(serviceName string) ([]types.ServiceVolumeConfig, error) {
 	svc, err := p.GetService(serviceName)
 	if err != nil {
 		return nil, err
@@ -154,7 +155,7 @@ func (p *ComposeProject) GetServiceVolumes(serviceName string) ([]types.ServiceV
 }
 
 // GetServicePorts returns the port configurations for a service
-func (p *ComposeProject) GetServicePorts(serviceName string) ([]types.ServicePortConfig, error) {
+func (p *Project) GetServicePorts(serviceName string) ([]types.ServicePortConfig, error) {
 	svc, err := p.GetService(serviceName)
 	if err != nil {
 		return nil, err
@@ -164,13 +165,13 @@ func (p *ComposeProject) GetServicePorts(serviceName string) ([]types.ServicePor
 }
 
 // HasService checks if a service exists in the compose file
-func (p *ComposeProject) HasService(serviceName string) bool {
+func (p *Project) HasService(serviceName string) bool {
 	_, exists := p.Services[serviceName]
 	return exists
 }
 
 // GetServiceDependencies returns the services that a service depends on
-func (p *ComposeProject) GetServiceDependencies(serviceName string) ([]string, error) {
+func (p *Project) GetServiceDependencies(serviceName string) ([]string, error) {
 	svc, err := p.GetService(serviceName)
 	if err != nil {
 		return nil, err
@@ -184,8 +185,8 @@ func (p *ComposeProject) GetServiceDependencies(serviceName string) ([]string, e
 	return deps, nil
 }
 
-// UpdateComposeFileTags updates multiple service tags in docker-compose.yml
-// This maintains backward compatibility with the previous implementation
+// UpdateComposeFileTags atomically updates multiple service image tags in docker-compose.yml
+// Used for updating Pangolin, Gerbil, Traefik, and CrowdSec images
 func UpdateComposeFileTags(filePath string, updates map[string]string) error {
 	// Load the compose file
 	project, err := LoadComposeFile(filePath)
@@ -250,7 +251,7 @@ func getProjectNameFromPath(filePath string) string {
 }
 
 // GetNetworkNames returns a list of all network names defined in the compose file
-func (p *ComposeProject) GetNetworkNames() []string {
+func (p *Project) GetNetworkNames() []string {
 	names := make([]string, 0, len(p.Networks))
 	for name := range p.Networks {
 		names = append(names, name)
@@ -259,7 +260,7 @@ func (p *ComposeProject) GetNetworkNames() []string {
 }
 
 // GetVolumeNames returns a list of all volume names defined in the compose file
-func (p *ComposeProject) GetVolumeNames() []string {
+func (p *Project) GetVolumeNames() []string {
 	names := make([]string, 0, len(p.Volumes))
 	for name := range p.Volumes {
 		names = append(names, name)
@@ -268,7 +269,7 @@ func (p *ComposeProject) GetVolumeNames() []string {
 }
 
 // GetServiceHealthcheck returns the healthcheck configuration for a service
-func (p *ComposeProject) GetServiceHealthcheck(serviceName string) (*types.HealthCheckConfig, error) {
+func (p *Project) GetServiceHealthcheck(serviceName string) (*types.HealthCheckConfig, error) {
 	svc, err := p.GetService(serviceName)
 	if err != nil {
 		return nil, err
@@ -278,7 +279,7 @@ func (p *ComposeProject) GetServiceHealthcheck(serviceName string) (*types.Healt
 }
 
 // GetServiceLabels returns the labels for a service
-func (p *ComposeProject) GetServiceLabels(serviceName string) (map[string]string, error) {
+func (p *Project) GetServiceLabels(serviceName string) (map[string]string, error) {
 	svc, err := p.GetService(serviceName)
 	if err != nil {
 		return nil, err
@@ -293,7 +294,7 @@ func (p *ComposeProject) GetServiceLabels(serviceName string) (map[string]string
 }
 
 // SetServiceEnvironmentVar sets or updates an environment variable for a service
-func (p *ComposeProject) SetServiceEnvironmentVar(serviceName, key, value string) error {
+func (p *Project) SetServiceEnvironmentVar(serviceName, key, value string) error {
 	svc, exists := p.Services[serviceName]
 	if !exists {
 		return fmt.Errorf("service '%s' not found in compose file", serviceName)
@@ -309,6 +310,6 @@ func (p *ComposeProject) SetServiceEnvironmentVar(serviceName, key, value string
 }
 
 // GetRawProject returns the underlying compose-go Project for advanced operations
-func (p *ComposeProject) GetRawProject() *types.Project {
+func (p *Project) GetRawProject() *types.Project {
 	return p.Project
 }
