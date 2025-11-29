@@ -87,7 +87,7 @@ func main() {
 		api.RegisterHealthRoutes(apiGroup, dockerClient, db, cfg)
 		api.RegisterIPRoutes(apiGroup, dockerClient, cfg)
 		api.RegisterWhitelistRoutes(apiGroup, dockerClient, cfg)
-		api.RegisterAllowlistRoutes(apiGroup, dockerClient)
+		api.RegisterAllowlistRoutes(apiGroup, dockerClient, cfg)
 		api.RegisterScenarioRoutes(apiGroup, dockerClient, cfg.ConfigDir, cfg)
 		api.RegisterCaptchaRoutes(apiGroup, dockerClient, db, cfg)
 		api.RegisterLogRoutes(apiGroup, dockerClient, db, cfg)

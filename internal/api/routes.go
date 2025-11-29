@@ -47,13 +47,15 @@ func RegisterWhitelistRoutes(router *gin.RouterGroup, dockerClient *docker.Clien
 }
 
 // RegisterAllowlistRoutes configures endpoints for managing CrowdSec allowlists (CRUD operations)
-func RegisterAllowlistRoutes(router *gin.RouterGroup, dockerClient *docker.Client) {
+func RegisterAllowlistRoutes(router *gin.RouterGroup, dockerClient *docker.Client, cfg *config.Config) {
 	allowlist := router.Group("/allowlist")
 	{
-		allowlist.GET("/inspect/:name", handlers.InspectAllowlist(dockerClient))
-		allowlist.POST("/add", handlers.AddAllowlistEntries(dockerClient))
-		allowlist.POST("/remove", handlers.RemoveAllowlistEntries(dockerClient))
-		allowlist.DELETE("/:name", handlers.DeleteAllowlist(dockerClient))
+		allowlist.GET("/list", handlers.ListAllowlists(dockerClient, cfg))
+		allowlist.POST("/create", handlers.CreateAllowlist(dockerClient, cfg))
+		allowlist.GET("/inspect/:name", handlers.InspectAllowlist(dockerClient, cfg))
+		allowlist.POST("/add", handlers.AddAllowlistEntries(dockerClient, cfg))
+		allowlist.POST("/remove", handlers.RemoveAllowlistEntries(dockerClient, cfg))
+		allowlist.DELETE("/:name", handlers.DeleteAllowlist(dockerClient, cfg))
 	}
 }
 

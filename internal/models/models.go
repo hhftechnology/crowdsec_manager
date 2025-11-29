@@ -348,7 +348,7 @@ type AllowlistInspectResponse struct {
 	Items       []AllowlistEntry `json:"items"`      // CrowdSec uses "items", not "entries"
 	CreatedAt   string           `json:"created_at"` // When the allowlist was created
 	UpdatedAt   string           `json:"updated_at"` // When the allowlist was last updated
-	Count       int              `json:"-"`          // Computed field, not in JSON
+	Count       int              `json:"count,omitempty"` // Number of items
 }
 
 // DiscordConfig represents the configuration for Discord notifications
