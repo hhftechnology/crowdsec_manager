@@ -1,33 +1,33 @@
 package logger
 
 import (
+	"fmt"
 	"io"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/sirupsen/logrus"
 )
 
-var defaultLogger *slog.Logger
+var defaultLogger *logrus.Logger
 
 // Init initializes the global logger
 func Init(level, logFile string) {
+	defaultLogger = logrus.New()
+
 	// Parse log level
-	var logLevel slog.Level
-	switch level {
-	case "debug":
-		logLevel = slog.LevelDebug
-	case "info":
-		logLevel = slog.LevelInfo
-	case "warn":
-		logLevel = slog.LevelWarn
-	case "error":
-		logLevel = slog.LevelError
-	default:
-		logLevel = slog.LevelInfo
+	logLevel, err := logrus.ParseLevel(level)
+	if err != nil {
+		logLevel = logrus.InfoLevel
 	}
+	defaultLogger.SetLevel(logLevel)
+
+	// Set formatter to JSON
+	defaultLogger.SetFormatter(&logrus.JSONFormatter{
+		TimestampFormat: time.RFC3339,
+	})
 
 	// Create log file if specified
 	var writers []io.Writer
@@ -43,43 +43,68 @@ func Init(level, logFile string) {
 
 	// Create multi-writer
 	multiWriter := io.MultiWriter(writers...)
+	defaultLogger.SetOutput(multiWriter)
+}
 
-	// Create handler with options
-	opts := &slog.HandlerOptions{
-		Level: logLevel,
+// argsToFields converts variadic arguments to logrus Fields
+// It expects arguments in key-value pairs
+func argsToFields(args ...any) logrus.Fields {
+	fields := make(logrus.Fields)
+	for i := 0; i < len(args); i += 2 {
+		if i+1 < len(args) {
+			key, ok := args[i].(string)
+			if !ok {
+				key = fmt.Sprintf("%v", args[i])
+			}
+			fields[key] = args[i+1]
+		}
 	}
-
-	handler := slog.NewJSONHandler(multiWriter, opts)
-	defaultLogger = slog.New(handler)
-
-	// Set as default
-	slog.SetDefault(defaultLogger)
+	return fields
 }
 
 // Debug logs a debug message
 func Debug(msg string, args ...any) {
-	defaultLogger.Debug(msg, args...)
+	if len(args) > 0 {
+		defaultLogger.WithFields(argsToFields(args...)).Debug(msg)
+	} else {
+		defaultLogger.Debug(msg)
+	}
 }
 
 // Info logs an info message
 func Info(msg string, args ...any) {
-	defaultLogger.Info(msg, args...)
+	if len(args) > 0 {
+		defaultLogger.WithFields(argsToFields(args...)).Info(msg)
+	} else {
+		defaultLogger.Info(msg)
+	}
 }
 
 // Warn logs a warning message
 func Warn(msg string, args ...any) {
-	defaultLogger.Warn(msg, args...)
+	if len(args) > 0 {
+		defaultLogger.WithFields(argsToFields(args...)).Warn(msg)
+	} else {
+		defaultLogger.Warn(msg)
+	}
 }
 
 // Error logs an error message
 func Error(msg string, args ...any) {
-	defaultLogger.Error(msg, args...)
+	if len(args) > 0 {
+		defaultLogger.WithFields(argsToFields(args...)).Error(msg)
+	} else {
+		defaultLogger.Error(msg)
+	}
 }
 
 // Fatal logs a fatal message and exits
 func Fatal(msg string, args ...any) {
-	defaultLogger.Error(msg, args...)
-	os.Exit(1)
+	if len(args) > 0 {
+		defaultLogger.WithFields(argsToFields(args...)).Fatal(msg)
+	} else {
+		defaultLogger.Fatal(msg)
+	}
 }
 
 // GinLogger returns a gin middleware for logging
@@ -111,13 +136,13 @@ func GinLogger() gin.HandlerFunc {
 		}
 
 		// Log request
-		defaultLogger.Info("HTTP Request",
-			slog.Int("status", statusCode),
-			slog.String("method", method),
-			slog.String("path", path),
-			slog.String("ip", clientIP),
-			slog.Duration("latency", latency),
-			slog.Int("size", c.Writer.Size()),
-		)
+		defaultLogger.WithFields(logrus.Fields{
+			"status":  statusCode,
+			"method":  method,
+			"path":    path,
+			"ip":      clientIP,
+			"latency": latency,
+			"size":    c.Writer.Size(),
+		}).Info("HTTP Request")
 	}
 }
