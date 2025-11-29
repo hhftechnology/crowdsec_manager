@@ -33,10 +33,14 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 
+import { Badge } from "@/components/ui/badge"
+
 interface SidebarProps {
   isCollapsed: boolean
   setIsCollapsed: (collapsed: boolean) => void
 }
+
+
 
 const navigation = [
   {
@@ -104,7 +108,13 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
         {!isCollapsed && (
           <div className="flex items-center gap-2 font-semibold text-lg">
             <Shield className="h-6 w-6 text-primary" />
-            <span>CrowdSec</span>
+            <div className="flex flex-col">
+              <span>CrowdSec</span>
+              <span className="text-sm font-normal text-muted-foreground">Manager</span>
+              <Badge variant="secondary" className="text-[10px] px-1 py-0 h-5 mt-1 w-fit whitespace-nowrap">
+                Beta-version - v0.0.1
+              </Badge>
+            </div>
           </div>
         )}
         <Button
