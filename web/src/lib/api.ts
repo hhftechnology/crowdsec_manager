@@ -48,6 +48,7 @@ export interface Bouncer {
   last_pull: string
   type: string
   version: string
+  status?: string
 }
 
 export interface IPInfo {

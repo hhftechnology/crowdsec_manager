@@ -4,6 +4,7 @@ import (
 	"crowdsec-manager/internal/api/handlers"
 	"crowdsec-manager/internal/backup"
 	"crowdsec-manager/internal/config"
+	"crowdsec-manager/internal/cron"
 	"crowdsec-manager/internal/crowdsec"
 	"crowdsec-manager/internal/database"
 	"crowdsec-manager/internal/docker"
@@ -43,6 +44,17 @@ func RegisterWhitelistRoutes(router *gin.RouterGroup, dockerClient *docker.Clien
 		whitelist.POST("/crowdsec", handlers.AddToCrowdSecWhitelist(dockerClient, cfg))
 		whitelist.POST("/traefik", handlers.AddToTraefikWhitelist(dockerClient, cfg))
 		whitelist.POST("/comprehensive", handlers.SetupComprehensiveWhitelist(dockerClient, cfg))
+	}
+}
+
+// RegisterAllowlistRoutes registers allowlist management routes
+func RegisterAllowlistRoutes(router *gin.RouterGroup, dockerClient *docker.Client) {
+	allowlist := router.Group("/allowlist")
+	{
+		allowlist.GET("/inspect/:name", handlers.InspectAllowlist(dockerClient))
+		allowlist.POST("/add", handlers.AddAllowlistEntries(dockerClient))
+		allowlist.POST("/remove", handlers.RemoveAllowlistEntries(dockerClient))
+		allowlist.DELETE("/:name", handlers.DeleteAllowlist(dockerClient))
 	}
 }
 
@@ -101,29 +113,6 @@ func RegisterUpdateRoutes(router *gin.RouterGroup, dockerClient *docker.Client, 
 	}
 }
 
-// RegisterCronRoutes registers cron job management routes
-func RegisterCronRoutes(router *gin.RouterGroup) {
-	cron := router.Group("/cron")
-	{
-		cron.POST("/setup", handlers.SetupCronJob())
-		cron.GET("/list", handlers.ListCronJobs())
-		cron.DELETE("/:id", handlers.DeleteCronJob())
-	}
-}
-
-// RegisterAllowlistRoutes registers allowlist management routes
-func RegisterAllowlistRoutes(router *gin.RouterGroup, dockerClient *docker.Client) {
-	allowlist := router.Group("/allowlist")
-	{
-		allowlist.GET("/list", handlers.ListAllowlists(dockerClient))
-		allowlist.POST("/create", handlers.CreateAllowlist(dockerClient))
-		allowlist.GET("/inspect/:name", handlers.InspectAllowlist(dockerClient))
-		allowlist.POST("/add", handlers.AddAllowlistEntries(dockerClient))
-		allowlist.POST("/remove", handlers.RemoveAllowlistEntries(dockerClient))
-		allowlist.DELETE("/:name", handlers.DeleteAllowlist(dockerClient))
-	}
-}
-
 // RegisterServicesRoutes registers service management routes
 func RegisterServicesRoutes(router *gin.RouterGroup, dockerClient *docker.Client, db *database.Database, cfg *config.Config, csClient *crowdsec.Client) {
 	services := router.Group("/services")
@@ -178,5 +167,15 @@ func RegisterNotificationRoutes(router *gin.RouterGroup, dockerClient *docker.Cl
 	{
 		notifications.GET("/discord", handlers.GetDiscordConfig(db, cfg))
 		notifications.POST("/discord", handlers.UpdateDiscordConfig(db, cfg, dockerClient))
+	}
+}
+
+// RegisterCronRoutes registers cron job management routes
+func RegisterCronRoutes(router *gin.RouterGroup, scheduler *cron.Scheduler) {
+	cronRoutes := router.Group("/cron")
+	{
+		cronRoutes.POST("/setup", handlers.SetupCronJob(scheduler))
+		cronRoutes.GET("/list", handlers.ListCronJobs(scheduler))
+		cronRoutes.DELETE("/:id", handlers.DeleteCronJob(scheduler))
 	}
 }

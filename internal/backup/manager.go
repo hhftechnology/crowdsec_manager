@@ -235,7 +235,8 @@ func (m *Manager) Restore(backupID string) error {
 	}
 
 	if extractedDir == "" {
-		return fmt.Errorf("no directory found in backup archive")
+		// Fallback: check if files are in root of extractDir
+		extractedDir = extractDir
 	}
 
 	// Restore items
@@ -248,13 +249,17 @@ func (m *Manager) Restore(backupID string) error {
 
 		destPath := filepath.Join(".", item)
 
-		// Remove existing item
-		if err := os.RemoveAll(destPath); err != nil {
+		// Remove existing item with retry
+		if err := m.retryOperation(func() error {
+			return os.RemoveAll(destPath)
+		}, 3, time.Second); err != nil {
 			return fmt.Errorf("failed to remove existing item %s: %w", item, err)
 		}
 
-		// Copy from backup
-		if err := m.copyPath(sourcePath, destPath); err != nil {
+		// Copy from backup with retry
+		if err := m.retryOperation(func() error {
+			return m.copyPath(sourcePath, destPath)
+		}, 3, time.Second); err != nil {
 			return fmt.Errorf("failed to restore item %s: %w", item, err)
 		}
 
@@ -263,6 +268,19 @@ func (m *Manager) Restore(backupID string) error {
 
 	logger.Info("Restore completed successfully")
 	return nil
+}
+
+// retryOperation retries an operation with exponential backoff
+func (m *Manager) retryOperation(op func() error, attempts int, delay time.Duration) error {
+	var err error
+	for i := 0; i < attempts; i++ {
+		if err = op(); err == nil {
+			return nil
+		}
+		time.Sleep(delay)
+		delay *= 2
+	}
+	return fmt.Errorf("operation failed after %d attempts: %w", attempts, err)
 }
 
 // CleanupOld removes backups older than retention period

@@ -1,74 +1,83 @@
-import { useEffect, useState } from 'react'
-import { Badge } from './ui/badge'
-import { Activity, Github, MessageCircle, Home } from 'lucide-react'
-import { Button } from './ui/button'
-import { useNavigate } from 'react-router-dom'
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Bell, Plus, Search } from "lucide-react"
+import { useLocation } from "react-router-dom"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
-interface HeaderProps {
-  onMenuToggle: () => void
-}
-
-export default function Header({ onMenuToggle }: HeaderProps) {
-  const [lastUpdate, setLastUpdate] = useState<string>('')
-  const navigate = useNavigate()
-
-  useEffect(() => {
-    const updateTime = () => {
-      const now = new Date()
-      const hours = now.getHours().toString().padStart(2, '0')
-      const minutes = now.getMinutes().toString().padStart(2, '0')
-      const seconds = now.getSeconds().toString().padStart(2, '0')
-      setLastUpdate(`${hours}:${minutes}:${seconds}`)
-    }
-
-    updateTime()
-    const interval = setInterval(updateTime, 1000)
-
-    return () => clearInterval(interval)
-  }, [])
+export default function Header() {
+  const location = useLocation()
+  
+  // Generate breadcrumbs from path
+  const pathSegments = location.pathname.split('/').filter(Boolean)
+  const breadcrumbs = [
+    { name: 'Security Stack', href: '/' },
+    ...pathSegments.map((segment, index) => {
+      const href = `/${pathSegments.slice(0, index + 1).join('/')}`
+      return {
+        name: segment.charAt(0).toUpperCase() + segment.slice(1).replace(/-/g, ' '),
+        href
+      }
+    })
+  ]
 
   return (
-    <header className="h-16 border-b border-border bg-card px-6 flex items-center justify-between">
-      <div className="flex items-center gap-4">
-        <Activity className="h-6 w-6 text-red-500" />
-        <div>
-          <h1 className="text-xl font-bold">CROWDSEC MANAGER</h1>
-          <Badge variant="secondary" className="text-xs">
-            Beta-version - v0.0.1
-          </Badge>
-        </div>
+    <header className="h-16 border-b border-border bg-background px-6 flex items-center justify-between">
+      {/* Breadcrumbs */}
+      <div className="flex items-center">
+        <Breadcrumb>
+          <BreadcrumbList>
+            {breadcrumbs.map((item, index) => (
+              <div key={item.href} className="flex items-center">
+                <BreadcrumbItem>
+                  {index === breadcrumbs.length - 1 ? (
+                    <BreadcrumbPage>{item.name}</BreadcrumbPage>
+                  ) : (
+                    <BreadcrumbLink href={item.href}>{item.name}</BreadcrumbLink>
+                  )}
+                </BreadcrumbItem>
+                {index < breadcrumbs.length - 1 && (
+                  <BreadcrumbSeparator />
+                )}
+              </div>
+            ))}
+          </BreadcrumbList>
+        </Breadcrumb>
       </div>
+
+      {/* Right Section: Search & Actions */}
       <div className="flex items-center gap-4">
-        <span className="text-sm text-muted-foreground">
-          Last update: {lastUpdate}
-        </span>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="gap-2"
-          onClick={() => window.open('https://github.com/hhftechnology/crowdsec_manager', '_blank')}
-        >
-          <Github className="h-4 w-4" />
-          GitHub
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="gap-2"
-          onClick={() => window.open('https://discord.gg/xCtMFeUKf9', '_blank')}
-        >
-          <MessageCircle className="h-4 w-4" />
-          Discord
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="gap-2"
-          onClick={() => navigate('/')}
-        >
-          <Home className="h-4 w-4" />
-          Home
-        </Button>
+        {/* Search Bar */}
+        <div className="relative w-64">
+          <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input placeholder="Search for anything..." className="pl-8 bg-muted/50 border-muted-foreground/20" />
+          <div className="absolute right-2 top-2.5 flex items-center gap-1">
+             <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100">
+              <span className="text-xs">^</span>K
+            </kbd>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center gap-2 border-l border-border pl-4">
+          <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground">
+            <Bell className="h-5 w-5" />
+          </Button>
+          <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground">
+            <Plus className="h-5 w-5" />
+          </Button>
+          <Avatar className="h-8 w-8 ml-2">
+            <AvatarImage src="https://github.com/shadcn.png" />
+            <AvatarFallback>CN</AvatarFallback>
+          </Avatar>
+        </div>
       </div>
     </header>
   )

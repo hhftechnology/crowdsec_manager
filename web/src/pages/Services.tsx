@@ -34,7 +34,8 @@ export default function Services() {
       const response = await api.crowdsec.getStatus()
       return response.data.data
     },
-    refetchInterval: (data) => {
+    refetchInterval: (query) => {
+      const data = query.state.data
       // Poll faster if waiting for approval
       if (data?.enrolled && !data.validated) return 2000
       return 5000

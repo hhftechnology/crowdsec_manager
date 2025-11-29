@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"crowdsec-manager/internal/api"
 	"crowdsec-manager/internal/backup"
 	"crowdsec-manager/internal/config"
+	"crowdsec-manager/internal/cron"
 	"crowdsec-manager/internal/crowdsec"
 	"crowdsec-manager/internal/database"
 	"crowdsec-manager/internal/docker"
@@ -31,6 +33,9 @@ func main() {
 
 	// Initialize logger
 	logger.Init(cfg.LogLevel, cfg.LogFile)
+    
+    // Define dataDir
+    dataDir := cfg.ConfigDir
 
 	// Initialize database
 	db, err := database.New(cfg.DatabasePath)
@@ -47,21 +52,16 @@ func main() {
 	}
 	defer dockerClient.Close()
 
-	// Check prerequisites
-	if err := checkPrerequisites(dockerClient, cfg); err != nil {
-		logger.Fatal("Prerequisites check failed", "error", err)
-	}
-
-	// Initialize backup manager
-	backupManager := backup.NewManager(cfg.BackupDir, cfg.RetentionDays)
-
-	// Initialize CrowdSec LAPI client
+	// Initialize CrowdSec client
 	csClient := crowdsec.NewClient(cfg.CrowdSecLAPIKey, cfg.CrowdSecLAPIMachineID, cfg.CrowdSecLAPIPassword, cfg.CrowdSecLAPIUrl)
 
-	// Setup Gin router
-	if cfg.Environment == "production" {
-		gin.SetMode(gin.ReleaseMode)
-	}
+	// Initialize Backup Manager
+	backupManager := backup.NewManager(filepath.Join(dataDir, "backups"), 7)
+
+	// Initialize Cron Scheduler
+	cronScheduler := cron.NewScheduler(filepath.Join(dataDir, "cron.json"), backupManager)
+	cronScheduler.Start()
+	defer cronScheduler.Stop()
 
 	router := gin.New()
 	router.Use(gin.Recovery())
@@ -94,7 +94,7 @@ func main() {
 		api.RegisterLogRoutes(apiGroup, dockerClient, db, cfg)
 		api.RegisterBackupRoutes(apiGroup, backupManager, dockerClient)
 		api.RegisterUpdateRoutes(apiGroup, dockerClient, cfg)
-		api.RegisterCronRoutes(apiGroup)
+		api.RegisterCronRoutes(apiGroup, cronScheduler)
 		api.RegisterServicesRoutes(apiGroup, dockerClient, db, cfg, csClient)
 		api.RegisterNotificationRoutes(apiGroup, dockerClient, db, cfg)
 	}

@@ -128,7 +128,8 @@ func UnbanIP(dockerClient *docker.Client, cfg *config.Config, csClient *crowdsec
 
 		logger.Info("Unbanning IP via LAPI", "ip", req.IP)
 
-		err := csClient.DeleteDecision(req.IP, "")
+		// Use DeleteDecisions with IP filter
+		err := csClient.DeleteDecisions(url.Values{"ip": []string{req.IP}})
 		if err != nil {
 			logger.Error("Failed to unban IP", "error", err)
 			c.JSON(http.StatusInternalServerError, models.Response{

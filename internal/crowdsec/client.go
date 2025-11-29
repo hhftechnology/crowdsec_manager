@@ -195,6 +195,51 @@ func (c *Client) DeleteDecision(decisionID string) error {
 	return nil
 }
 
+// DeleteDecisions deletes decisions matching the provided options (requires Machine Auth)
+func (c *Client) DeleteDecisions(opts url.Values) error {
+	endpoint := fmt.Sprintf("%s/v1/decisions", c.BaseURL)
+	if len(opts) > 0 {
+		endpoint += "?" + opts.Encode()
+	}
+
+	req, err := http.NewRequest("DELETE", endpoint, nil)
+	if err != nil {
+		return err
+	}
+
+	// Delete requires Machine authentication
+	if err := c.authMachine(req); err != nil {
+		return err
+	}
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		// Try to refresh token and retry once
+		if err := c.Login(); err != nil {
+			return fmt.Errorf("re-login failed: %w", err)
+		}
+		if err := c.authMachine(req); err != nil {
+			return err
+		}
+		resp, err = c.HTTPClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+	}
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("LAPI returned status: %d", resp.StatusCode)
+	}
+
+	return nil
+}
+
 // GetAlerts fetches alerts (requires Machine Auth)
 func (c *Client) GetAlerts(opts url.Values) ([]Alert, error) {
 	endpoint := fmt.Sprintf("%s/v1/alerts", c.BaseURL)
