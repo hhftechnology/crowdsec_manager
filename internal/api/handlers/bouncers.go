@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -141,7 +142,7 @@ func AddBouncer(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc
 // DeleteBouncer deletes a bouncer
 func DeleteBouncer(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		name := c.Param("name")
+		name := strings.TrimSpace(c.Param("name"))
 		if name == "" {
 			c.JSON(http.StatusBadRequest, models.Response{
 				Success: false,
@@ -156,12 +157,15 @@ func DeleteBouncer(dockerClient *docker.Client, cfg *config.Config) gin.HandlerF
 			"cscli", "bouncers", "delete", name,
 		})
 		if err != nil {
+			logger.Error("Failed to delete bouncer", "error", err, "output", output)
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
 				Error:   fmt.Sprintf("Failed to delete bouncer: %v", err),
 			})
 			return
 		}
+
+		logger.Info("Bouncer deleted successfully", "name", name, "output", output)
 
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,

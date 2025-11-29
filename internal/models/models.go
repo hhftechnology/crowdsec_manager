@@ -1,6 +1,9 @@
 package models
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 // Response is the standard API response
 type Response struct {
@@ -63,16 +66,16 @@ type Decision struct {
 // DecisionRaw is the raw structure from CrowdSec JSON output
 // This matches CrowdSec's actual JSON field names
 type DecisionRaw struct {
-	ID        int64  `json:"id"`
-	Source    string `json:"source"`
-	Type      string `json:"type"`
-	Scope     string `json:"scope"`
-	Value     string `json:"value"`
-	Duration  string `json:"duration"`
-	Scenario  string `json:"scenario"`
-	Reason    string `json:"reason"` // CrowdSec uses "reason" for the scenario
-	CreatedAt string `json:"created_at"`
-	Origin    string `json:"origin"`
+	ID        int64       `json:"id"`
+	Source    interface{} `json:"source"` // Changed to interface{} as it can be a string or object
+	Type      string      `json:"type"`
+	Scope     string      `json:"scope"`
+	Value     string      `json:"value"`
+	Duration  string      `json:"duration"`
+	Scenario  string      `json:"scenario"`
+	Reason    string      `json:"reason"` // CrowdSec uses "reason" for the scenario
+	CreatedAt string      `json:"created_at"`
+	Origin    string      `json:"origin"`
 }
 
 // Normalize converts DecisionRaw to Decision with normalized fields
@@ -83,8 +86,29 @@ func (d *DecisionRaw) Normalize() Decision {
 		scenario = d.Reason
 	}
 
+	// Handle Source which can be string or object
+	var sourceStr string
+	switch v := d.Source.(type) {
+	case string:
+		sourceStr = v
+	case map[string]interface{}:
+		// Try to find a meaningful name in the object
+		if name, ok := v["name"].(string); ok {
+			sourceStr = name
+		} else if typeStr, ok := v["type"].(string); ok {
+			sourceStr = typeStr
+		} else {
+			// Fallback to JSON representation or generic string
+			sourceStr = "unknown_source_object"
+		}
+	case nil:
+		sourceStr = ""
+	default:
+		sourceStr = fmt.Sprintf("%v", v)
+	}
+
 	// Use Source if Origin is empty
-	origin := d.Source
+	origin := sourceStr
 	if origin == "" && d.Origin != "" {
 		origin = d.Origin
 	}

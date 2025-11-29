@@ -218,12 +218,14 @@ export default function CrowdSecHealth() {
                               </span>
                               <div className="pl-2">
                                 {typeof value === 'object' && value !== null ? (
-                                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1">
+                                  <div className="grid grid-cols-1 gap-1">
                                     {Object.entries(value).map(([subKey, subValue]) => (
-                                      <div key={subKey} className="flex items-center gap-1">
-                                        <span className="text-xs text-muted-foreground">{subKey}:</span>
-                                        <span className="font-mono font-medium text-xs">
-                                          {String(subValue)}
+                                      <div key={subKey} className="flex flex-col sm:flex-row sm:items-center gap-1">
+                                        <span className="text-xs text-muted-foreground min-w-[100px]">{subKey}:</span>
+                                        <span className="font-mono font-medium text-xs break-all">
+                                          {typeof subValue === 'object' && subValue !== null 
+                                            ? JSON.stringify(subValue) 
+                                            : String(subValue)}
                                         </span>
                                       </div>
                                     ))}
