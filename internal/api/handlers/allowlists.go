@@ -176,12 +176,16 @@ func InspectAllowlist(dockerClient *docker.Client) gin.HandlerFunc {
 		}
 		if createdAt, err := jsonparser.GetString(dataBytes, "created_at"); err == nil {
 			if t, err := time.Parse(time.RFC3339, createdAt); err == nil {
-				response.CreatedAt = t
+				response.CreatedAt = t.Format(time.RFC3339)
+			} else {
+				response.CreatedAt = createdAt
 			}
 		}
 		if updatedAt, err := jsonparser.GetString(dataBytes, "updated_at"); err == nil {
 			if t, err := time.Parse(time.RFC3339, updatedAt); err == nil {
-				response.UpdatedAt = t
+				response.UpdatedAt = t.Format(time.RFC3339)
+			} else {
+				response.UpdatedAt = updatedAt
 			}
 		}
 
