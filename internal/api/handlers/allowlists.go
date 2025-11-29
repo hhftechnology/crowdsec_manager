@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
@@ -10,6 +9,7 @@ import (
 	"crowdsec-manager/internal/logger"
 	"crowdsec-manager/internal/models"
 
+	"github.com/buger/jsonparser"
 	"github.com/gin-gonic/gin"
 )
 
@@ -55,6 +55,11 @@ func ListAllowlists(dockerClient *docker.Client) gin.HandlerFunc {
 			return
 		}
 
+
+	// Compute Size field from Items length for each allowlist
+	for i := range allowlists {
+		allowlists[i].Size = len(allowlists[i].Items)
+	}
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
 			Data:    gin.H{"allowlists": allowlists, "count": len(allowlists)},

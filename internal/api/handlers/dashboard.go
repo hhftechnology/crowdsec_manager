@@ -34,19 +34,19 @@ func GetDecisions(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFu
 			return
 		}
 
-		// Parse the JSON
-		var rawDecisions []models.DecisionRaw
-		if err := json.Unmarshal([]byte(output), &rawDecisions); err != nil {
+		// Parse the JSON as alerts (CrowdSec returns array of alerts, each containing decisions)
+		var alerts []models.Alert
+		if err := json.Unmarshal([]byte(output), &alerts); err != nil {
 			// If output is empty or "null", it means no decisions
-			if output == "null" || output == "" {
+			if output == "null" || output == "" || output == "[]" {
 				c.JSON(http.StatusOK, models.Response{
 					Success: true,
 					Data:    []models.Decision{},
 				})
 				return
 			}
-			
-			logger.Warn("Failed to parse decisions JSON", "error", err, "output_preview", truncateString(output, 100))
+
+			logger.Warn("Failed to parse alerts JSON", "error", err, "output_preview", truncateString(output, 200))
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
 				Error:   fmt.Sprintf("Failed to parse decisions JSON: %v", err),
@@ -54,10 +54,16 @@ func GetDecisions(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFu
 			return
 		}
 
-		// Convert to models.Decision
+		// Extract all decisions from all alerts
 		var decisions []models.Decision
-		for _, d := range rawDecisions {
-			decisions = append(decisions, d.Normalize())
+		for _, alert := range alerts {
+			for _, decision := range alert.Decisions {
+				// Set created_at from alert if not present in decision
+				if decision.CreatedAt == "" {
+					decision.CreatedAt = alert.CreatedAt
+				}
+				decisions = append(decisions, decision)
+			}
 		}
 
 		logger.Debug("Decisions retrieved successfully", "count", len(decisions))
@@ -227,31 +233,38 @@ func GetDecisionsAnalysis(dockerClient *docker.Client, cfg *config.Config) gin.H
 			return
 		}
 
-		// Parse the JSON
-		var rawDecisions []models.DecisionRaw
-		if err := json.Unmarshal([]byte(output), &rawDecisions); err != nil {
+		// Parse the JSON as alerts (CrowdSec returns array of alerts, each containing decisions)
+		var alerts []models.Alert
+		if err := json.Unmarshal([]byte(output), &alerts); err != nil {
 			// If output is empty or "null", it means no decisions
-			if output == "null" || output == "" {
+			if output == "null" || output == "" || output == "[]" {
 				c.JSON(http.StatusOK, models.Response{
 					Success: true,
 					Data:    gin.H{"decisions": []models.Decision{}, "count": 0},
 				})
 				return
 			}
-			
-			logger.Warn("Failed to parse decisions analysis JSON", "error", err, "output_preview", truncateString(output, 100))
+	
+			logger.Warn("Failed to parse decisions analysis JSON", "error", err, "output_preview", truncateString(output, 200))
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
-				Error:   fmt.Sprintf("Failed to parse decisions analysis JSON: %v", err),
+				Error:   fmt.Sprintf("Failed to parse decisions JSON: %v", err),
 			})
 			return
 		}
-
-		// Convert to models.Decision
+	
+		// Extract all decisions from all alerts
 		var decisions []models.Decision
-		for _, d := range rawDecisions {
-			decisions = append(decisions, d.Normalize())
+		for _, alert := range alerts {
+			for _, decision := range alert.Decisions {
+				// Set created_at from alert if not present in decision
+				if decision.CreatedAt == "" {
+					decision.CreatedAt = alert.CreatedAt
+				}
+				decisions = append(decisions, decision)
+			}
 		}
+	
 
 		logger.Info("Decisions analysis retrieved successfully",
 			"count", len(decisions),

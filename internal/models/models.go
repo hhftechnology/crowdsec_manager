@@ -44,23 +44,31 @@ type CrowdSecHealthCheck struct {
 	Checks    map[string]HealthCheckItem `json:"checks"`    // Individual health checks
 }
 
+// Alert represents a CrowdSec alert that contains decisions
+type Alert struct {
+	Capacity  int                      `json:"capacity"`
+	CreatedAt string                   `json:"created_at"`
+	Decisions []Decision               `json:"decisions"`
+	Events    []map[string]interface{} `json:"events,omitempty"`
+}
+
 // Decision represents a CrowdSec decision
 type Decision struct {
 	ID        int64  `json:"id"`
-	Source    string `json:"source"`     // Changed from "origin" to "source"
-	Type      string `json:"type"`       // This is the decision type (ban, captcha, etc.)
-	Scope     string `json:"scope"`      // This should be correct
-	Value     string `json:"value"`      // This should be correct
-	Duration  string `json:"duration"`   // This should be correct
-	Scenario  string `json:"scenario"`   // Changed from "scenario" - let's check if it's "reason"
-	CreatedAt string `json:"created_at"` // Changed from time.Time to string for flexibility
+	Origin    string `json:"origin"`             // Source of the decision (crowdsec, cscli, etc.)
+	Type      string `json:"type"`               // Decision type (ban, captcha, etc.)
+	Scope     string `json:"scope"`              // Scope (Ip, Range, etc.)
+	Value     string `json:"value"`              // IP address or range
+	Duration  string `json:"duration"`           // Duration like "3h45m3s"
+	Scenario  string `json:"scenario"`           // Scenario name
+	Simulated bool   `json:"simulated"`          // Whether decision is simulated
+	CreatedAt string `json:"created_at"`         // Creation timestamp
 
-	// Alternative field names that CrowdSec might use
-	Reason    string `json:"reason,omitempty"`    // CrowdSec might call scenario "reason"
-	Origin    string `json:"origin,omitempty"`    // Backup field name
-	Until     string `json:"until,omitempty"`     // Expiration timestamp
-	Simulated *bool  `json:"simulated,omitempty"` // Whether decision is simulated
-	UUID      string `json:"uuid,omitempty"`      // Unique identifier for LAPI→CAPI
+	// Legacy/additional fields for backward compatibility
+	Source    string `json:"source,omitempty"`   // Alias for Origin (backward compat)
+	Reason    string `json:"reason,omitempty"`   // Alias for Scenario (some versions use this)
+	Until     string `json:"until,omitempty"`    // Expiration timestamp
+	UUID      string `json:"uuid,omitempty"`     // Unique identifier
 }
 
 // DecisionRaw is the raw structure from CrowdSec JSON output
@@ -296,9 +304,12 @@ type ConfigPathRequest struct {
 
 // Allowlist represents a CrowdSec allowlist
 type Allowlist struct {
-	Name        string    `json:"name"`
-	Description string    `json:"description"`
-	CreatedAt   string    `json:"created_at,omitempty"`
+	Name        string           `json:"name"`
+	Description string           `json:"description"`
+	CreatedAt   string           `json:"created_at,omitempty"`
+	UpdatedAt   string           `json:"updated_at,omitempty"`
+	Items       []AllowlistEntry `json:"items,omitempty"`
+	Size        int              `json:"size,omitempty"` // Computed from Items length
 }
 
 // AllowlistEntry represents an entry in an allowlist

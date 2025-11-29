@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"crowdsec-manager/internal/config"
@@ -103,6 +104,47 @@ headers:
   Content-Type: application/json
 `
 
+// parseDiscordYaml reads discord.yaml and extracts webhook config
+func parseDiscordYaml(path string) (*models.DiscordConfig, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+
+	var yamlData map[string]interface{}
+	if err := yaml.Unmarshal(data, &yamlData); err != nil {
+		return nil, err
+	}
+
+	config := &models.DiscordConfig{}
+
+	// Extract URL: https://discord.com/api/webhooks/{ID}/{TOKEN}
+	if urlStr, ok := yamlData["url"].(string); ok {
+		// Parse webhook ID and token from URL
+		if strings.Contains(urlStr, "discord.com/api/webhooks/") {
+			parts := strings.Split(urlStr, "/")
+			if len(parts) >= 7 {
+				config.WebhookID = parts[5]
+				config.WebhookToken = parts[6]
+			}
+		}
+	}
+
+	// Extract format string to get Geoapify key (check if it's hardcoded in the template)
+	if formatStr, ok := yamlData["format"].(string); ok {
+		// Look for actual API key value (not template variable)
+		if strings.Contains(formatStr, "geoapify") {
+			re := regexp.MustCompile(`apiKey=([A-Za-z0-9]+)`)
+			matches := re.FindStringSubmatch(formatStr)
+			if len(matches) > 1 {
+				config.GeoapifyKey = matches[1]
+			}
+		}
+	}
+
+	return config, nil
+}
+
 // GetDiscordConfig retrieves the current Discord configuration
 func GetDiscordConfig(db *database.Database, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -122,12 +164,31 @@ func GetDiscordConfig(db *database.Database, cfg *config.Config) gin.HandlerFunc
 			enabled, _ = isDiscordEnabled(profilesPath)
 		}
 
+		// Start with database values
 		config := models.DiscordConfig{
 			Enabled:      enabled,
 			WebhookID:    settings.DiscordWebhookID,
 			WebhookToken: settings.DiscordWebhookToken,
 			GeoapifyKey:  settings.GeoapifyKey,
 			CTIKey:       settings.CTIKey,
+		}
+
+		// Try to read from discord.yaml file if it exists (priority over database)
+		discordPath := filepath.Join(cfg.ConfigDir, "crowdsec", "notifications", "discord.yaml")
+		if fileConfig, err := parseDiscordYaml(discordPath); err == nil {
+			// File values override database values if present
+			if fileConfig.WebhookID != "" {
+				config.WebhookID = fileConfig.WebhookID
+			}
+			if fileConfig.WebhookToken != "" {
+				config.WebhookToken = fileConfig.WebhookToken
+			}
+			if fileConfig.GeoapifyKey != "" {
+				config.GeoapifyKey = fileConfig.GeoapifyKey
+			}
+			logger.Debug("Loaded Discord config from file", "path", discordPath)
+		} else if !os.IsNotExist(err) {
+			logger.Warn("Failed to parse discord.yaml", "error", err, "path", discordPath)
 		}
 
 		c.JSON(http.StatusOK, models.Response{
