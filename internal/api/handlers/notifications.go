@@ -157,7 +157,7 @@ func GetDiscordConfig(db *database.Database, cfg *config.Config) gin.HandlerFunc
 			return
 		}
 
-		// Check if enabled in profiles.yaml
+		// Check if enabled in profiles.yaml (read from host config)
 		enabled := false
 		profilesPath := filepath.Join(cfg.ConfigDir, "crowdsec", "profiles.yaml")
 		if _, err := os.Stat(profilesPath); err == nil {
@@ -173,23 +173,9 @@ func GetDiscordConfig(db *database.Database, cfg *config.Config) gin.HandlerFunc
 			CTIKey:       settings.CTIKey,
 		}
 
-		// Try to read from discord.yaml file if it exists (priority over database)
-		discordPath := filepath.Join(cfg.ConfigDir, "crowdsec", "notifications", "discord.yaml")
-		if fileConfig, err := parseDiscordYaml(discordPath); err == nil {
-			// File values override database values if present
-			if fileConfig.WebhookID != "" {
-				config.WebhookID = fileConfig.WebhookID
-			}
-			if fileConfig.WebhookToken != "" {
-				config.WebhookToken = fileConfig.WebhookToken
-			}
-			if fileConfig.GeoapifyKey != "" {
-				config.GeoapifyKey = fileConfig.GeoapifyKey
-			}
-			logger.Debug("Loaded Discord config from file", "path", discordPath)
-		} else if !os.IsNotExist(err) {
-			logger.Warn("Failed to parse discord.yaml", "error", err, "path", discordPath)
-		}
+		// Note: We don't read from container's discord.yaml because it uses environment variable syntax
+		// The database is the source of truth for the actual values
+		// The container file just references ${DISCORD_WEBHOOK_ID} etc.
 
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
@@ -233,9 +219,9 @@ func UpdateDiscordConfig(db *database.Database, cfg *config.Config, dockerClient
 			return
 		}
 
-		// 1. Generate discord.yaml
-		discordPath := filepath.Join(cfg.ConfigDir, "crowdsec", "notifications", "discord.yaml")
-		if err := generateDiscordYaml(discordPath, req); err != nil {
+		// 1. Generate discord.yaml directly in CrowdSec container config
+		// Write to the existing crowdsec-config volume, not a separate mount
+		if err := generateDiscordYamlInContainer(dockerClient, cfg, req); err != nil {
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
 				Error:   fmt.Sprintf("Failed to generate discord.yaml: %v", err),
@@ -243,7 +229,7 @@ func UpdateDiscordConfig(db *database.Database, cfg *config.Config, dockerClient
 			return
 		}
 
-		// 2. Update docker-compose.yml with environment variables (actual values) and volume mount
+		// 2. Update docker-compose.yml with environment variables ONLY (no volume mount)
 		composeFiles := []string{
 			"docker-compose.yml",
 			"docker-compose.pangolin.yml",
@@ -254,7 +240,7 @@ func UpdateDiscordConfig(db *database.Database, cfg *config.Config, dockerClient
 			composePath := filepath.Join(cfg.ConfigDir, "..", composeFile)
 			if _, err := os.Stat(composePath); err == nil {
 				logger.Info("Updating docker-compose file", "file", composeFile)
-				if err := updateDockerCompose(composePath, req); err != nil {
+				if err := updateDockerComposeEnvOnly(composePath, req); err != nil {
 					logger.Warn("Failed to update docker-compose", "file", composeFile, "error", err)
 					composeErr = err
 				} else {
@@ -303,11 +289,11 @@ func UpdateDiscordConfig(db *database.Database, cfg *config.Config, dockerClient
 		// Build success message
 		message := "Discord configuration updated successfully. "
 		if req.Enabled {
-			message += "Created discord.yaml and updated docker-compose.yml with environment variables and volume mount. "
+			message += "Created discord.yaml in CrowdSec config and updated docker-compose.yml with environment variables. "
 			if restarted {
-				message += "CrowdSec container restarted. Run 'docker-compose up -d' to apply docker-compose.yml changes."
+				message += "CrowdSec container restarted. Run 'docker-compose up -d' to apply environment variable changes."
 			} else {
-				message += "Run 'docker-compose up -d' to apply changes."
+				message += "Run 'docker-compose up -d' to apply environment variable changes."
 			}
 		} else {
 			message += "Discord notifications disabled in profiles.yaml."
@@ -322,18 +308,6 @@ func UpdateDiscordConfig(db *database.Database, cfg *config.Config, dockerClient
 }
 
 // Helper functions
-
-func generateDiscordYaml(path string, config models.DiscordConfig) error {
-	// Ensure directory exists
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return err
-	}
-
-	// Write the template as-is - it uses environment variables ${DISCORD_WEBHOOK_ID}
-	// which are provided via docker-compose.yml environment section
-	return os.WriteFile(path, []byte(DiscordTemplate), 0644)
-}
 
 func isDiscordEnabled(path string) (bool, error) {
 	data, err := os.ReadFile(path)
@@ -418,8 +392,33 @@ func updateProfilesYaml(path string, enable bool) error {
 	return nil
 }
 
-// updateDockerCompose updates docker-compose.yml to add Discord notification environment variables and volume mount
-func updateDockerCompose(composePath string, config models.DiscordConfig) error {
+// generateDiscordYamlInContainer writes discord.yaml directly to CrowdSec container config
+func generateDiscordYamlInContainer(dockerClient *docker.Client, cfg *config.Config, config models.DiscordConfig) error {
+	// Create notifications directory if it doesn't exist
+	_, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
+		"mkdir", "-p", "/etc/crowdsec/notifications",
+	})
+	if err != nil {
+		logger.Warn("Failed to create notifications directory (may already exist)", "error", err)
+	}
+
+	// Escape single quotes in the template for shell command
+	escapedTemplate := strings.ReplaceAll(DiscordTemplate, "'", "'\\''")
+
+	// Write discord.yaml directly to container
+	_, err = dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
+		"sh", "-c", fmt.Sprintf("echo '%s' > /etc/crowdsec/notifications/discord.yaml", escapedTemplate),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to write discord.yaml to container: %w", err)
+	}
+
+	logger.Info("Discord YAML created in CrowdSec container", "path", "/etc/crowdsec/notifications/discord.yaml")
+	return nil
+}
+
+// updateDockerComposeEnvOnly updates docker-compose.yml to add Discord environment variables ONLY (no volume mount)
+func updateDockerComposeEnvOnly(composePath string, config models.DiscordConfig) error {
 	// Read docker-compose.yml
 	data, err := os.ReadFile(composePath)
 	if err != nil {
@@ -464,35 +463,7 @@ func updateDockerCompose(composePath string, config models.DiscordConfig) error 
 		envMap["CTI_API_KEY"] = config.CTIKey
 	}
 
-	// Update volumes to include discord.yaml mount
-	volumes, ok := crowdsec["volumes"]
-	if !ok {
-		crowdsec["volumes"] = []interface{}{}
-		volumes = crowdsec["volumes"]
-	}
-
-	volumesList, ok := volumes.([]interface{})
-	if !ok {
-		return fmt.Errorf("volumes section has unexpected format")
-	}
-
-	// Check if discord.yaml volume already exists
-	discordVolumeExists := false
-	discordVolume := "./notifications/discord.yaml:/etc/crowdsec/notifications/discord.yaml"
-	for _, vol := range volumesList {
-		if volStr, ok := vol.(string); ok {
-			if strings.Contains(volStr, "/etc/crowdsec/notifications/discord.yaml") {
-				discordVolumeExists = true
-				break
-			}
-		}
-	}
-
-	// Add discord.yaml volume if it doesn't exist
-	if !discordVolumeExists {
-		volumesList = append(volumesList, discordVolume)
-		crowdsec["volumes"] = volumesList
-	}
+	// DO NOT add volume mount - discord.yaml is written directly to crowdsec-config volume
 
 	// Write back to file
 	updatedData, err := yaml.Marshal(compose)
@@ -504,6 +475,7 @@ func updateDockerCompose(composePath string, config models.DiscordConfig) error 
 		return fmt.Errorf("failed to write docker-compose.yml: %w", err)
 	}
 
+	logger.Info("Docker Compose updated with environment variables (no volume mount added)")
 	return nil
 }
 
