@@ -32,9 +32,9 @@ format: |
         {{range .Decisions -}}
         {{- $cti := .Value | CrowdsecCTI  -}}
         "timestamp": "{{$alert.StartAt}}",
-        "title": "Crowdsec Alert",
+        "title": "🚨 CrowdSec Security Alert",
         "color": 16711680,
-        "description": "Potential threat detected. View details in [Crowdsec Console](<https://app.crowdsec.net/cti/{{.Value}}>)",
+        "description": "Potential threat detected. View details in [CrowdSec Console](<https://app.crowdsec.net/cti/{{.Value}}>)",
         "url": "https://app.crowdsec.net/cti/{{.Value}}",
         {{if $alert.Source.Cn -}}
         "image": {
@@ -45,53 +45,77 @@ format: |
               {
                 "name": "Scenario",
                 "value": "` + "`{{ .Scenario }}`" + `",
-                "inline": "true"
+                "inline": false
               },
               {
-                "name": "IP",
+                "name": "Source IP",
                 "value": "[{{.Value}}](<https://www.whois.com/whois/{{.Value}}>)",
-                "inline": "true"
+                "inline": false
               },
               {
                 "name": "Ban Duration",
                 "value": "{{.Duration}}",
-                "inline": "true"
+                "inline": false
               },
               {{if $alert.Source.Cn -}}
-              { 
+              {
                 "name": "Country",
-                "value": "{{$alert.Source.Cn}} :flag_{{ $alert.Source.Cn | lower }}:",
-                "inline": "true"
+                "value": "**{{$alert.Source.Cn}}** :flag_{{ $alert.Source.Cn | lower }}:",
+                "inline": false
               }
               {{if $cti.Location.City -}}
-              ,
-              { 
+              ,{
                 "name": "City",
-                "value": "{{$cti.Location.City}}",
-                "inline": "true"
+                "value": "**{{$cti.Location.City}}**",
+                "inline": false
               },
-              { 
+              {
                 "name": "Maliciousness",
                 "value": "{{mulf $cti.GetMaliciousnessScore 100 | floor}} %",
-                "inline": "true"
+                "inline": false
               }
               {{end}}
               {{end}}
               {{if not $alert.Source.Cn -}}
-              { 
+              ,{
                 "name": "Location",
-                "value": "Unknown :pirate_flag:"
+                "value": "Unknown :pirate_flag:",
+                "inline": false
               }
               {{end}}
               {{end -}}
               {{end -}}
               {{range . -}}
               {{$alert := . -}}
+              {{if GetMeta $alert "target_host" -}}
+              ,{
+                "name": "🎯 Target Host",
+                "value": "` + "`{{GetMeta $alert \"target_host\"}}`" + `",
+                "inline": false
+              }
+              {{end}}
+              {{if GetMeta $alert "target_uri" -}}
+              ,{
+                "name": "🔗 Target URI",
+                "value": "` + "`{{GetMeta $alert \"target_uri\"}}`" + `",
+                "inline": false
+              }
+              {{end}}
+              {{if GetMeta $alert "target_fqdn" -}}
+              ,{
+                "name": "🌐 Target URL",
+                "value": "{{range (GetMeta $alert "target_fqdn" | uniq) -}}` + "`{{.}}`" + `\n{{ end -}}",
+                "inline": false
+              }
+              {{end}}
               {{range .Meta -}}
+                {{if and (ne .Key "target_host") (ne .Key "target_uri") (ne .Key "target_fqdn") -}}
                 ,{
-                "name": "{{.Key}}",
-                "value": "{{ (splitList "," (.Value | replace "\"" "` + "`" + `" | replace "[" "" |replace "]" "")) | join "\\n"}}"
-              } 
+                  "name": "{{.Key}}",
+                  "value": "{{ (splitList "," (.Value | replace "\"" "` + "`" + `" | replace "[" "" |replace "]" "")) | join "\\n"}}",
+                  "inline": false
+                }
+                {{end -}}
               {{end -}}
               {{end -}}
         ]
