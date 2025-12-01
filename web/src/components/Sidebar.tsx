@@ -109,8 +109,7 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
           <div className="flex items-center gap-2 font-semibold text-lg">
             <Shield className="h-6 w-6 text-primary" />
             <div className="flex flex-col">
-              <span>CrowdSec</span>
-              <span className="text-sm font-normal text-muted-foreground">Manager</span>
+              <span>CrowdSec Manager</span>
               <Badge variant="secondary" className="text-[10px] px-1 py-0 h-5 mt-1 w-fit whitespace-nowrap">
               Beta-v0.0.6
               </Badge>
