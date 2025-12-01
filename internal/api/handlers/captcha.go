@@ -146,7 +146,7 @@ func SetupCaptcha(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFu
 
 		// STEP 2: Update Traefik dynamic_config.yml
 		logger.Info("Updating Traefik dynamic configuration")
-		if err := updateTraefikCaptchaConfig(dockerClient, cfg, req); err != nil {
+		if err := updateTraefikCaptchaConfig(dockerClient, cfg, req, hostTraefikPath); err != nil {
 			logger.Error("Failed to update Traefik config", "error", err)
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
@@ -360,19 +360,13 @@ func detectCaptchaInConfig(configContent string) (enabled bool, provider string,
 }
 
 // updateTraefikCaptchaConfig updates Traefik's dynamic_config.yml with captcha configuration
-func updateTraefikCaptchaConfig(dockerClient *docker.Client, cfg *config.Config, req models.CaptchaSetupRequest) error {
-	// Get host path for Traefik config
-	hostTraefikPath, found, err := dockerClient.GetHostMountPath(cfg.TraefikContainerName, "/etc/traefik")
-	if err != nil || !found {
-		return fmt.Errorf("failed to get Traefik config path: %v", err)
-	}
-
+func updateTraefikCaptchaConfig(dockerClient *docker.Client, cfg *config.Config, req models.CaptchaSetupRequest, hostTraefikPath string) error {
+	// Read existing config from host filesystem (Traefik mount is read-only)
 	dynamicConfigPath := filepath.Join(hostTraefikPath, "dynamic_config.yml")
 
-	// Read existing config
 	configBytes, err := os.ReadFile(dynamicConfigPath)
 	if err != nil {
-		return fmt.Errorf("failed to read dynamic_config.yml: %v", err)
+		return fmt.Errorf("failed to read dynamic_config.yml from host: %v", err)
 	}
 
 	// Parse YAML
@@ -394,7 +388,7 @@ func updateTraefikCaptchaConfig(dockerClient *docker.Client, cfg *config.Config,
 
 	// Find or create crowdsec bouncer middleware
 	var crowdsecPlugin map[string]interface{}
-	found = false
+	found := false
 
 	// Try different possible middleware names
 	possibleNames := []string{
@@ -446,7 +440,7 @@ func updateTraefikCaptchaConfig(dockerClient *docker.Client, cfg *config.Config,
 		"captchaDuration": "14400s",
 	}
 
-	// Backup existing file
+	// Create backup before modifying
 	backupPath := dynamicConfigPath + ".bak"
 	if err := os.WriteFile(backupPath, configBytes, 0644); err != nil {
 		logger.Warn("Failed to create backup of dynamic_config.yml", "error", err)
@@ -458,16 +452,16 @@ func updateTraefikCaptchaConfig(dockerClient *docker.Client, cfg *config.Config,
 		return fmt.Errorf("failed to marshal dynamic_config.yml: %v", err)
 	}
 
-	// Write updated config
+	// Write updated config to host filesystem
 	if err := os.WriteFile(dynamicConfigPath, newConfigBytes, 0644); err != nil {
 		// Restore backup if write fails
 		if backupBytes, err2 := os.ReadFile(backupPath); err2 == nil {
 			os.WriteFile(dynamicConfigPath, backupBytes, 0644)
 		}
-		return fmt.Errorf("failed to write dynamic_config.yml: %v", err)
+		return fmt.Errorf("failed to write dynamic_config.yml to host: %v", err)
 	}
 
-	logger.Info("Traefik dynamic config updated successfully")
+	logger.Info("Traefik dynamic config updated successfully on host filesystem")
 	return nil
 }
 
