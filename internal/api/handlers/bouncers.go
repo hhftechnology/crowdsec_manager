@@ -5,6 +5,8 @@ import (
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
 	"crowdsec-manager/internal/models"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -69,7 +71,7 @@ func GetBouncers(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFun
 	}
 }
 
-// AddBouncer adds a new bouncer
+// AddBouncer adds a new bouncer with a generated API key
 func AddBouncer(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req struct {
@@ -85,10 +87,25 @@ func AddBouncer(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc
 
 		logger.Info("Adding bouncer", "name", req.Name)
 
+		// Generate unique API key (32 bytes = 43 characters in base64 URL encoding)
+		apiKey, err := generateBouncerAPIKey()
+		if err != nil {
+			logger.Error("Failed to generate API key", "error", err)
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to generate API key: %v", err),
+			})
+			return
+		}
+
+		logger.Debug("Generated API key for bouncer", "name", req.Name, "key_length", len(apiKey))
+
+		// Add bouncer with the generated key
 		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
-			"cscli", "bouncers", "add", req.Name, "-o", "json",
+			"cscli", "bouncers", "add", req.Name, "--key", apiKey,
 		})
 		if err != nil {
+			logger.Error("Failed to add bouncer", "error", err, "output", output)
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
 				Error:   fmt.Sprintf("Failed to add bouncer: %v", err),
@@ -96,47 +113,32 @@ func AddBouncer(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc
 			return
 		}
 
-		// cscli bouncers add returns the API key as a JSON string or an object depending on version
-		// Log output: "72iDIWLzUIm6Bwd2uLh2Pg6mo7FaDl+YV00etlpuyHA"
-		var apiKey string
-		if err := json.Unmarshal([]byte(output), &apiKey); err == nil {
-			// Successfully parsed as string
-			c.JSON(http.StatusOK, models.Response{
-				Success: true,
-				Message: "Bouncer added successfully",
-				Data: map[string]string{
-					"name":    req.Name,
-					"api_key": apiKey,
-				},
-			})
-			return
-		}
+		logger.Info("Bouncer added successfully", "name", req.Name)
 
-		// Try parsing as array of objects (older versions or different output format)
-		var result []map[string]string
-		if err := json.Unmarshal([]byte(output), &result); err != nil {
-			logger.Error("Failed to parse add bouncer output", "error", err, "output", output)
-			c.JSON(http.StatusInternalServerError, models.Response{
-				Success: false,
-				Error:   "Failed to parse bouncer creation response",
-			})
-			return
-		}
-
-		if len(result) == 0 {
-			c.JSON(http.StatusInternalServerError, models.Response{
-				Success: false,
-				Error:   "No bouncer data returned",
-			})
-			return
-		}
-
+		// Return the bouncer info with the generated API key
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
-			Message: "Bouncer added successfully",
-			Data:    result[0],
+			Message: fmt.Sprintf("Bouncer '%s' added successfully. Save the API key - it won't be shown again!", req.Name),
+			Data: gin.H{
+				"name":    req.Name,
+				"api_key": apiKey,
+			},
 		})
 	}
+}
+
+// generateBouncerAPIKey generates a cryptographically secure random API key
+// The key is 32 bytes encoded as base64 URL-safe string (43 characters)
+func generateBouncerAPIKey() (string, error) {
+	// Generate 32 random bytes (256 bits)
+	randomBytes := make([]byte, 32)
+	if _, err := rand.Read(randomBytes); err != nil {
+		return "", fmt.Errorf("failed to generate random bytes: %w", err)
+	}
+
+	// Encode as base64 URL-safe string (no padding)
+	apiKey := base64.RawURLEncoding.EncodeToString(randomBytes)
+	return apiKey, nil
 }
 
 // DeleteBouncer deletes a bouncer
