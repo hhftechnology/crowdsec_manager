@@ -55,6 +55,12 @@ func GetDecisions(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFu
 				alertCreatedAt = createdAt
 			}
 
+			// Get alert's ID
+			var alertID int64
+			if id, err := jsonparser.GetInt(alertValue, "id"); err == nil {
+				alertID = id
+			}
+
 			// Parse decisions array within this alert
 			jsonparser.ArrayEach(alertValue, func(decisionValue []byte, decisionType jsonparser.ValueType, decisionOffset int, decisionErr error) {
 				var decision models.Decision
@@ -92,6 +98,9 @@ func GetDecisions(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFu
 				if decision.CreatedAt == "" {
 					decision.CreatedAt = alertCreatedAt
 				}
+
+				// Set AlertID
+				decision.AlertID = alertID
 
 				decisions = append(decisions, decision)
 			}, "decisions")
@@ -293,6 +302,12 @@ func GetDecisionsAnalysis(dockerClient *docker.Client, cfg *config.Config) gin.H
 				alertCreatedAt = createdAt
 			}
 
+			// Get alert's ID
+			var alertID int64
+			if id, err := jsonparser.GetInt(alertValue, "id"); err == nil {
+				alertID = id
+			}
+
 			// Parse decisions array within this alert
 			jsonparser.ArrayEach(alertValue, func(decisionValue []byte, decisionType jsonparser.ValueType, decisionOffset int, decisionErr error) {
 				var decision models.Decision
@@ -331,6 +346,9 @@ func GetDecisionsAnalysis(dockerClient *docker.Client, cfg *config.Config) gin.H
 					decision.CreatedAt = alertCreatedAt
 				}
 
+				// Set AlertID
+				decision.AlertID = alertID
+
 				decisions = append(decisions, decision)
 			}, "decisions")
 		})
@@ -364,26 +382,40 @@ func GetAlertsAnalysis(dockerClient *docker.Client, cfg *config.Config) gin.Hand
 		cmd := []string{"cscli", "alerts", "list", "-o", "json"}
 
 		// Add filters based on query parameters
+		// Add filters based on query parameters
+		if v := c.Query("id"); v != "" {
+			cmd = append(cmd, "--id", v)
+		}
+		if v := c.Query("ip"); v != "" {
+			cmd = append(cmd, "--ip", v)
+		}
+		if v := c.Query("range"); v != "" {
+			cmd = append(cmd, "--range", v)
+		}
+		if v := c.Query("type"); v != "" && v != "all" {
+			cmd = append(cmd, "--type", v)
+		}
+		if v := c.Query("scope"); v != "" && v != "all" {
+			cmd = append(cmd, "--scope", v)
+		}
+		if v := c.Query("value"); v != "" {
+			cmd = append(cmd, "--value", v)
+		}
+		if v := c.Query("scenario"); v != "" {
+			cmd = append(cmd, "--scenario", v)
+		}
+		if v := c.Query("origin"); v != "" && v != "all" {
+			cmd = append(cmd, "--origin", v)
+		}
 		if v := c.Query("since"); v != "" {
 			cmd = append(cmd, "--since", v)
 		}
 		if v := c.Query("until"); v != "" {
 			cmd = append(cmd, "--until", v)
 		}
-		// cscli alerts list doesn't support all the same filters as decisions list directly in the same way,
-		// but let's try to map what we can.
-		// Note: cscli alerts list filters are a bit different.
-		// Common ones: --since, --until, --scenario, --ip, --range
-		
-		if v := c.Query("ip"); v != "" {
-			// cscli alerts list doesn't have --ip, it filters by value usually?
-			// Actually it does not seem to have specific --ip flag in all versions.
-			// But let's check help or assume standard filters.
-			// If not supported, we might need to filter in memory or ignore.
-			// For now, let's assume basic filters.
+		if v := c.Query("includeAll"); v == "true" {
+			cmd = append(cmd, "-a")
 		}
-		
-		// For now, let's just use basic list and maybe --since/--until
 		
 		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, cmd)
 		if err != nil {

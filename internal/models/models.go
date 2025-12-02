@@ -55,6 +55,7 @@ type Alert struct {
 // Decision represents a CrowdSec decision
 type Decision struct {
 	ID        int64  `json:"id"`
+	AlertID   int64  `json:"alert_id"`           // ID of the parent alert
 	Origin    string `json:"origin"`             // Source of the decision (crowdsec, cscli, etc.)
 	Type      string `json:"type"`               // Decision type (ban, captcha, etc.)
 	Scope     string `json:"scope"`              // Scope (Ip, Range, etc.)

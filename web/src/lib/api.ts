@@ -31,6 +31,7 @@ export interface HealthStatus {
 
 export interface Decision {
   id: number
+  alert_id: number
   origin: string
   type: string
   scope: string

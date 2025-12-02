@@ -63,9 +63,9 @@ export default function DecisionAnalysis() {
     }
 
     const csvContent = [
-      ['ID', 'Type', 'Scope', 'Value', 'Origin', 'Scenario', 'Duration', 'Created At'].join(','),
+      ['ID', 'Alert ID', 'Type', 'Scope', 'Value', 'Origin', 'Scenario', 'Duration', 'Created At'].join(','),
       ...decisionsData.decisions.map((d: Decision) =>
-        [d.id, d.type, d.scope, d.value, d.origin, d.scenario, d.duration, d.created_at].join(',')
+        [d.id, d.alert_id, d.type, d.scope, d.value, d.origin, d.scenario, d.duration, d.created_at].join(',')
       ),
     ].join('\n')
 
@@ -299,6 +299,8 @@ export default function DecisionAnalysis() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead>ID</TableHead>
+                    <TableHead>Alert ID</TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead>Scope</TableHead>
                     <TableHead>Value</TableHead>
@@ -311,6 +313,8 @@ export default function DecisionAnalysis() {
                 <TableBody>
                   {decisionsData.decisions.map((decision: Decision, index: number) => (
                     <TableRow key={decision.id || index}>
+                      <TableCell className="font-mono text-xs">{decision.id}</TableCell>
+                      <TableCell className="font-mono text-xs">{decision.alert_id}</TableCell>
                       <TableCell>
                         <Badge variant={decision.type === 'ban' ? 'destructive' : 'default'}>
                           {decision.type}
