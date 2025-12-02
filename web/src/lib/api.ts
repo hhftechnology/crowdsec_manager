@@ -42,6 +42,27 @@ export interface Decision {
   until?: string
 }
 
+export interface AddDecisionRequest {
+  ip?: string
+  range?: string
+  duration?: string
+  type?: string
+  scope?: string
+  value?: string
+  reason?: string
+}
+
+export interface DeleteDecisionRequest {
+  id?: string
+  ip?: string
+  range?: string
+  type?: string
+  scope?: string
+  value?: string
+  scenario?: string
+  origin?: string
+}
+
 export interface Bouncer {
   name: string
   ip_address: string
@@ -476,6 +497,22 @@ export const crowdsecAPI = {
 
   getAlertsAnalysis: (filters: AlertFilters) =>
     api.get<ApiResponse<{ alerts: any[]; count: number }>>('/crowdsec/alerts/analysis', { params: filters }),
+
+  addDecision: (data: AddDecisionRequest) =>
+    api.post<ApiResponse>('/crowdsec/decisions', data),
+
+  deleteDecision: (params: DeleteDecisionRequest) =>
+    api.delete<ApiResponse>('/crowdsec/decisions', { params }),
+
+  importDecisions: (file: File) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return api.post<ApiResponse>('/crowdsec/decisions/import', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+  },
 }
 
 // =============================================================================
