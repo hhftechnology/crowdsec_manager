@@ -109,19 +109,21 @@ func SetupCaptcha(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFu
 		captchaHTML = strings.ReplaceAll(captchaHTML, "{{.RedirectURL}}", "")
 		captchaHTML = strings.ReplaceAll(captchaHTML, "{{.CaptchaValue}}", "")
 
-		// Get host path for Traefik config directory
-		hostTraefikPath, found, err := dockerClient.GetHostMountPath(cfg.TraefikContainerName, "/etc/traefik")
-		if err != nil || !found {
-			logger.Error("Failed to get Traefik config path", "error", err, "found", found)
+		// Use local path for Traefik config directory (mapped via /app/config)
+		traefikConfigDir := filepath.Join(cfg.ConfigDir, "traefik")
+		
+		// Verify the directory exists
+		if _, err := os.Stat(traefikConfigDir); err != nil {
+			logger.Error("Traefik config directory not found", "path", traefikConfigDir, "error", err)
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
-				Error:   "Failed to locate Traefik configuration directory",
+				Error:   "Traefik configuration directory not found",
 			})
 			return
 		}
 
 		// Create conf directory if it doesn't exist
-		confDir := filepath.Join(hostTraefikPath, "conf")
+		confDir := filepath.Join(traefikConfigDir, "conf")
 		if err := os.MkdirAll(confDir, 0755); err != nil {
 			logger.Error("Failed to create conf directory", "error", err, "path", confDir)
 			c.JSON(http.StatusInternalServerError, models.Response{
@@ -146,7 +148,7 @@ func SetupCaptcha(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFu
 
 		// STEP 2: Update Traefik dynamic_config.yml
 		logger.Info("Updating Traefik dynamic configuration")
-		if err := updateTraefikCaptchaConfig(dockerClient, cfg, req, hostTraefikPath); err != nil {
+		if err := updateTraefikCaptchaConfig(dockerClient, cfg, req, traefikConfigDir); err != nil {
 			logger.Error("Failed to update Traefik config", "error", err)
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
@@ -265,22 +267,16 @@ func GetCaptchaStatus(dockerClient *docker.Client, db *database.Database, cfg *c
 			configured, detectedProvider, hasHTMLPath = detectCaptchaInConfig(configContent)
 		}
 
-		// Check if captcha.html exists on host filesystem
+		// Check if captcha.html exists on local filesystem (via /app/config mount)
 		captchaHTMLExistsOnHost := false
 		hostHTMLPath := ""
-		hostConfPath, found, hostErr := dockerClient.GetHostMountPath(cfg.TraefikContainerName, "/etc/traefik/conf")
-		if hostErr == nil && !found {
-			// Try /etc/traefik and append /conf
-			hostTraefikPath, found, err := dockerClient.GetHostMountPath(cfg.TraefikContainerName, "/etc/traefik")
-			if err == nil && found {
-				hostConfPath = filepath.Join(hostTraefikPath, "conf")
-			}
-		}
-		if hostConfPath != "" {
-			hostHTMLPath = filepath.Join(hostConfPath, "captcha.html")
-			if _, err := os.Stat(hostHTMLPath); err == nil {
-				captchaHTMLExistsOnHost = true
-			}
+		
+		// Use local path: /app/config/traefik/conf/captcha.html
+		localConfPath := filepath.Join(cfg.ConfigDir, "traefik", "conf")
+		hostHTMLPath = filepath.Join(localConfPath, "captcha.html")
+		
+		if _, err := os.Stat(hostHTMLPath); err == nil {
+			captchaHTMLExistsOnHost = true
 		}
 
 		// Check if captcha.html exists in Traefik container (verifies mount is working)
@@ -360,13 +356,13 @@ func detectCaptchaInConfig(configContent string) (enabled bool, provider string,
 }
 
 // updateTraefikCaptchaConfig updates Traefik's dynamic_config.yml with captcha configuration
-func updateTraefikCaptchaConfig(dockerClient *docker.Client, cfg *config.Config, req models.CaptchaSetupRequest, hostTraefikPath string) error {
-	// Read existing config from host filesystem (Traefik mount is read-only)
-	dynamicConfigPath := filepath.Join(hostTraefikPath, "dynamic_config.yml")
+func updateTraefikCaptchaConfig(dockerClient *docker.Client, cfg *config.Config, req models.CaptchaSetupRequest, traefikConfigDir string) error {
+	// Read existing config from local filesystem (via /app/config mount)
+	dynamicConfigPath := filepath.Join(traefikConfigDir, "dynamic_config.yml")
 
 	configBytes, err := os.ReadFile(dynamicConfigPath)
 	if err != nil {
-		return fmt.Errorf("failed to read dynamic_config.yml from host: %v", err)
+		return fmt.Errorf("failed to read dynamic_config.yml from local path: %v", err)
 	}
 
 	// Parse YAML
@@ -458,10 +454,10 @@ func updateTraefikCaptchaConfig(dockerClient *docker.Client, cfg *config.Config,
 		if backupBytes, err2 := os.ReadFile(backupPath); err2 == nil {
 			os.WriteFile(dynamicConfigPath, backupBytes, 0644)
 		}
-		return fmt.Errorf("failed to write dynamic_config.yml to host: %v", err)
+		return fmt.Errorf("failed to write dynamic_config.yml to local path: %v", err)
 	}
 
-	logger.Info("Traefik dynamic config updated successfully on host filesystem")
+	logger.Info("Traefik dynamic config updated successfully on local filesystem")
 	return nil
 }
 
