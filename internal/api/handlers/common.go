@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"crowdsec-manager/internal/logger"
 	"crowdsec-manager/internal/models"
 
 	"github.com/gin-gonic/gin"
@@ -102,12 +103,27 @@ func GetConsoleStatusHelper(dockerClient interface {
 		return models.ConsoleStatus{}, err
 	}
 
+	// Log the raw output for debugging
+	logger.Info("Console status raw output", "output", output)
+
 	var status models.ConsoleStatus
 	if err := json.Unmarshal([]byte(output), &status); err != nil {
+		logger.Warn("Failed to parse console status JSON, attempting fallback", "error", err)
+		
 		// Fallback to simple string check if JSON parsing fails
 		// This handles cases where older versions might not output valid JSON or other issues
-		status.Enrolled = strings.Contains(output, "enrolled: true") || strings.Contains(output, `"enrolled":true`)
-		status.Validated = strings.Contains(output, "validated: true") || strings.Contains(output, `"validated":true`)
+		// We check for various formats (YAML-like, JSON with/without spaces)
+		status.Enrolled = strings.Contains(output, "enrolled: true") || 
+			strings.Contains(output, `"enrolled":true`) || 
+			strings.Contains(output, `"enrolled": true`)
+			
+		status.Validated = strings.Contains(output, "validated: true") || 
+			strings.Contains(output, `"validated":true`) || 
+			strings.Contains(output, `"validated": true`)
+			
+		status.Manual = strings.Contains(output, "manual: true") || 
+			strings.Contains(output, `"manual":true`) || 
+			strings.Contains(output, `"manual": true`)
 	}
 
 	return status, nil
