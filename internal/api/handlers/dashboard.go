@@ -228,7 +228,7 @@ func GetCrowdSecEnrollmentStatus(dockerClient *docker.Client, cfg *config.Config
 			return
 		}
 
-		logger.Debug("Console status retrieved", "enrolled", status.Enrolled, "validated", status.Validated, "manual", status.Manual)
+		logger.Info("Console status retrieved", "enrolled", status.Enrolled, "validated", status.Validated, "manual", status.Manual)
 
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,

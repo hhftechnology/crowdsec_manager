@@ -364,7 +364,11 @@ type DiscordConfig struct {
 
 // ConsoleStatus represents the CrowdSec Console enrollment status
 type ConsoleStatus struct {
-	Enrolled  bool `json:"enrolled"`
-	Validated bool `json:"validated"`
-	Manual    bool `json:"manual"`
+	Enrolled          bool `json:"enrolled"`
+	Validated         bool `json:"validated"`
+	Manual            bool `json:"manual"`
+	ConsoleManagement bool `json:"console_management"`
+	Context           bool `json:"context"`
+	Custom            bool `json:"custom"`
+	Tainted           bool `json:"tainted"`
 }

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"regexp"
 	"strings"
 
 	"github.com/docker/docker/api/types"
@@ -148,10 +149,16 @@ func (c *Client) ExecCommand(containerName string, cmd []string) (string, error)
 	return stripControlCharacters(stdout.String()), nil
 }
 
+// Regex to match ANSI escape codes
+var ansiRegex = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
+
 // stripControlCharacters removes ANSI escape codes and control characters from command output
 // Essential for commands returning JSON to prevent parsing errors
 // Pre-allocates buffer for better performance
 func stripControlCharacters(s string) string {
+	// First strip ANSI codes
+	s = ansiRegex.ReplaceAllString(s, "")
+
 	var result strings.Builder
 	result.Grow(len(s))
 

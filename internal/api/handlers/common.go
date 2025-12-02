@@ -124,6 +124,21 @@ func GetConsoleStatusHelper(dockerClient interface {
 		status.Manual = strings.Contains(output, "manual: true") || 
 			strings.Contains(output, `"manual":true`) || 
 			strings.Contains(output, `"manual": true`)
+
+		status.ConsoleManagement = strings.Contains(output, "console_management: true") ||
+			strings.Contains(output, `"console_management":true`) ||
+			strings.Contains(output, `"console_management": true`)
+	}
+
+	// Map fields if Enrolled/Validated are missing but other indicators are present
+	// This handles cases where cscli returns different fields (like manual/console_management)
+	if !status.Enrolled && status.Manual {
+		status.Enrolled = true
+	}
+
+	// If console management is enabled, it implies validation/connection
+	if !status.Validated && status.ConsoleManagement {
+		status.Validated = true
 	}
 
 	return status, nil
