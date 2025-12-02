@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/goccy/go-yaml"
+	"gopkg.in/yaml.v3"
 )
 
 // Captcha HTML template for Cloudflare Turnstile
@@ -365,78 +365,162 @@ func updateTraefikCaptchaConfig(dockerClient *docker.Client, cfg *config.Config,
 		return fmt.Errorf("failed to read dynamic_config.yml from local path: %v", err)
 	}
 
-	// Parse YAML
-	var dynamicConfig map[string]interface{}
-	if err := yaml.Unmarshal(configBytes, &dynamicConfig); err != nil {
+	// Parse YAML into Node to preserve comments
+	var node yaml.Node
+	if err := yaml.Unmarshal(configBytes, &node); err != nil {
 		return fmt.Errorf("failed to parse dynamic_config.yml: %v", err)
 	}
 
-	// Ensure http.middlewares structure exists
-	if dynamicConfig["http"] == nil {
-		dynamicConfig["http"] = make(map[string]interface{})
+	// Ensure root is a mapping
+	if len(node.Content) == 0 {
+		// Empty file, initialize
+		node.Kind = yaml.DocumentNode
+		node.Content = []*yaml.Node{
+			{Kind: yaml.MappingNode},
+		}
+	} else if node.Content[0].Kind != yaml.MappingNode {
+		return fmt.Errorf("dynamic_config.yml root is not a mapping")
 	}
-	httpConf := dynamicConfig["http"].(map[string]interface{})
+	rootMap := node.Content[0]
 
-	if httpConf["middlewares"] == nil {
-		httpConf["middlewares"] = make(map[string]interface{})
+	// Helper to find or create a key in a mapping
+	findOrCreateMap := func(parent *yaml.Node, key string) *yaml.Node {
+		for i := 0; i < len(parent.Content); i += 2 {
+			if parent.Content[i].Value == key {
+				if parent.Content[i+1].Kind != yaml.MappingNode {
+					// If it exists but isn't a map, we have a problem. Overwrite?
+					// For now, let's assume structure is correct or overwrite.
+					parent.Content[i+1] = &yaml.Node{Kind: yaml.MappingNode}
+				}
+				return parent.Content[i+1]
+			}
+		}
+		// Not found, create it
+		keyNode := &yaml.Node{Kind: yaml.ScalarNode, Value: key}
+		valNode := &yaml.Node{Kind: yaml.MappingNode}
+		parent.Content = append(parent.Content, keyNode, valNode)
+		return valNode
 	}
-	middlewares := httpConf["middlewares"].(map[string]interface{})
+
+	// Navigate/Create structure: http -> middlewares
+	httpNode := findOrCreateMap(rootMap, "http")
+	middlewaresNode := findOrCreateMap(httpNode, "middlewares")
 
 	// Find or create crowdsec bouncer middleware
-	var crowdsecPlugin map[string]interface{}
-	found := false
-
-	// Try different possible middleware names
+	// We look for any middleware that has the crowdsec plugin
+	var crowdsecPluginNode *yaml.Node
+	var middlewareNode *yaml.Node
+	
 	possibleNames := []string{
 		"crowdsec-bouncer-traefik-plugin",
 		"crowdsec-bouncer",
 		"crowdsec",
 	}
 
-	for _, name := range possibleNames {
-		if mw, ok := middlewares[name].(map[string]interface{}); ok {
-			if plugin, ok := mw["plugin"].(map[string]interface{}); ok {
-				for pluginName, pluginCfg := range plugin {
-					if strings.Contains(strings.ToLower(pluginName), "crowdsec") {
-						if cfg, ok := pluginCfg.(map[string]interface{}); ok {
-							crowdsecPlugin = cfg
-							found = true
-							break
-						}
+	// Search existing
+	for i := 0; i < len(middlewaresNode.Content); i += 2 {
+		mwBody := middlewaresNode.Content[i+1]
+		
+		// Check if this middleware has the plugin
+		for j := 0; j < len(mwBody.Content); j += 2 {
+			if mwBody.Content[j].Value == "plugin" {
+				pluginBody := mwBody.Content[j+1]
+				for k := 0; k < len(pluginBody.Content); k += 2 {
+					if strings.Contains(strings.ToLower(pluginBody.Content[k].Value), "crowdsec") {
+						middlewareNode = mwBody
+						crowdsecPluginNode = pluginBody.Content[k+1]
+						break
 					}
 				}
 			}
+			if crowdsecPluginNode != nil {
+				break
+			}
 		}
-		if found {
+		if crowdsecPluginNode != nil {
 			break
 		}
 	}
 
-	// If not found, create new middleware
-	if !found {
-		middlewareName := "crowdsec-bouncer-traefik-plugin"
-		middlewares[middlewareName] = map[string]interface{}{
-			"plugin": map[string]interface{}{
-				"crowdsec-bouncer-traefik-plugin": map[string]interface{}{},
-			},
+	// If not found, create it
+	if crowdsecPluginNode == nil {
+		// Use default name
+		mwName := "crowdsec-bouncer-traefik-plugin"
+		
+		// Check if name is taken (simple check)
+		nameTaken := false
+		for i := 0; i < len(middlewaresNode.Content); i += 2 {
+			if middlewaresNode.Content[i].Value == mwName {
+				nameTaken = true
+				break
+			}
 		}
-		mw := middlewares[middlewareName].(map[string]interface{})
-		plugin := mw["plugin"].(map[string]interface{})
-		crowdsecPlugin = plugin["crowdsec-bouncer-traefik-plugin"].(map[string]interface{})
+		
+		if nameTaken {
+			// Try alternatives
+			for _, name := range possibleNames {
+				taken := false
+				for i := 0; i < len(middlewaresNode.Content); i += 2 {
+					if middlewaresNode.Content[i].Value == name {
+						taken = true
+						break
+					}
+				}
+				if !taken {
+					mwName = name
+					break
+				}
+			}
+		}
+
+		middlewareNode = findOrCreateMap(middlewaresNode, mwName)
+		pluginNode := findOrCreateMap(middlewareNode, "plugin")
+		crowdsecPluginNode = findOrCreateMap(pluginNode, "crowdsec-bouncer-traefik-plugin")
 	}
 
-	// Update captcha configuration (Flat structure as per plugin docs)
-	crowdsecPlugin["captchaProvider"] = "turnstile" // Defaulting to turnstile as per previous logic, or use req.Provider if supported
-	if req.Provider != "" {
-		crowdsecPlugin["captchaProvider"] = req.Provider
+	// Helper to set a value in a mapping
+	setScalar := func(parent *yaml.Node, key string, value string, tag string) {
+		found := false
+		for i := 0; i < len(parent.Content); i += 2 {
+			if parent.Content[i].Value == key {
+				parent.Content[i+1].Value = value
+				if tag != "" {
+					parent.Content[i+1].Tag = tag
+				}
+				found = true
+				break
+			}
+		}
+		if !found {
+			keyNode := &yaml.Node{Kind: yaml.ScalarNode, Value: key}
+			valNode := &yaml.Node{Kind: yaml.ScalarNode, Value: value}
+			if tag != "" {
+				valNode.Tag = tag
+			}
+			parent.Content = append(parent.Content, keyNode, valNode)
+		}
 	}
-	crowdsecPlugin["captchaSiteKey"] = req.SiteKey
-	crowdsecPlugin["captchaSecretKey"] = req.SecretKey
-	crowdsecPlugin["captchaHTMLFilePath"] = "/etc/traefik/conf/captcha.html"
-	crowdsecPlugin["captchaGracePeriodSeconds"] = 1800
+
+	// Update captcha configuration (Flat structure)
+	provider := "turnstile"
+	if req.Provider != "" {
+		provider = req.Provider
+	}
 	
-	// Remove old nested key if it exists to clean up
-	delete(crowdsecPlugin, "captcha")
+	setScalar(crowdsecPluginNode, "captchaProvider", provider, "")
+	setScalar(crowdsecPluginNode, "captchaSiteKey", req.SiteKey, "")
+	setScalar(crowdsecPluginNode, "captchaSecretKey", req.SecretKey, "")
+	setScalar(crowdsecPluginNode, "captchaHTMLFilePath", "/etc/traefik/conf/captcha.html", "")
+	setScalar(crowdsecPluginNode, "captchaGracePeriodSeconds", "1800", "!!int")
+
+	// Remove old nested "captcha" key if it exists
+	for i := 0; i < len(crowdsecPluginNode.Content); i += 2 {
+		if crowdsecPluginNode.Content[i].Value == "captcha" {
+			// Remove key and value
+			crowdsecPluginNode.Content = append(crowdsecPluginNode.Content[:i], crowdsecPluginNode.Content[i+2:]...)
+			break
+		}
+	}
 
 	// Create backup before modifying
 	backupPath := dynamicConfigPath + ".bak"
@@ -445,7 +529,7 @@ func updateTraefikCaptchaConfig(dockerClient *docker.Client, cfg *config.Config,
 	}
 
 	// Marshal back to YAML
-	newConfigBytes, err := yaml.Marshal(dynamicConfig)
+	newConfigBytes, err := yaml.Marshal(&node)
 	if err != nil {
 		return fmt.Errorf("failed to marshal dynamic_config.yml: %v", err)
 	}
@@ -473,48 +557,103 @@ func updateCrowdSecProfiles(dockerClient *docker.Client, cfg *config.Config) err
 		return fmt.Errorf("failed to read profiles.yaml: %v", err)
 	}
 
-	// Parse existing profiles
-	var profiles []map[string]interface{}
-	if err := yaml.Unmarshal([]byte(output), &profiles); err != nil {
-		// If parsing fails, use default profile
-		profiles = []map[string]interface{}{}
+	// Parse YAML into Node
+	var node yaml.Node
+	if err := yaml.Unmarshal([]byte(output), &node); err != nil {
+		// If parsing fails, we can't safely edit.
+		return fmt.Errorf("failed to parse profiles.yaml: %v", err)
 	}
 
-	// Find or create default_ip_remediation profile
-	defaultProfile := map[string]interface{}{
-		"name": "default_ip_remediation",
-		"filters": []string{
-			"Alert.Remediation == true && Alert.GetScope() == 'Ip'",
-		},
-		"decisions": []map[string]interface{}{
-			{
-				"type":     "ban",
-				"duration": "4h",
-			},
-			{
-				"type":     "captcha",
-				"duration": "4h",
-			},
-		},
-		"on_success": "break",
+	if len(node.Content) == 0 {
+		// Empty file
+		node.Kind = yaml.DocumentNode
+		node.Content = []*yaml.Node{
+			{Kind: yaml.SequenceNode},
+		}
+	} else if node.Content[0].Kind != yaml.SequenceNode {
+		return fmt.Errorf("profiles.yaml root is not a sequence")
 	}
+	rootSeq := node.Content[0]
 
-	// Check if profile already exists
-	profileExists := false
-	for i, profile := range profiles {
-		if name, ok := profile["name"].(string); ok && name == "default_ip_remediation" {
-			profiles[i] = defaultProfile
-			profileExists = true
+	// Find default_ip_remediation profile
+	var profileNode *yaml.Node
+	
+	for _, item := range rootSeq.Content {
+		if item.Kind == yaml.MappingNode {
+			for i := 0; i < len(item.Content); i += 2 {
+				if item.Content[i].Value == "name" && item.Content[i+1].Value == "default_ip_remediation" {
+					profileNode = item
+					break
+				}
+			}
+		}
+		if profileNode != nil {
 			break
 		}
 	}
 
-	if !profileExists {
-		profiles = append(profiles, defaultProfile)
+	if profileNode == nil {
+		// Create new profile
+		// We construct it manually to ensure correct structure
+		newProfileYAML := `
+name: default_ip_remediation
+filters:
+ - Alert.Remediation == true && Alert.GetScope() == 'Ip'
+decisions:
+ - type: ban
+   duration: 4h
+ - type: captcha
+   duration: 4h
+on_success: break
+`
+		var newNode yaml.Node
+		if err := yaml.Unmarshal([]byte(newProfileYAML), &newNode); err == nil && len(newNode.Content) > 0 {
+			rootSeq.Content = append(rootSeq.Content, newNode.Content[0])
+		}
+	} else {
+		// Update existing profile
+		// Find "decisions" key
+		var decisionsNode *yaml.Node
+		for i := 0; i < len(profileNode.Content); i += 2 {
+			if profileNode.Content[i].Value == "decisions" {
+				decisionsNode = profileNode.Content[i+1]
+				break
+			}
+		}
+
+		if decisionsNode == nil {
+			// Add decisions key
+			keyNode := &yaml.Node{Kind: yaml.ScalarNode, Value: "decisions"}
+			decisionsNode = &yaml.Node{Kind: yaml.SequenceNode}
+			profileNode.Content = append(profileNode.Content, keyNode, decisionsNode)
+		}
+
+		// Check if captcha decision exists
+		hasCaptcha := false
+		for _, decision := range decisionsNode.Content {
+			for i := 0; i < len(decision.Content); i += 2 {
+				if decision.Content[i].Value == "type" && decision.Content[i+1].Value == "captcha" {
+					hasCaptcha = true
+					break
+				}
+			}
+		}
+
+		if !hasCaptcha {
+			// Add captcha decision
+			captchaDecisionYAML := `
+type: captcha
+duration: 4h
+`
+			var newDecisionNode yaml.Node
+			if err := yaml.Unmarshal([]byte(captchaDecisionYAML), &newDecisionNode); err == nil && len(newDecisionNode.Content) > 0 {
+				decisionsNode.Content = append(decisionsNode.Content, newDecisionNode.Content[0])
+			}
+		}
 	}
 
-	// Marshal to YAML
-	newProfileBytes, err := yaml.Marshal(profiles)
+	// Marshal back to YAML
+	newProfileBytes, err := yaml.Marshal(&node)
 	if err != nil {
 		return fmt.Errorf("failed to marshal profiles: %v", err)
 	}
@@ -525,6 +664,10 @@ func updateCrowdSecProfiles(dockerClient *docker.Client, cfg *config.Config) err
 	})
 
 	// Write new profiles.yaml
+	// We need to be careful with echo and large/complex content.
+	// Using a temporary file approach or writing via stdin would be safer if possible,
+	// but ExecCommand doesn't easily support stdin.
+	// We'll escape single quotes.
 	escapedContent := strings.ReplaceAll(string(newProfileBytes), "'", "'\\''")
 	_, err = dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
 		"sh", "-c", fmt.Sprintf("echo '%s' > /etc/crowdsec/profiles.yaml", escapedContent),

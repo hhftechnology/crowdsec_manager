@@ -15,7 +15,7 @@ import (
 	"crowdsec-manager/internal/models"
 
 	"github.com/gin-gonic/gin"
-	"github.com/goccy/go-yaml"
+	"gopkg.in/yaml.v3"
 )
 
 // DiscordTemplate is the template for discord.yaml
@@ -358,62 +358,107 @@ func isDiscordEnabled(path string) (bool, error) {
 	return strings.Contains(string(data), "- discord"), nil
 }
 
+// updateProfilesYaml updates profiles.yaml to enable/disable discord notifications
 func updateProfilesYaml(path string, enable bool) error {
-	// Reading the file
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return err
 	}
 
-	content := string(data)
-	hasDiscord := strings.Contains(content, "- discord")
-
-	if enable && !hasDiscord {
-		// Add discord to notifications
-		// We look for "notifications:" and add "- discord" under it.
-		// This is a bit brittle with string replacement but safer than re-marshalling which might lose comments/formatting.
-		if strings.Contains(content, "notifications:") {
-			lines := strings.Split(content, "\n")
-			var newLines []string
-			for _, line := range lines {
-				newLines = append(newLines, line)
-				if strings.TrimSpace(line) == "notifications:" {
-					// Check indentation
-					indent := ""
-					for _, char := range line {
-						if char == ' ' || char == '\t' {
-							indent += string(char)
-						} else {
-							break
-						}
-					}
-					newLines = append(newLines, indent+"  - discord")
-				}
-			}
-			return os.WriteFile(path, []byte(strings.Join(newLines, "\n")), 0644)
-		} else {
-			// If no notifications section, append it to the end
-			newContent := content
-			if !strings.HasSuffix(newContent, "\n") {
-				newContent += "\n"
-			}
-			newContent += "notifications:\n  - discord\n"
-			return os.WriteFile(path, []byte(newContent), 0644)
-		}
-	} else if !enable && hasDiscord {
-		// Remove discord
-		lines := strings.Split(content, "\n")
-		var newLines []string
-		for _, line := range lines {
-			if strings.Contains(line, "- discord") {
-				continue
-			}
-			newLines = append(newLines, line)
-		}
-		return os.WriteFile(path, []byte(strings.Join(newLines, "\n")), 0644)
+	var node yaml.Node
+	if err := yaml.Unmarshal(data, &node); err != nil {
+		return fmt.Errorf("failed to parse profiles.yaml: %v", err)
 	}
 
-	return nil
+	if len(node.Content) == 0 {
+		// Empty file
+		node.Kind = yaml.DocumentNode
+		node.Content = []*yaml.Node{
+			{Kind: yaml.SequenceNode},
+		}
+	} else if node.Content[0].Kind != yaml.SequenceNode {
+		// profiles.yaml root should be a sequence of profiles
+		return fmt.Errorf("profiles.yaml root is not a sequence")
+	}
+	rootSeq := node.Content[0]
+
+	// We need to find the "notifications" section.
+	// It can be at the top level (global) or inside a profile?
+	// CrowdSec docs say 'notifications' is a top-level key in profiles.yaml?
+	// Actually, profiles.yaml contains a list of profiles.
+	// Notifications are usually defined in a separate notifications.yaml or similar, 
+	// BUT they are referenced in profiles.yaml under `notifications:` list within a profile.
+	// OR there is a top-level `notifications:` list in profiles.yaml?
+	// Let's assume we want to add it to the default profile or all profiles?
+	// The previous code looked for "notifications:" string.
+	
+	// Let's look for the profile named "default_ip_remediation" or just the first profile.
+	// Or we can add it to all profiles?
+	// For now, let's try to find "notifications" key in any mapping in the sequence.
+	
+	updated := false
+	for _, profile := range rootSeq.Content {
+		if profile.Kind == yaml.MappingNode {
+			// Find "notifications" key
+			var notificationsNode *yaml.Node
+			for i := 0; i < len(profile.Content); i += 2 {
+				if profile.Content[i].Value == "notifications" {
+					notificationsNode = profile.Content[i+1]
+					break
+				}
+			}
+
+			if enable {
+				if notificationsNode == nil {
+					// Add notifications key
+					keyNode := &yaml.Node{Kind: yaml.ScalarNode, Value: "notifications"}
+					notificationsNode = &yaml.Node{Kind: yaml.SequenceNode}
+					profile.Content = append(profile.Content, keyNode, notificationsNode)
+				}
+				
+				// Check if discord exists
+				hasDiscord := false
+				for _, n := range notificationsNode.Content {
+					if n.Value == "discord" {
+						hasDiscord = true
+						break
+					}
+				}
+				
+				if !hasDiscord {
+					notificationsNode.Content = append(notificationsNode.Content, &yaml.Node{Kind: yaml.ScalarNode, Value: "discord"})
+					updated = true
+				}
+			} else {
+				if notificationsNode != nil {
+					// Remove discord
+					var newContent []*yaml.Node
+					for _, n := range notificationsNode.Content {
+						if n.Value != "discord" {
+							newContent = append(newContent, n)
+						} else {
+							updated = true
+						}
+					}
+					notificationsNode.Content = newContent
+				}
+			}
+		}
+	}
+
+	if !updated && enable {
+		// If we didn't find any profile to update, maybe we should create one?
+		// Or maybe the file structure is different.
+		// For now, if we didn't update anything, we might want to log a warning or force add to the first profile.
+	}
+
+	// Marshal back
+	newData, err := yaml.Marshal(&node)
+	if err != nil {
+		return fmt.Errorf("failed to marshal profiles.yaml: %v", err)
+	}
+
+	return os.WriteFile(path, newData, 0644)
 }
 
 // generateDiscordYamlInContainer writes discord.yaml directly to CrowdSec container config
@@ -449,48 +494,113 @@ func updateDockerComposeEnvOnly(composePath string, config models.DiscordConfig)
 		return fmt.Errorf("failed to read docker-compose.yml: %w", err)
 	}
 
-	// Parse YAML
-	var compose map[string]interface{}
-	if err := yaml.Unmarshal(data, &compose); err != nil {
+	// Parse YAML into Node
+	var node yaml.Node
+	if err := yaml.Unmarshal(data, &node); err != nil {
 		return fmt.Errorf("failed to parse docker-compose.yml: %w", err)
 	}
 
-	// Navigate to services -> crowdsec
-	services, ok := compose["services"].(map[string]interface{})
-	if !ok {
-		return fmt.Errorf("services section not found in docker-compose.yml")
+	if len(node.Content) == 0 || node.Content[0].Kind != yaml.MappingNode {
+		return fmt.Errorf("docker-compose.yml root is not a mapping")
+	}
+	rootMap := node.Content[0]
+
+	// Helper to find key in mapping
+	findKey := func(parent *yaml.Node, key string) *yaml.Node {
+		for i := 0; i < len(parent.Content); i += 2 {
+			if parent.Content[i].Value == key {
+				return parent.Content[i+1]
+			}
+		}
+		return nil
 	}
 
-	crowdsec, ok := services["crowdsec"].(map[string]interface{})
-	if !ok {
-		return fmt.Errorf("crowdsec service not found in docker-compose.yml")
+	// Navigate to services -> crowdsec
+	servicesNode := findKey(rootMap, "services")
+	if servicesNode == nil {
+		return fmt.Errorf("services section not found")
+	}
+
+	crowdsecNode := findKey(servicesNode, "crowdsec")
+	if crowdsecNode == nil {
+		return fmt.Errorf("crowdsec service not found")
 	}
 
 	// Update environment variables
-	env, ok := crowdsec["environment"]
-	if !ok {
-		// Create environment map if it doesn't exist
-		crowdsec["environment"] = make(map[string]interface{})
-		env = crowdsec["environment"]
+	// environment can be a sequence (list) or a mapping (dict).
+	// We need to handle both or assume one. Docker Compose supports both.
+	// The existing code assumed map[string]interface{}.
+	// Let's check what it is.
+	
+	var envNode *yaml.Node
+	for i := 0; i < len(crowdsecNode.Content); i += 2 {
+		if crowdsecNode.Content[i].Value == "environment" {
+			envNode = crowdsecNode.Content[i+1]
+			break
+		}
 	}
 
-	envMap, ok := env.(map[string]interface{})
-	if !ok {
+	if envNode == nil {
+		// Create environment as mapping
+		keyNode := &yaml.Node{Kind: yaml.ScalarNode, Value: "environment"}
+		envNode = &yaml.Node{Kind: yaml.MappingNode}
+		crowdsecNode.Content = append(crowdsecNode.Content, keyNode, envNode)
+	}
+
+	if envNode.Kind == yaml.MappingNode {
+		// Helper to set scalar in map
+		setScalar := func(parent *yaml.Node, key string, value string) {
+			found := false
+			for i := 0; i < len(parent.Content); i += 2 {
+				if parent.Content[i].Value == key {
+					parent.Content[i+1].Value = value
+					found = true
+					break
+				}
+			}
+			if !found {
+				parent.Content = append(parent.Content, 
+					&yaml.Node{Kind: yaml.ScalarNode, Value: key},
+					&yaml.Node{Kind: yaml.ScalarNode, Value: value},
+				)
+			}
+		}
+
+		setScalar(envNode, "GEOAPIFY_API_KEY", config.GeoapifyKey)
+		setScalar(envNode, "DISCORD_WEBHOOK_ID", config.WebhookID)
+		setScalar(envNode, "DISCORD_WEBHOOK_TOKEN", config.WebhookToken)
+		if config.CTIKey != "" {
+			setScalar(envNode, "CTI_API_KEY", config.CTIKey)
+		}
+	} else if envNode.Kind == yaml.SequenceNode {
+		// Handle list format: - KEY=VALUE
+		updateListEnv := func(key, value string) {
+			prefix := key + "="
+			found := false
+			for _, item := range envNode.Content {
+				if strings.HasPrefix(item.Value, prefix) {
+					item.Value = fmt.Sprintf("%s=%s", key, value)
+					found = true
+					break
+				}
+			}
+			if !found {
+				envNode.Content = append(envNode.Content, &yaml.Node{Kind: yaml.ScalarNode, Value: fmt.Sprintf("%s=%s", key, value)})
+			}
+		}
+
+		updateListEnv("GEOAPIFY_API_KEY", config.GeoapifyKey)
+		updateListEnv("DISCORD_WEBHOOK_ID", config.WebhookID)
+		updateListEnv("DISCORD_WEBHOOK_TOKEN", config.WebhookToken)
+		if config.CTIKey != "" {
+			updateListEnv("CTI_API_KEY", config.CTIKey)
+		}
+	} else {
 		return fmt.Errorf("environment section has unexpected format")
 	}
 
-	// Add/update environment variables with actual values
-	envMap["GEOAPIFY_API_KEY"] = config.GeoapifyKey
-	envMap["DISCORD_WEBHOOK_ID"] = config.WebhookID
-	envMap["DISCORD_WEBHOOK_TOKEN"] = config.WebhookToken
-	if config.CTIKey != "" {
-		envMap["CTI_API_KEY"] = config.CTIKey
-	}
-
-	// DO NOT add volume mount - discord.yaml is written directly to crowdsec-config volume
-
 	// Write back to file
-	updatedData, err := yaml.Marshal(compose)
+	updatedData, err := yaml.Marshal(&node)
 	if err != nil {
 		return fmt.Errorf("failed to marshal docker-compose.yml: %w", err)
 	}
@@ -576,37 +686,71 @@ func updateCrowdSecConfig(configPath string, enableCTI bool) error {
 		return fmt.Errorf("failed to read config.yaml: %w", err)
 	}
 
-	// Parse YAML
-	var config map[string]interface{}
-	if err := yaml.Unmarshal(data, &config); err != nil {
+	// Parse YAML into Node
+	var node yaml.Node
+	if err := yaml.Unmarshal(data, &node); err != nil {
 		return fmt.Errorf("failed to parse config.yaml: %w", err)
 	}
 
-	// Navigate to api section
-	api, ok := config["api"]
-	if !ok {
-		config["api"] = make(map[string]interface{})
-		api = config["api"]
+	if len(node.Content) == 0 || node.Content[0].Kind != yaml.MappingNode {
+		return fmt.Errorf("config.yaml root is not a mapping")
+	}
+	rootMap := node.Content[0]
+
+	// Find api section
+	var apiNode *yaml.Node
+	for i := 0; i < len(rootMap.Content); i += 2 {
+		if rootMap.Content[i].Value == "api" {
+			apiNode = rootMap.Content[i+1]
+			break
+		}
 	}
 
-	apiMap, ok := api.(map[string]interface{})
-	if !ok {
-		return fmt.Errorf("api section has unexpected format")
+	if apiNode == nil {
+		// Create api section
+		keyNode := &yaml.Node{Kind: yaml.ScalarNode, Value: "api"}
+		apiNode = &yaml.Node{Kind: yaml.MappingNode}
+		rootMap.Content = append(rootMap.Content, keyNode, apiNode)
+	}
+
+	if apiNode.Kind != yaml.MappingNode {
+		return fmt.Errorf("api section is not a mapping")
 	}
 
 	// Add CTI configuration
-	ctiConfig := map[string]interface{}{
-		"key":           "${CTI_API_KEY}",
-		"cache_timeout": "60m",
-		"cache_size":    50,
-		"enabled":       true,
-		"log_level":     "debug",
+	ctiConfigYAML := `
+key: "${CTI_API_KEY}"
+cache_timeout: 60m
+cache_size: 50
+enabled: true
+log_level: debug
+`
+	var ctiNode yaml.Node
+	if err := yaml.Unmarshal([]byte(ctiConfigYAML), &ctiNode); err != nil {
+		return fmt.Errorf("failed to parse cti config template: %v", err)
 	}
 
-	apiMap["cti"] = ctiConfig
+	// Check if cti exists
+	found := false
+	for i := 0; i < len(apiNode.Content); i += 2 {
+		if apiNode.Content[i].Value == "cti" {
+			// Update existing? Or just leave it?
+			// Let's overwrite it to ensure it's correct
+			apiNode.Content[i+1] = ctiNode.Content[0]
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		apiNode.Content = append(apiNode.Content, 
+			&yaml.Node{Kind: yaml.ScalarNode, Value: "cti"},
+			ctiNode.Content[0],
+		)
+	}
 
 	// Write back to file
-	updatedData, err := yaml.Marshal(config)
+	updatedData, err := yaml.Marshal(&node)
 	if err != nil {
 		return fmt.Errorf("failed to marshal config.yaml: %w", err)
 	}
