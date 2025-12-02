@@ -425,16 +425,18 @@ func updateTraefikCaptchaConfig(dockerClient *docker.Client, cfg *config.Config,
 		crowdsecPlugin = plugin["crowdsec-bouncer-traefik-plugin"].(map[string]interface{})
 	}
 
-	// Update captcha configuration
-	crowdsecPlugin["captcha"] = map[string]interface{}{
-		"enabled":         true,
-		"provider":        "turnstile",
-		"siteKey":         req.SiteKey,
-		"secretKey":       req.SecretKey,
-		"htmlPath":        "/etc/traefik/conf/captcha.html",
-		"gracePeriod":     "1800s",
-		"captchaDuration": "14400s",
+	// Update captcha configuration (Flat structure as per plugin docs)
+	crowdsecPlugin["captchaProvider"] = "turnstile" // Defaulting to turnstile as per previous logic, or use req.Provider if supported
+	if req.Provider != "" {
+		crowdsecPlugin["captchaProvider"] = req.Provider
 	}
+	crowdsecPlugin["captchaSiteKey"] = req.SiteKey
+	crowdsecPlugin["captchaSecretKey"] = req.SecretKey
+	crowdsecPlugin["captchaHTMLFilePath"] = "/etc/traefik/conf/captcha.html"
+	crowdsecPlugin["captchaGracePeriodSeconds"] = 1800
+	
+	// Remove old nested key if it exists to clean up
+	delete(crowdsecPlugin, "captcha")
 
 	// Create backup before modifying
 	backupPath := dynamicConfigPath + ".bak"
