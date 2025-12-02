@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"testing"
+
+	"crowdsec-manager/internal/logger"
 )
 
 // MockDockerClient is a mock implementation of the docker client interface
@@ -15,6 +17,9 @@ func (m *MockDockerClient) ExecCommand(containerName string, cmd []string) (stri
 }
 
 func TestGetConsoleStatusHelper_Mapping(t *testing.T) {
+	// Initialize logger for tests
+	logger.Init("info", "")
+
 	tests := []struct {
 		name           string
 		output         string
@@ -30,7 +35,7 @@ func TestGetConsoleStatusHelper_Mapping(t *testing.T) {
 		{
 			name:           "Manual only (User case)",
 			output:         `{"manual": true, "console_management": false}`,
-			expectEnrolled: true,
+			expectEnrolled: false,
 			expectValidated: false,
 		},
 		{

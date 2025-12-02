@@ -387,12 +387,17 @@ func updateProfilesYaml(path string, enable bool) error {
 		node.Content = []*yaml.Node{
 			{Kind: yaml.SequenceNode},
 		}
+	} else if node.Content[0].Kind == yaml.MappingNode {
+		// If root is a map, it's likely a single profile. Wrap it in a sequence.
+		logger.Warn("profiles.yaml root is a map, wrapping in sequence")
+		existingMap := node.Content[0]
+		node.Content[0] = &yaml.Node{
+			Kind: yaml.SequenceNode,
+			Content: []*yaml.Node{existingMap},
+		}
 	} else if node.Content[0].Kind != yaml.SequenceNode {
-		// If root is not a sequence, it might be a map (single profile?) or invalid.
-		// CrowdSec profiles.yaml is a list.
-		// If it's a map, we wrap it in a sequence? Or error?
-		// Let's assume it's a sequence as per spec.
-		return fmt.Errorf("profiles.yaml root is not a sequence")
+		// If root is not a sequence and not a map, it's invalid.
+		return fmt.Errorf("profiles.yaml root is not a sequence or map")
 	}
 	rootSeq := node.Content[0]
 
