@@ -262,9 +262,14 @@ func GetCaptchaStatus(dockerClient *docker.Client, db *database.Database, cfg *c
 		configured := false
 		detectedProvider := ""
 		hasHTMLPath := false
+		siteKey := ""
+		secretKey := ""
 
 		if err == nil && configContent != "" {
 			configured, detectedProvider, hasHTMLPath = detectCaptchaInConfig(configContent)
+
+			// Extract site key and secret key from config
+			siteKey, secretKey = extractCaptchaKeys(configContent)
 		}
 
 		// Check if captcha.html exists on local filesystem (via /app/config mount)
@@ -318,6 +323,9 @@ func GetCaptchaStatus(dockerClient *docker.Client, db *database.Database, cfg *c
 			"hostHTMLPath":                 hostHTMLPath,                    // Host path where captcha.html should be
 			"hasHTMLPath":                  hasHTMLPath,                     // True if captchaHTMLFilePath is configured
 			"implemented":                  configured && captchaHTMLExists, // Fully implemented if both exist
+			"site_key":                     siteKey,                         // Site key from config (for UI pre-population)
+			"secret_key":                   secretKey,                       // Secret key from config (for UI pre-population)
+			"manually_configured":          configured && siteKey != "",     // True if config was manually set
 		}
 
 		c.JSON(http.StatusOK, models.Response{
@@ -353,6 +361,37 @@ func detectCaptchaInConfig(configContent string) (enabled bool, provider string,
 	}
 
 	return
+}
+
+// extractCaptchaKeys extracts site key and secret key from dynamic_config.yml content
+func extractCaptchaKeys(configContent string) (siteKey string, secretKey string) {
+	// Parse YAML to extract keys
+	var config map[string]interface{}
+	if err := yaml.Unmarshal([]byte(configContent), &config); err != nil {
+		return "", ""
+	}
+
+	// Navigate: http -> middlewares -> crowdsec-plugin -> plugin -> crowdsec
+	if http, ok := config["http"].(map[string]interface{}); ok {
+		if middlewares, ok := http["middlewares"].(map[string]interface{}); ok {
+			if crowdsecPlugin, ok := middlewares["crowdsec-plugin"].(map[string]interface{}); ok {
+				if plugin, ok := crowdsecPlugin["plugin"].(map[string]interface{}); ok {
+					if crowdsec, ok := plugin["crowdsec"].(map[string]interface{}); ok {
+						// Extract captchaSiteKey
+						if key, ok := crowdsec["captchaSiteKey"].(string); ok {
+							siteKey = key
+						}
+						// Extract captchaSecretKey
+						if key, ok := crowdsec["captchaSecretKey"].(string); ok {
+							secretKey = key
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return siteKey, secretKey
 }
 
 // updateTraefikCaptchaConfig updates Traefik's dynamic_config.yml with captcha configuration
@@ -557,106 +596,146 @@ func updateCrowdSecProfiles(dockerClient *docker.Client, cfg *config.Config) err
 		return fmt.Errorf("failed to read profiles.yaml: %v", err)
 	}
 
-	// Parse YAML into Node
-	var node yaml.Node
-	if err := yaml.Unmarshal([]byte(output), &node); err != nil {
-		// If parsing fails, we can't safely edit.
-		return fmt.Errorf("failed to parse profiles.yaml: %v", err)
-	}
-
-	if len(node.Content) == 0 {
-		// Empty file
-		node.Kind = yaml.DocumentNode
-		node.Content = []*yaml.Node{
-			{Kind: yaml.SequenceNode},
-		}
-	} else if node.Content[0].Kind != yaml.SequenceNode {
-		return fmt.Errorf("profiles.yaml root is not a sequence")
-	}
-	rootSeq := node.Content[0]
-
-	// Find default_ip_remediation profile
-	var profileNode *yaml.Node
-	
-	for _, item := range rootSeq.Content {
-		if item.Kind == yaml.MappingNode {
-			for i := 0; i < len(item.Content); i += 2 {
-				if item.Content[i].Value == "name" && item.Content[i+1].Value == "default_ip_remediation" {
-					profileNode = item
-					break
-				}
+	// Helper to find key in mapping
+	findKey := func(parent *yaml.Node, key string) (*yaml.Node, int) {
+		for i := 0; i < len(parent.Content); i += 2 {
+			if parent.Content[i].Value == key {
+				return parent.Content[i+1], i + 1
 			}
 		}
-		if profileNode != nil {
-			break
-		}
+		return nil, -1
 	}
 
-	if profileNode == nil {
-		// Create new profile
-		// We construct it manually to ensure correct structure
-		newProfileYAML := `
-name: default_ip_remediation
-filters:
- - Alert.Remediation == true && Alert.GetScope() == 'Ip'
-decisions:
- - type: ban
-   duration: 4h
- - type: captcha
-   duration: 4h
-on_success: break
-`
-		var newNode yaml.Node
-		if err := yaml.Unmarshal([]byte(newProfileYAML), &newNode); err == nil && len(newNode.Content) > 0 {
-			rootSeq.Content = append(rootSeq.Content, newNode.Content[0])
-		}
-	} else {
-		// Update existing profile
-		// Find "decisions" key
-		var decisionsNode *yaml.Node
-		for i := 0; i < len(profileNode.Content); i += 2 {
-			if profileNode.Content[i].Value == "decisions" {
-				decisionsNode = profileNode.Content[i+1]
+	// Parse multiple YAML documents (profiles.yaml can have multiple documents separated by ---)
+	decoder := yaml.NewDecoder(strings.NewReader(output))
+	var documents []*yaml.Node
+	foundProfile := false
+
+	for {
+		var doc yaml.Node
+		err := decoder.Decode(&doc)
+		if err != nil {
+			if err.Error() == "EOF" {
 				break
 			}
+			if len(documents) == 0 && len(output) == 0 {
+				break
+			}
+			return fmt.Errorf("failed to parse profiles.yaml: %v", err)
 		}
 
-		if decisionsNode == nil {
-			// Add decisions key
-			keyNode := &yaml.Node{Kind: yaml.ScalarNode, Value: "decisions"}
-			decisionsNode = &yaml.Node{Kind: yaml.SequenceNode}
-			profileNode.Content = append(profileNode.Content, keyNode, decisionsNode)
-		}
+		// Process this document
+		if len(doc.Content) > 0 && doc.Content[0].Kind == yaml.MappingNode {
+			profileNode := doc.Content[0]
+			nameNode, _ := findKey(profileNode, "name")
 
-		// Check if captcha decision exists
-		hasCaptcha := false
-		for _, decision := range decisionsNode.Content {
-			for i := 0; i < len(decision.Content); i += 2 {
-				if decision.Content[i].Value == "type" && decision.Content[i+1].Value == "captcha" {
-					hasCaptcha = true
-					break
+			// Check if this is the default_ip_remediation profile
+			if nameNode != nil && nameNode.Value == "default_ip_remediation" {
+				foundProfile = true
+
+				// Find decisions node
+				decisionsNode, _ := findKey(profileNode, "decisions")
+				if decisionsNode == nil {
+					// Add decisions key
+					keyNode := &yaml.Node{Kind: yaml.ScalarNode, Value: "decisions"}
+					decisionsNode = &yaml.Node{Kind: yaml.SequenceNode}
+					profileNode.Content = append(profileNode.Content, keyNode, decisionsNode)
+				}
+
+				// Check if captcha decision exists
+				hasCaptcha := false
+				if decisionsNode.Kind == yaml.SequenceNode {
+					for _, decision := range decisionsNode.Content {
+						if decision.Kind == yaml.MappingNode {
+							typeNode, _ := findKey(decision, "type")
+							if typeNode != nil && typeNode.Value == "captcha" {
+								hasCaptcha = true
+								break
+							}
+						}
+					}
+				}
+
+				if !hasCaptcha {
+					// Add captcha decision
+					captchaDecision := &yaml.Node{
+						Kind: yaml.MappingNode,
+						Content: []*yaml.Node{
+							{Kind: yaml.ScalarNode, Value: "type"},
+							{Kind: yaml.ScalarNode, Value: "captcha"},
+							{Kind: yaml.ScalarNode, Value: "duration"},
+							{Kind: yaml.ScalarNode, Value: "4h"},
+						},
+					}
+					decisionsNode.Content = append(decisionsNode.Content, captchaDecision)
+					logger.Info("Added captcha decision to default_ip_remediation profile")
 				}
 			}
 		}
 
-		if !hasCaptcha {
-			// Add captcha decision
-			captchaDecisionYAML := `
-type: captcha
-duration: 4h
-`
-			var newDecisionNode yaml.Node
-			if err := yaml.Unmarshal([]byte(captchaDecisionYAML), &newDecisionNode); err == nil && len(newDecisionNode.Content) > 0 {
-				decisionsNode.Content = append(decisionsNode.Content, newDecisionNode.Content[0])
-			}
-		}
+		documents = append(documents, &doc)
 	}
 
-	// Marshal back to YAML
-	newProfileBytes, err := yaml.Marshal(&node)
-	if err != nil {
-		return fmt.Errorf("failed to marshal profiles: %v", err)
+	// If profile not found, create it
+	if !foundProfile {
+		logger.Info("Creating default_ip_remediation profile with captcha")
+		newProfile := &yaml.Node{
+			Kind: yaml.MappingNode,
+			Content: []*yaml.Node{
+				{Kind: yaml.ScalarNode, Value: "name"},
+				{Kind: yaml.ScalarNode, Value: "default_ip_remediation"},
+
+				{Kind: yaml.ScalarNode, Value: "filters"},
+				{Kind: yaml.SequenceNode, Content: []*yaml.Node{
+					{Kind: yaml.ScalarNode, Value: "Alert.Remediation == true && Alert.GetScope() == \"Ip\""},
+				}},
+
+				{Kind: yaml.ScalarNode, Value: "decisions"},
+				{Kind: yaml.SequenceNode, Content: []*yaml.Node{
+					{Kind: yaml.MappingNode, Content: []*yaml.Node{
+						{Kind: yaml.ScalarNode, Value: "type"},
+						{Kind: yaml.ScalarNode, Value: "ban"},
+						{Kind: yaml.ScalarNode, Value: "duration"},
+						{Kind: yaml.ScalarNode, Value: "4h"},
+					}},
+					{Kind: yaml.MappingNode, Content: []*yaml.Node{
+						{Kind: yaml.ScalarNode, Value: "type"},
+						{Kind: yaml.ScalarNode, Value: "captcha"},
+						{Kind: yaml.ScalarNode, Value: "duration"},
+						{Kind: yaml.ScalarNode, Value: "4h"},
+					}},
+				}},
+
+				{Kind: yaml.ScalarNode, Value: "on_success"},
+				{Kind: yaml.ScalarNode, Value: "break"},
+			},
+		}
+
+		newDoc := &yaml.Node{
+			Kind:    yaml.DocumentNode,
+			Content: []*yaml.Node{newProfile},
+		}
+		documents = append(documents, newDoc)
 	}
+
+	// Write all documents back to file
+	var buf strings.Builder
+	encoder := yaml.NewEncoder(&buf)
+	encoder.SetIndent(2)
+
+	for i, doc := range documents {
+		if i > 0 {
+			buf.WriteString("\n---\n")
+		}
+		if err := encoder.Encode(doc); err != nil {
+			return fmt.Errorf("failed to marshal profiles.yaml document %d: %v", i, err)
+		}
+	}
+	encoder.Close()
+
+	// Clean up output
+	newProfileBytes := buf.String()
+	newProfileBytes = strings.TrimPrefix(newProfileBytes, "---\n")
 
 	// Backup existing profiles.yaml
 	_, _ = dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
