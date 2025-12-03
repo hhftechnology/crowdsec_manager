@@ -360,6 +360,8 @@ func isDiscordEnabled(path string) (bool, error) {
 }
 
 // updateProfilesYaml updates profiles.yaml to enable/disable discord notifications
+// This function properly handles multiple YAML documents separated by "---"
+// It works with ANY user-defined profiles and adds notifications to profiles with IP-based decisions
 func updateProfilesYaml(path string, enable bool) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -371,40 +373,6 @@ func updateProfilesYaml(path string, enable bool) error {
 		}
 	}
 
-	var node yaml.Node
-	if err := yaml.Unmarshal(data, &node); err != nil {
-		// If empty or invalid, start fresh
-		node = yaml.Node{
-			Kind: yaml.DocumentNode,
-			Content: []*yaml.Node{
-				{Kind: yaml.SequenceNode},
-			},
-		}
-	}
-
-	if len(node.Content) == 0 {
-		node.Kind = yaml.DocumentNode
-		node.Content = []*yaml.Node{
-			{Kind: yaml.SequenceNode},
-		}
-	} else if node.Content[0].Kind == yaml.MappingNode {
-		// If root is a map, it's likely a single profile. Wrap it in a sequence.
-		logger.Warn("profiles.yaml root is a map, wrapping in sequence")
-		existingMap := node.Content[0]
-		node.Content[0] = &yaml.Node{
-			Kind: yaml.SequenceNode,
-			Content: []*yaml.Node{existingMap},
-		}
-	} else if node.Content[0].Kind != yaml.SequenceNode {
-		// If root is not a sequence and not a map, it's invalid.
-		return fmt.Errorf("profiles.yaml root is not a sequence or map")
-	}
-	rootSeq := node.Content[0]
-
-	// Target profile name
-	targetProfile := "default_ip_remediation"
-	var profileNode *yaml.Node
-
 	// Helper to find key in mapping
 	findKey := func(parent *yaml.Node, key string) (*yaml.Node, int) {
 		for i := 0; i < len(parent.Content); i += 2 {
@@ -415,78 +383,74 @@ func updateProfilesYaml(path string, enable bool) error {
 		return nil, -1
 	}
 
-	// Find the target profile
-	for _, profile := range rootSeq.Content {
-		if profile.Kind == yaml.MappingNode {
-			nameNode, _ := findKey(profile, "name")
-			if nameNode != nil && nameNode.Value == targetProfile {
-				profileNode = profile
-				break
-			}
+	// Helper to check if a profile should have notifications
+	// Returns true for profiles that have IP scope (not range, not captcha-only)
+	shouldHaveNotifications := func(profileNode *yaml.Node) bool {
+		if profileNode.Kind != yaml.MappingNode {
+			return false
 		}
+
+		nameNode, _ := findKey(profileNode, "name")
+		if nameNode == nil {
+			return false
+		}
+
+		// Skip captcha-only profiles (they have their own remediation flow)
+		name := strings.ToLower(nameNode.Value)
+		if strings.Contains(name, "captcha") && !strings.Contains(name, "ip") {
+			return false
+		}
+
+		// Skip range-only profiles (notifications typically for IPs)
+		if strings.Contains(name, "range") && !strings.Contains(name, "ip") {
+			return false
+		}
+
+		// Check if profile has decisions (profiles without decisions shouldn't notify)
+		decisionsNode, _ := findKey(profileNode, "decisions")
+		if decisionsNode == nil {
+			return false
+		}
+
+		// This profile should have notifications
+		return true
 	}
 
-	if enable {
-		if profileNode == nil {
-			// Create new profile if not found
-			logger.Info("Creating new profile in profiles.yaml", "profile", targetProfile)
-			
-			// Construct the new profile node
-			// name: default_ip_remediation
-			// filters:
-			//  - Alert.Remediation == true && Alert.GetScope() == "Ip"
-			// decisions:
-			//  - type: ban
-			//    duration: 4h
-			// on_success: break
-			// notifications:
-			//  - discord
+	// Helper to process a single profile document
+	processProfile := func(profileNode *yaml.Node) (bool, string) {
+		if profileNode.Kind != yaml.MappingNode {
+			return false, ""
+		}
 
-			newProfile := &yaml.Node{
-				Kind: yaml.MappingNode,
-				Content: []*yaml.Node{
-					{Kind: yaml.ScalarNode, Value: "name"},
-					{Kind: yaml.ScalarNode, Value: targetProfile},
-					
-					{Kind: yaml.ScalarNode, Value: "filters"},
-					{Kind: yaml.SequenceNode, Content: []*yaml.Node{
-						{Kind: yaml.ScalarNode, Value: "Alert.Remediation == true && Alert.GetScope() == \"Ip\""},
-					}},
-					
-					{Kind: yaml.ScalarNode, Value: "decisions"},
-					{Kind: yaml.SequenceNode, Content: []*yaml.Node{
-						{Kind: yaml.MappingNode, Content: []*yaml.Node{
-							{Kind: yaml.ScalarNode, Value: "type"},
-							{Kind: yaml.ScalarNode, Value: "ban"},
-							{Kind: yaml.ScalarNode, Value: "duration"},
-							{Kind: yaml.ScalarNode, Value: "4h"},
-						}},
-					}},
-					
-					{Kind: yaml.ScalarNode, Value: "on_success"},
-					{Kind: yaml.ScalarNode, Value: "break"},
-					
-					{Kind: yaml.ScalarNode, Value: "notifications"},
-					{Kind: yaml.SequenceNode, Content: []*yaml.Node{
-						{Kind: yaml.ScalarNode, Value: "discord"},
-					}},
-				},
-			}
-			
-			rootSeq.Content = append(rootSeq.Content, newProfile)
-		} else {
-			// Profile exists, check for notifications
-			notificationsNode, _ := findKey(profileNode, "notifications")
+		nameNode, _ := findKey(profileNode, "name")
+		if nameNode == nil {
+			return false, ""
+		}
+		profileName := nameNode.Value
+
+		// Check if this profile should have notifications
+		if !shouldHaveNotifications(profileNode) {
+			return false, profileName
+		}
+
+		// This profile should have notifications
+		if enable {
+			// Add or update notifications
+			notificationsNode, notifIdx := findKey(profileNode, "notifications")
 			if notificationsNode == nil {
 				// Add notifications section
 				keyNode := &yaml.Node{Kind: yaml.ScalarNode, Value: "notifications"}
-				notificationsNode = &yaml.Node{Kind: yaml.SequenceNode}
+				notificationsNode = &yaml.Node{
+					Kind: yaml.SequenceNode,
+					Style: yaml.FlowStyle,
+				}
 				profileNode.Content = append(profileNode.Content, keyNode, notificationsNode)
 			} else if notificationsNode.Kind != yaml.SequenceNode {
-				// If it exists but is not a sequence (e.g. null or scalar), make it a sequence
-				// This handles cases where it might be empty or malformed
+				// Convert to sequence if it's not already
 				notificationsNode.Kind = yaml.SequenceNode
+				notificationsNode.Style = yaml.FlowStyle
 				notificationsNode.Content = []*yaml.Node{}
+				profileNode.Content[notifIdx] = notificationsNode
 			}
 
 			// Check if discord is already in the list
@@ -499,12 +463,14 @@ func updateProfilesYaml(path string, enable bool) error {
 			}
 
 			if !hasDiscord {
-				notificationsNode.Content = append(notificationsNode.Content, &yaml.Node{Kind: yaml.ScalarNode, Value: "discord"})
+				notificationsNode.Content = append(notificationsNode.Content, &yaml.Node{
+					Kind:  yaml.ScalarNode,
+					Value: "discord",
+				})
+				logger.Info("Added discord notification to profile", "profile", profileName)
 			}
-		}
-	} else {
-		// Disable: remove discord from notifications if profile exists
-		if profileNode != nil {
+		} else {
+			// Remove discord from notifications
 			notificationsNode, _ := findKey(profileNode, "notifications")
 			if notificationsNode != nil && notificationsNode.Kind == yaml.SequenceNode {
 				var newContent []*yaml.Node
@@ -514,24 +480,104 @@ func updateProfilesYaml(path string, enable bool) error {
 					}
 				}
 				notificationsNode.Content = newContent
-				
-				// Optional: remove notifications key if empty? 
-				// Maybe better to leave it empty or remove it to be clean.
-				// For now, leaving it empty is safer.
+				logger.Info("Removed discord notification from profile", "profile", profileName)
 			}
 		}
+		return true, profileName
 	}
 
-	// Marshal back
+	// Parse multiple YAML documents
+	decoder := yaml.NewDecoder(bytes.NewReader(data))
+	var documents []*yaml.Node
+	foundTargets := []string{}
+
+	for {
+		var doc yaml.Node
+		err := decoder.Decode(&doc)
+		if err != nil {
+			if err.Error() == "EOF" {
+				break
+			}
+			// If we can't parse, try to handle as empty/new file
+			if len(documents) == 0 && len(data) == 0 {
+				break
+			}
+			return fmt.Errorf("failed to parse profiles.yaml: %v", err)
+		}
+
+		// Process this document
+		if len(doc.Content) > 0 && doc.Content[0].Kind == yaml.MappingNode {
+			if processed, name := processProfile(doc.Content[0]); processed {
+				foundTargets = append(foundTargets, name)
+			}
+		}
+
+		documents = append(documents, &doc)
+	}
+
+	// If enabling and no suitable profiles found, create a default one
+	if enable && len(foundTargets) == 0 {
+		logger.Info("No suitable profiles found, creating default_ip_remediation profile")
+
+		newProfile := &yaml.Node{
+			Kind: yaml.MappingNode,
+			Content: []*yaml.Node{
+				{Kind: yaml.ScalarNode, Value: "name"},
+				{Kind: yaml.ScalarNode, Value: "default_ip_remediation"},
+
+				{Kind: yaml.ScalarNode, Value: "filters"},
+				{Kind: yaml.SequenceNode, Content: []*yaml.Node{
+					{Kind: yaml.ScalarNode, Value: "Alert.Remediation == true && Alert.GetScope() == \"Ip\""},
+				}},
+
+				{Kind: yaml.ScalarNode, Value: "decisions"},
+				{Kind: yaml.SequenceNode, Content: []*yaml.Node{
+					{Kind: yaml.MappingNode, Content: []*yaml.Node{
+						{Kind: yaml.ScalarNode, Value: "type"},
+						{Kind: yaml.ScalarNode, Value: "ban"},
+						{Kind: yaml.ScalarNode, Value: "duration"},
+						{Kind: yaml.ScalarNode, Value: "4h"},
+					}},
+				}},
+
+				{Kind: yaml.ScalarNode, Value: "notifications"},
+				{Kind: yaml.SequenceNode, Style: yaml.FlowStyle, Content: []*yaml.Node{
+					{Kind: yaml.ScalarNode, Value: "discord"},
+				}},
+
+				{Kind: yaml.ScalarNode, Value: "on_success"},
+				{Kind: yaml.ScalarNode, Value: "break"},
+			},
+		}
+
+		newDoc := &yaml.Node{
+			Kind: yaml.DocumentNode,
+			Content: []*yaml.Node{newProfile},
+		}
+		documents = append(documents, newDoc)
+	}
+
+	// Write all documents back to file
 	var buf bytes.Buffer
-	enc := yaml.NewEncoder(&buf)
-	enc.SetIndent(2)
-	if err := enc.Encode(&node); err != nil {
-		return fmt.Errorf("failed to marshal profiles.yaml: %v", err)
-	}
-	enc.Close()
+	encoder := yaml.NewEncoder(&buf)
+	encoder.SetIndent(2)
 
-	return os.WriteFile(path, buf.Bytes(), 0644)
+	for i, doc := range documents {
+		if i > 0 {
+			// Add document separator
+			buf.WriteString("\n---\n")
+		}
+		if err := encoder.Encode(doc); err != nil {
+			return fmt.Errorf("failed to marshal profiles.yaml document %d: %v", i, err)
+		}
+	}
+	encoder.Close()
+
+	// Clean up the output - remove the extra "---" that encoder adds at the start
+	output := buf.Bytes()
+	output = bytes.TrimPrefix(output, []byte("---\n"))
+
+	return os.WriteFile(path, output, 0644)
 }
 
 // generateDiscordYamlInContainer writes discord.yaml directly to CrowdSec container config
