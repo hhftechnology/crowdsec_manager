@@ -7,7 +7,7 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb"
 import { useLocation } from "react-router-dom"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Avatar } from "@/components/ui/avatar"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,6 +19,7 @@ import {
 import { User, Settings, Github, Book } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import EnrollDialog from "@/components/EnrollDialog"
+import { CrowdSecLogo } from "@/components/icons/CrowdSecLogo"
 
 export default function Header() {
   const location = useLocation()
@@ -96,21 +97,8 @@ export default function Header() {
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Avatar className="h-8 w-8 cursor-pointer hover:opacity-80 transition-opacity">
-              <div 
-                className="aspect-square h-full w-full bg-primary dark:bg-white" 
-                style={{ 
-                  maskImage: 'url(/custom-logo.svg)', 
-                  maskSize: 'contain', 
-                  maskRepeat: 'no-repeat', 
-                  maskPosition: 'center',
-                  WebkitMaskImage: 'url(/custom-logo.svg)', 
-                  WebkitMaskSize: 'contain', 
-                  WebkitMaskRepeat: 'no-repeat', 
-                  WebkitMaskPosition: 'center' 
-                }} 
-              />
-              <AvatarFallback>CS</AvatarFallback>
+            <Avatar className="h-8 w-8 cursor-pointer hover:opacity-80 transition-opacity bg-transparent">
+              <CrowdSecLogo className="h-full w-full text-primary p-1" />
             </Avatar>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
