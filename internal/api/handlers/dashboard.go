@@ -379,42 +379,43 @@ func GetAlertsAnalysis(dockerClient *docker.Client, cfg *config.Config) gin.Hand
 	return func(c *gin.Context) {
 		logger.Info("Getting CrowdSec alerts analysis via cscli")
 
-		cmd := []string{"cscli", "alerts", "list", "-o", "json"}
-
-		// Add filters based on query parameters
-		// Add filters based on query parameters
+		var cmd []string
 		if v := c.Query("id"); v != "" {
-			cmd = append(cmd, "--id", v)
-		}
-		if v := c.Query("ip"); v != "" {
-			cmd = append(cmd, "--ip", v)
-		}
-		if v := c.Query("range"); v != "" {
-			cmd = append(cmd, "--range", v)
-		}
-		if v := c.Query("type"); v != "" && v != "all" {
-			cmd = append(cmd, "--type", v)
-		}
-		if v := c.Query("scope"); v != "" && v != "all" {
-			cmd = append(cmd, "--scope", v)
-		}
-		if v := c.Query("value"); v != "" {
-			cmd = append(cmd, "--value", v)
-		}
-		if v := c.Query("scenario"); v != "" {
-			cmd = append(cmd, "--scenario", v)
-		}
-		if v := c.Query("origin"); v != "" && v != "all" {
-			cmd = append(cmd, "--origin", v)
-		}
-		if v := c.Query("since"); v != "" {
-			cmd = append(cmd, "--since", v)
-		}
-		if v := c.Query("until"); v != "" {
-			cmd = append(cmd, "--until", v)
-		}
-		if v := c.Query("includeAll"); v == "true" {
-			cmd = append(cmd, "-a")
+			cmd = []string{"cscli", "alerts", "inspect", v, "-o", "json"}
+		} else {
+			cmd = []string{"cscli", "alerts", "list", "-o", "json"}
+
+			// Add filters based on query parameters
+			if v := c.Query("ip"); v != "" {
+				cmd = append(cmd, "--ip", v)
+			}
+			if v := c.Query("range"); v != "" {
+				cmd = append(cmd, "--range", v)
+			}
+			if v := c.Query("type"); v != "" && v != "all" {
+				cmd = append(cmd, "--type", v)
+			}
+			if v := c.Query("scope"); v != "" && v != "all" {
+				cmd = append(cmd, "--scope", v)
+			}
+			if v := c.Query("value"); v != "" {
+				cmd = append(cmd, "--value", v)
+			}
+			if v := c.Query("scenario"); v != "" {
+				cmd = append(cmd, "--scenario", v)
+			}
+			if v := c.Query("origin"); v != "" && v != "all" {
+				cmd = append(cmd, "--origin", v)
+			}
+			if v := c.Query("since"); v != "" {
+				cmd = append(cmd, "--since", v)
+			}
+			if v := c.Query("until"); v != "" {
+				cmd = append(cmd, "--until", v)
+			}
+			if v := c.Query("includeAll"); v == "true" {
+				cmd = append(cmd, "-a")
+			}
 		}
 		
 		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, cmd)
@@ -428,22 +429,30 @@ func GetAlertsAnalysis(dockerClient *docker.Client, cfg *config.Config) gin.Hand
 		}
 
 		// Parse JSON
+		// Parse JSON
 		var alerts []interface{} // Using interface{} for now as Alert model might need adjustment
 		if err := json.Unmarshal([]byte(output), &alerts); err != nil {
-			if output == "null" || output == "" {
-				c.JSON(http.StatusOK, models.Response{
-					Success: true,
-					Data:    gin.H{"alerts": []interface{}{}, "count": 0},
+			// If unmarshaling as list fails, try as a single object (behavior for inspect command)
+			var singleAlert interface{}
+			if errSingle := json.Unmarshal([]byte(output), &singleAlert); errSingle == nil {
+				// If it's a single object, wrap it in a slice
+				alerts = []interface{}{singleAlert}
+			} else {
+				if output == "null" || output == "" {
+					c.JSON(http.StatusOK, models.Response{
+						Success: true,
+						Data:    gin.H{"alerts": []interface{}{}, "count": 0},
+					})
+					return
+				}
+
+				logger.Warn("Failed to parse alerts JSON", "error", err)
+				c.JSON(http.StatusInternalServerError, models.Response{
+					Success: false,
+					Error:   fmt.Sprintf("Failed to parse alerts: %v", err),
 				})
 				return
 			}
-			
-			logger.Warn("Failed to parse alerts JSON", "error", err)
-			c.JSON(http.StatusInternalServerError, models.Response{
-				Success: false,
-				Error:   fmt.Sprintf("Failed to parse alerts: %v", err),
-			})
-			return
 		}
 
 		logger.Info("Alerts analysis retrieved successfully", "count", len(alerts))
