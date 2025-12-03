@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
-import { Save, RefreshCw, AlertTriangle, CheckCircle } from 'lucide-react'
+import { Save, RefreshCw, AlertTriangle, CheckCircle, Info } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -15,6 +15,8 @@ interface DiscordConfig {
   geoapify_key: string
   cti_key: string
   crowdsec_restarted?: boolean
+  manually_configured?: boolean
+  config_source?: string
 }
 
 export default function Notifications() {
@@ -141,8 +143,28 @@ export default function Notifications() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {config.manually_configured && (
+            <Alert>
+              <Info className="h-4 w-4" />
+              <AlertTitle>Existing Configuration Detected</AlertTitle>
+              <AlertDescription>
+                {config.config_source === 'container' && (
+                  <>A manual Discord configuration was found in the CrowdSec container. The values below have been pre-populated from your existing setup.</>
+                )}
+                {config.config_source === 'both' && (
+                  <>Discord notifications are configured in both the database and container. You can update them here to synchronize both sources.</>
+                )}
+              </AlertDescription>
+            </Alert>
+          )}
+
           <div className="space-y-2">
-            <Label htmlFor="webhook-url">Webhook URL</Label>
+            <Label htmlFor="webhook-url">
+              Webhook URL
+              {config.manually_configured && (
+                <span className="ml-2 text-xs text-muted-foreground font-normal">(Pre-populated from existing config)</span>
+              )}
+            </Label>
             <Input
               id="webhook-url"
               placeholder="https://discord.com/api/webhooks/..."
@@ -156,7 +178,12 @@ export default function Notifications() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="geoapify-key">Geoapify API Key</Label>
+              <Label htmlFor="geoapify-key">
+                Geoapify API Key
+                {config.manually_configured && config.geoapify_key && (
+                  <span className="ml-2 text-xs text-muted-foreground font-normal">(Pre-populated)</span>
+                )}
+              </Label>
               <Input
                 id="geoapify-key"
                 type="password"
