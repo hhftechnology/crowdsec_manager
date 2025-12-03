@@ -1,6 +1,7 @@
 package database
 
 import (
+	"crowdsec-manager/internal/models"
 	"database/sql"
 	"fmt"
 	"os"
@@ -25,7 +26,7 @@ type Settings struct {
 	DiscordWebhookID     string
 	DiscordWebhookToken  string
 	GeoapifyKey          string
-	CTIKey               string
+	CrowdSecCTIKey       string
 }
 
 // New creates a new SQLite database connection and initializes schema
@@ -75,6 +76,12 @@ func (d *Database) initSchema() error {
 		discord_webhook_token TEXT NOT NULL DEFAULT '',
 		geoapify_key TEXT NOT NULL DEFAULT '',
 		cti_key TEXT NOT NULL DEFAULT ''
+	);
+
+	CREATE TABLE IF NOT EXISTS profile_history (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		content TEXT NOT NULL,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);`
 	if _, err := d.db.Exec(createTable); err != nil {
 		return fmt.Errorf("failed to create settings table: %w", err)
@@ -113,7 +120,7 @@ func (d *Database) GetSettings() (*Settings, error) {
 		WHERE id = 1
 	`).Scan(&settings.ID, &settings.TraefikDynamicConfig, &settings.TraefikStaticConfig,
 		&settings.TraefikAccessLog, &settings.TraefikErrorLog, &settings.CrowdSecAcquisFile,
-		&settings.DiscordWebhookID, &settings.DiscordWebhookToken, &settings.GeoapifyKey, &settings.CTIKey)
+		&settings.DiscordWebhookID, &settings.DiscordWebhookToken, &settings.GeoapifyKey, &settings.CrowdSecCTIKey)
 
 	if err == sql.ErrNoRows {
 		// Return sensible defaults if no settings row exists
@@ -146,7 +153,7 @@ func (d *Database) UpdateSettings(settings *Settings) error {
 		WHERE id = 1
 	`, settings.TraefikDynamicConfig, settings.TraefikStaticConfig,
 		settings.TraefikAccessLog, settings.TraefikErrorLog, settings.CrowdSecAcquisFile,
-		settings.DiscordWebhookID, settings.DiscordWebhookToken, settings.GeoapifyKey, settings.CTIKey)
+		settings.DiscordWebhookID, settings.DiscordWebhookToken, settings.GeoapifyKey, settings.CrowdSecCTIKey)
 	return err
 }
 
@@ -168,4 +175,29 @@ func (d *Database) SetTraefikDynamicConfigPath(path string) error {
 	}
 	settings.TraefikDynamicConfig = path
 	return d.UpdateSettings(settings)
+}
+
+// CreateProfileHistory adds a new entry to the profile history
+func (d *Database) CreateProfileHistory(content string) error {
+	_, err := d.db.Exec(`
+		INSERT INTO profile_history (content)
+		VALUES (?)
+	`, content)
+	return err
+}
+
+// GetLatestProfileHistory retrieves the most recent profile history entry
+func (d *Database) GetLatestProfileHistory() (*models.ProfileHistory, error) {
+	history := &models.ProfileHistory{}
+	err := d.db.QueryRow(`
+		SELECT id, content, created_at
+		FROM profile_history
+		ORDER BY created_at DESC
+		LIMIT 1
+	`).Scan(&history.ID, &history.Content, &history.CreatedAt)
+
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	return history, err
 }

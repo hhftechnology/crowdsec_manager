@@ -22,6 +22,7 @@ const Configuration = lazy(() => import('./pages/Configuration'))
 const DecisionAnalysis = lazy(() => import('./pages/DecisionAnalysis'))
 const AlertAnalysis = lazy(() => import('./pages/AlertAnalysis'))
 const Notifications = lazy(() => import('./pages/Notifications'))
+const Profiles = lazy(() => import('./pages/Profiles'))
 const Bouncers = lazy(() => import('./pages/Bouncers'))
 
 function App() {
@@ -48,6 +49,7 @@ function App() {
               <Route path="/services" element={<Services />} />
               <Route path="/configuration" element={<Configuration />} />
               <Route path="/notifications" element={<Notifications />} />
+              <Route path="/profiles" element={<Profiles />} />
               <Route path="/bouncers" element={<Bouncers />} />
             </Routes>
           </Suspense>
