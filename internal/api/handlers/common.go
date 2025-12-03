@@ -1,7 +1,12 @@
 package handlers
 
 import (
+	"encoding/json"
+	"strings"
 	"time"
+
+	"crowdsec-manager/internal/logger"
+	"crowdsec-manager/internal/models"
 
 	"github.com/gin-gonic/gin"
 )
@@ -85,4 +90,59 @@ func activeFilters(c *gin.Context) map[string]string {
 		}
 	}
 	return filters
+}
+
+// GetConsoleStatusHelper executes the console status command and parses the result
+func GetConsoleStatusHelper(dockerClient interface {
+	ExecCommand(containerName string, cmd []string) (string, error)
+}, containerName string) (models.ConsoleStatus, error) {
+	output, err := dockerClient.ExecCommand(containerName, []string{
+		"cscli", "console", "status", "-o", "json",
+	})
+	if err != nil {
+		return models.ConsoleStatus{}, err
+	}
+
+	// Log the raw output for debugging
+	logger.Info("Console status raw output", "output", output)
+
+	var status models.ConsoleStatus
+	if err := json.Unmarshal([]byte(output), &status); err != nil {
+		logger.Warn("Failed to parse console status JSON, attempting fallback", "error", err)
+		
+		// Fallback to simple string check if JSON parsing fails
+		// This handles cases where older versions might not output valid JSON or other issues
+		// We check for various formats (YAML-like, JSON with/without spaces)
+		status.Enrolled = strings.Contains(output, "enrolled: true") || 
+			strings.Contains(output, `"enrolled":true`) || 
+			strings.Contains(output, `"enrolled": true`)
+			
+		status.Validated = strings.Contains(output, "validated: true") || 
+			strings.Contains(output, `"validated":true`) || 
+			strings.Contains(output, `"validated": true`)
+			
+		status.Manual = strings.Contains(output, "manual: true") || 
+			strings.Contains(output, `"manual":true`) || 
+			strings.Contains(output, `"manual": true`)
+
+		status.ConsoleManagement = strings.Contains(output, "console_management: true") ||
+			strings.Contains(output, `"console_management":true`) ||
+			strings.Contains(output, `"console_management": true`)
+	}
+
+	// Map fields if Enrolled/Validated are missing but other indicators are present
+	// We DO NOT map status.Manual to status.Enrolled because 'manual' can be true even if not enrolled (default state).
+	// User feedback indicates manual: true causes false positives.
+
+	// If console management is enabled, it implies validation/connection
+	if !status.Validated && status.ConsoleManagement {
+		status.Validated = true
+	}
+	
+	// If ConsoleManagement is true, it definitely means it is enrolled too
+	if !status.Enrolled && status.ConsoleManagement {
+		status.Enrolled = true
+	}
+
+	return status, nil
 }

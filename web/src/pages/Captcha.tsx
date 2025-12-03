@@ -7,7 +7,9 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import { XCircle, Shield } from 'lucide-react'
+import { XCircle, Shield, Info } from 'lucide-react'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { useEffect } from 'react'
 
 export default function Captcha() {
   const queryClient = useQueryClient()
@@ -23,12 +25,26 @@ export default function Captcha() {
     },
   })
 
+  // Pre-populate values from statusData
+  useEffect(() => {
+    if (statusData) {
+      if (statusData.site_key) {
+        setSiteKey(statusData.site_key)
+      }
+      if (statusData.secret_key) {
+        setSecretKey(statusData.secret_key)
+      }
+      if (statusData.provider) {
+        setProvider(statusData.provider)
+      }
+    }
+  }, [statusData])
+
   const setupMutation = useMutation({
     mutationFn: (data: CaptchaSetupRequest) => api.captcha.setup(data),
     onSuccess: () => {
       toast.success('Captcha configured successfully')
-      setSiteKey('')
-      setSecretKey('')
+      // Don't clear values - keep them populated
       queryClient.invalidateQueries({ queryKey: ['captcha-status'] })
     },
     onError: () => {
@@ -204,10 +220,23 @@ export default function Captcha() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {statusData?.manually_configured && (
+            <Alert className="mb-4">
+              <Info className="h-4 w-4" />
+              <AlertTitle>Existing Configuration Detected</AlertTitle>
+              <AlertDescription>
+                A captcha configuration was found in the Traefik dynamic config. The values below have been pre-populated from your existing setup.
+              </AlertDescription>
+            </Alert>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="provider">
                 Captcha Provider <span className="text-destructive">*</span>
+                {statusData?.manually_configured && (
+                  <span className="ml-2 text-xs text-muted-foreground font-normal">(Pre-populated)</span>
+                )}
               </Label>
               <select
                 id="provider"
@@ -227,6 +256,9 @@ export default function Captcha() {
             <div className="space-y-2">
               <Label htmlFor="site-key">
                 Site Key <span className="text-destructive">*</span>
+                {statusData?.manually_configured && statusData?.site_key && (
+                  <span className="ml-2 text-xs text-muted-foreground font-normal">(Pre-populated)</span>
+                )}
               </Label>
               <Input
                 id="site-key"
@@ -243,6 +275,9 @@ export default function Captcha() {
             <div className="space-y-2">
               <Label htmlFor="secret-key">
                 Secret Key <span className="text-destructive">*</span>
+                {statusData?.manually_configured && statusData?.secret_key && (
+                  <span className="ml-2 text-xs text-muted-foreground font-normal">(Pre-populated)</span>
+                )}
               </Label>
               <Input
                 id="secret-key"

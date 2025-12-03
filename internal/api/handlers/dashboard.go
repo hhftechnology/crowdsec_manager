@@ -1,17 +1,16 @@
 package handlers
 
 import (
-	"encoding/json"
-	"fmt"
-	"net/http"
-	"strings"
-	"time"
-
 	"crowdsec-manager/internal/config"
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
 	"crowdsec-manager/internal/models"
+	"encoding/json" // Used for arbitrary JSON in GetMetrics
+	"fmt"
+	"net/http"
+	"strings"
 
+	"github.com/buger/jsonparser"
 	"github.com/gin-gonic/gin"
 )
 
@@ -19,65 +18,11 @@ import (
 // DASHBOARD & METRICS
 // =============================================================================
 
-// GetBouncers retrieves CrowdSec bouncers
-func GetBouncers(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		logger.Info("Getting CrowdSec bouncers")
-
-		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
-			"cscli", "bouncers", "list", "-o", "json",
-		})
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, models.Response{
-				Success: false,
-				Error:   fmt.Sprintf("Failed to get bouncers: %v", err),
-			})
-			return
-		}
-
-		// Parse the JSON to ensure it's valid and return as structured data
-		var bouncers []models.Bouncer
-		if err := json.Unmarshal([]byte(output), &bouncers); err != nil {
-			// If JSON parsing fails, log details and return error
-			logger.Warn("Failed to parse bouncers JSON",
-				"error", err,
-				"output_length", len(output),
-				"output_preview", truncateString(output, 100))
-			c.JSON(http.StatusInternalServerError, models.Response{
-				Success: false,
-				Error:   fmt.Sprintf("Failed to parse bouncers JSON: %v", err),
-			})
-			return
-		}
-
-		// Compute status for each bouncer
-		for i := range bouncers {
-			// Primary indicator: if last pull was recent (within 5 minutes), bouncer is connected
-			if time.Since(bouncers[i].LastPull) <= 5*time.Minute {
-				bouncers[i].Status = "connected"
-			} else if bouncers[i].Valid {
-				// Last pull is old but key is valid - bouncer exists but inactive
-				bouncers[i].Status = "stale"
-			} else {
-				// Key is invalid - bouncer is disconnected
-				bouncers[i].Status = "disconnected"
-			}
-		}
-
-		logger.Debug("Bouncers API retrieved successfully", "count", len(bouncers))
-
-		// Return properly formatted data
-		c.JSON(http.StatusOK, models.Response{
-			Success: true,
-			Data:    gin.H{"bouncers": bouncers, "count": len(bouncers)},
-		})
-	}
-}
-
-// GetDecisions retrieves the list of active decisions
+// GetDecisions retrieves CrowdSec decisions
+// GetDecisions retrieves CrowdSec decisions
 func GetDecisions(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		logger.Info("Getting CrowdSec decisions")
+		logger.Info("Getting CrowdSec decisions via cscli")
 
 		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
 			"cscli", "decisions", "list", "-o", "json",
@@ -90,15 +35,79 @@ func GetDecisions(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFu
 			return
 		}
 
-		// Parse as raw JSON - CrowdSec returns an array of alert objects,
-		// each containing a "decisions" array
-		var rawAlerts []map[string]interface{}
-		if err := json.Unmarshal([]byte(output), &rawAlerts); err != nil {
-			// If JSON parsing fails, log details and return error
-			logger.Warn("Failed to parse decisions JSON",
-				"error", err,
-				"output_length", len(output),
-				"output_preview", truncateString(output, 100))
+		// Check if output is empty or null
+		if output == "null" || output == "" || output == "[]" {
+			c.JSON(http.StatusOK, models.Response{
+				Success: true,
+				Data:    gin.H{"decisions": []models.Decision{}, "count": 0},
+			})
+			return
+		}
+
+		// Parse alerts using jsonparser
+		var decisions []models.Decision
+		dataBytes := []byte(output)
+
+		_, err = jsonparser.ArrayEach(dataBytes, func(alertValue []byte, alertType jsonparser.ValueType, alertOffset int, alertErr error) {
+			// Get alert's created_at for fallback
+			var alertCreatedAt string
+			if createdAt, err := jsonparser.GetString(alertValue, "created_at"); err == nil {
+				alertCreatedAt = createdAt
+			}
+
+			// Get alert's ID
+			var alertID int64
+			if id, err := jsonparser.GetInt(alertValue, "id"); err == nil {
+				alertID = id
+			}
+
+			// Parse decisions array within this alert
+			jsonparser.ArrayEach(alertValue, func(decisionValue []byte, decisionType jsonparser.ValueType, decisionOffset int, decisionErr error) {
+				var decision models.Decision
+
+				// Extract decision fields
+				if id, err := jsonparser.GetInt(decisionValue, "id"); err == nil {
+					decision.ID = id
+				}
+				if origin, err := jsonparser.GetString(decisionValue, "origin"); err == nil {
+					decision.Origin = origin
+				}
+				if decisionType, err := jsonparser.GetString(decisionValue, "type"); err == nil {
+					decision.Type = decisionType
+				}
+				if scope, err := jsonparser.GetString(decisionValue, "scope"); err == nil {
+					decision.Scope = scope
+				}
+				if value, err := jsonparser.GetString(decisionValue, "value"); err == nil {
+					decision.Value = value
+				}
+				if duration, err := jsonparser.GetString(decisionValue, "duration"); err == nil {
+					decision.Duration = duration
+				}
+				if scenario, err := jsonparser.GetString(decisionValue, "scenario"); err == nil {
+					decision.Scenario = scenario
+				}
+				if simulated, err := jsonparser.GetBoolean(decisionValue, "simulated"); err == nil {
+					decision.Simulated = simulated
+				}
+				if createdAt, err := jsonparser.GetString(decisionValue, "created_at"); err == nil {
+					decision.CreatedAt = createdAt
+				}
+
+				// Set created_at from alert if not present in decision
+				if decision.CreatedAt == "" {
+					decision.CreatedAt = alertCreatedAt
+				}
+
+				// Set AlertID
+				decision.AlertID = alertID
+
+				decisions = append(decisions, decision)
+			}, "decisions")
+		})
+
+		if err != nil {
+			logger.Error("Failed to parse alerts JSON", "error", err, "output_preview", truncateString(output, 200))
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
 				Error:   fmt.Sprintf("Failed to parse decisions JSON: %v", err),
@@ -106,51 +115,7 @@ func GetDecisions(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFu
 			return
 		}
 
-		// Extract decisions from each alert and convert to normalized Decision format
-		decisions := make([]models.Decision, 0)
-		for _, alert := range rawAlerts {
-			// Each alert has a "decisions" array
-			if decisionsArr, ok := alert["decisions"].([]interface{}); ok {
-				for _, decisionInterface := range decisionsArr {
-					if raw, ok := decisionInterface.(map[string]interface{}); ok {
-						decision := models.Decision{
-							ID:       int64(getInt(raw, "id")),
-							Duration: getString(raw, "duration"),
-						}
-
-						// Handle origin/source field (CrowdSec might use either)
-						decision.Source = getString(raw, "source")
-						if decision.Source == "" {
-							decision.Source = getString(raw, "origin")
-						}
-						decision.Origin = decision.Source
-
-						// Handle type field
-						decision.Type = getString(raw, "type")
-
-						// Handle scope field
-						decision.Scope = getString(raw, "scope")
-
-						// Handle value field
-						decision.Value = getString(raw, "value")
-
-						// Handle scenario/reason field (CrowdSec might use either)
-						decision.Scenario = getString(raw, "scenario")
-						if decision.Scenario == "" {
-							decision.Scenario = getString(raw, "reason")
-						}
-						decision.Reason = decision.Scenario
-
-						// Handle created_at field
-						decision.CreatedAt = getString(raw, "created_at")
-
-						decisions = append(decisions, decision)
-					}
-				}
-			}
-		}
-
-		logger.Debug("Decisions API retrieved successfully", "count", len(decisions))
+		logger.Debug("Decisions retrieved successfully", "count", len(decisions))
 
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
@@ -159,13 +124,14 @@ func GetDecisions(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFu
 	}
 }
 
-// GetMetrics retrieves CrowdSec Prometheus metrics
+// GetMetrics retrieves CrowdSec metrics
+// GetMetrics retrieves CrowdSec metrics
 func GetMetrics(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		logger.Info("Getting CrowdSec metrics")
 
 		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
-			"cscli", "metrics",
+			"cscli", "metrics", "-o", "json",
 		})
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, models.Response{
@@ -175,9 +141,20 @@ func GetMetrics(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc
 			return
 		}
 
+		// Parse as raw JSON
+		var metrics interface{}
+		if err := json.Unmarshal([]byte(output), &metrics); err != nil {
+			logger.Warn("Failed to parse metrics JSON", "error", err)
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to parse metrics JSON: %v", err),
+			})
+			return
+		}
+
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
-			Data:    gin.H{"metrics": output},
+			Data:    metrics,
 		})
 	}
 }
@@ -187,6 +164,7 @@ func EnrollCrowdSec(dockerClient *docker.Client, cfg *config.Config) gin.Handler
 	return func(c *gin.Context) {
 		var req struct {
 			EnrollmentKey string `json:"enrollment_key" binding:"required"`
+			Name          string `json:"name"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, models.Response{
@@ -196,12 +174,18 @@ func EnrollCrowdSec(dockerClient *docker.Client, cfg *config.Config) gin.Handler
 			return
 		}
 
-		logger.Info("Enrolling CrowdSec with console")
+		logger.Info("Enrolling CrowdSec with console", "has_name", req.Name != "")
 
-		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
-			"cscli", "console", "enroll", req.EnrollmentKey,
-		})
+		// Build command with optional name parameter
+		cmd := []string{"cscli", "console", "enroll"}
+		if req.Name != "" {
+			cmd = append(cmd, "--name", req.Name)
+		}
+		cmd = append(cmd, req.EnrollmentKey)
+
+		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, cmd)
 		if err != nil {
+			logger.Error("Enrollment command failed", "error", err, "output", output)
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
 				Error:   fmt.Sprintf("Failed to enroll: %v", err),
@@ -209,9 +193,23 @@ func EnrollCrowdSec(dockerClient *docker.Client, cfg *config.Config) gin.Handler
 			return
 		}
 
+		// Log the full output for debugging
+		logger.Info("Enrollment command completed", "output", output)
+
+		// Check if output indicates success or failure
+		outputLower := strings.ToLower(output)
+		if strings.Contains(outputLower, "error") || strings.Contains(outputLower, "failed") || strings.Contains(outputLower, "fatal") {
+			logger.Warn("Enrollment may have failed", "output", output)
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Enrollment failed: %s", output),
+			})
+			return
+		}
+
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
-			Message: "CrowdSec enrolled successfully",
+			Message: "Enrollment key submitted. Please approve the request in your CrowdSec Console at https://app.crowdsec.net/",
 			Data:    gin.H{"output": output},
 		})
 	}
@@ -220,10 +218,9 @@ func EnrollCrowdSec(dockerClient *docker.Client, cfg *config.Config) gin.Handler
 // GetCrowdSecEnrollmentStatus checks the enrollment status
 func GetCrowdSecEnrollmentStatus(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
-			"cscli", "console", "status", "-o", "json",
-		})
+		status, err := GetConsoleStatusHelper(dockerClient, cfg.CrowdsecContainerName)
 		if err != nil {
+			logger.Error("Failed to get console status", "error", err)
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
 				Error:   fmt.Sprintf("Failed to check status: %v", err),
@@ -231,18 +228,7 @@ func GetCrowdSecEnrollmentStatus(dockerClient *docker.Client, cfg *config.Config
 			return
 		}
 
-		// Parse JSON output
-		// Example output: {"context":{},"enrolled":true,"manual":false,"validated":true}
-		var status struct {
-			Enrolled  bool `json:"enrolled"`
-			Validated bool `json:"validated"`
-		}
-		if err := json.Unmarshal([]byte(output), &status); err != nil {
-			logger.Warn("Failed to parse console status JSON", "error", err, "output", output)
-			// Fallback to simple string check if JSON parsing fails
-			status.Enrolled = strings.Contains(output, "enrolled: true")
-			status.Validated = strings.Contains(output, "validated: true")
-		}
+		logger.Info("Console status retrieved", "enrolled", status.Enrolled, "validated", status.Validated, "manual", status.Manual)
 
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
@@ -254,149 +240,133 @@ func GetCrowdSecEnrollmentStatus(dockerClient *docker.Client, cfg *config.Config
 // GetDecisionsAnalysis retrieves CrowdSec decisions with advanced filtering
 func GetDecisionsAnalysis(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		logger.Info("Getting CrowdSec decisions with filters")
+		logger.Info("Getting CrowdSec decisions analysis via cscli")
 
-		// Build command with filters from query parameters
 		cmd := []string{"cscli", "decisions", "list", "-o", "json"}
 
-		// Add time-based filters
-		if since := c.Query("since"); since != "" {
-			cmd = append(cmd, "--since", since)
+		// Add filters based on query parameters
+		if v := c.Query("ip"); v != "" {
+			cmd = append(cmd, "--ip", v)
 		}
-		if until := c.Query("until"); until != "" {
-			cmd = append(cmd, "--until", until)
+		if v := c.Query("range"); v != "" {
+			cmd = append(cmd, "--range", v)
 		}
-
-		// Add decision type filter
-		if decType := c.Query("type"); decType != "" && decType != "all" {
-			cmd = append(cmd, "-t", decType)
+		if v := c.Query("type"); v != "" && v != "all" {
+			cmd = append(cmd, "--type", v)
 		}
-
-		// Add scope filter
-		if scope := c.Query("scope"); scope != "" && scope != "all" {
-			cmd = append(cmd, "--scope", scope)
+		if v := c.Query("scope"); v != "" && v != "all" {
+			cmd = append(cmd, "--scope", v)
 		}
-
-		// Add origin filter
-		if origin := c.Query("origin"); origin != "" && origin != "all" {
-			cmd = append(cmd, "--origin", origin)
+		if v := c.Query("value"); v != "" {
+			cmd = append(cmd, "--value", v)
 		}
-
-		// Add value filter
-		if value := c.Query("value"); value != "" {
-			cmd = append(cmd, "-v", value)
+		if v := c.Query("scenario"); v != "" {
+			cmd = append(cmd, "--scenario", v)
 		}
-
-		// Add scenario filter
-		if scenario := c.Query("scenario"); scenario != "" {
-			cmd = append(cmd, "-s", scenario)
+		if v := c.Query("origin"); v != "" && v != "all" {
+			cmd = append(cmd, "--origin", v)
 		}
-
-		// Add IP filter (shorthand for --scope ip --value <IP>)
-		if ip := c.Query("ip"); ip != "" {
-			cmd = append(cmd, "-i", ip)
+		if v := c.Query("until"); v != "" {
+			cmd = append(cmd, "--until", v)
 		}
-
-		// Add range filter (shorthand for --scope range --value <RANGE>)
-		if ipRange := c.Query("range"); ipRange != "" {
-			cmd = append(cmd, "-r", ipRange)
-		}
-
-		// Add --all flag to include decisions from Central API
-		if includeAll := c.Query("includeAll"); includeAll == "true" {
+		if v := c.Query("includeAll"); v == "true" {
 			cmd = append(cmd, "-a")
 		}
-
-		logger.Debug("Executing decision analysis command", "cmd", cmd)
 
 		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, cmd)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
-				Error:   fmt.Sprintf("Failed to get decisions: %v", err),
+				Error:   fmt.Sprintf("Failed to get decisions analysis: %v", err),
 			})
 			return
 		}
 
-		// Log raw output for debugging
-		logger.Debug("Raw decisions output",
-			"length", len(output),
-			"preview", truncateString(output, 200))
+		// Check if output is empty or null
+		if output == "null" || output == "" || output == "[]" {
+			c.JSON(http.StatusOK, models.Response{
+				Success: true,
+				Data:    gin.H{"decisions": []models.Decision{}, "count": 0},
+			})
+			return
+		}
 
-		// Parse as raw JSON - CrowdSec returns an array of alert objects,
-		// each containing a "decisions" array
-		var rawAlerts []map[string]interface{}
-		if err := json.Unmarshal([]byte(output), &rawAlerts); err != nil {
-			logger.Warn("Failed to parse decisions JSON",
-				"error", err,
-				"output_length", len(output),
-				"output_preview", truncateString(output, 100))
+		// Parse alerts using jsonparser
+		var decisions []models.Decision
+		dataBytes := []byte(output)
+
+		_, err = jsonparser.ArrayEach(dataBytes, func(alertValue []byte, alertType jsonparser.ValueType, alertOffset int, alertErr error) {
+			// Get alert's created_at for fallback
+			var alertCreatedAt string
+			if createdAt, err := jsonparser.GetString(alertValue, "created_at"); err == nil {
+				alertCreatedAt = createdAt
+			}
+
+			// Get alert's ID
+			var alertID int64
+			if id, err := jsonparser.GetInt(alertValue, "id"); err == nil {
+				alertID = id
+			}
+
+			// Parse decisions array within this alert
+			jsonparser.ArrayEach(alertValue, func(decisionValue []byte, decisionType jsonparser.ValueType, decisionOffset int, decisionErr error) {
+				var decision models.Decision
+
+				// Extract decision fields
+				if id, err := jsonparser.GetInt(decisionValue, "id"); err == nil {
+					decision.ID = id
+				}
+				if origin, err := jsonparser.GetString(decisionValue, "origin"); err == nil {
+					decision.Origin = origin
+				}
+				if decisionType, err := jsonparser.GetString(decisionValue, "type"); err == nil {
+					decision.Type = decisionType
+				}
+				if scope, err := jsonparser.GetString(decisionValue, "scope"); err == nil {
+					decision.Scope = scope
+				}
+				if value, err := jsonparser.GetString(decisionValue, "value"); err == nil {
+					decision.Value = value
+				}
+				if duration, err := jsonparser.GetString(decisionValue, "duration"); err == nil {
+					decision.Duration = duration
+				}
+				if scenario, err := jsonparser.GetString(decisionValue, "scenario"); err == nil {
+					decision.Scenario = scenario
+				}
+				if simulated, err := jsonparser.GetBoolean(decisionValue, "simulated"); err == nil {
+					decision.Simulated = simulated
+				}
+				if createdAt, err := jsonparser.GetString(decisionValue, "created_at"); err == nil {
+					decision.CreatedAt = createdAt
+				}
+
+				// Set created_at from alert if not present in decision
+				if decision.CreatedAt == "" {
+					decision.CreatedAt = alertCreatedAt
+				}
+
+				// Set AlertID
+				decision.AlertID = alertID
+
+				decisions = append(decisions, decision)
+			}, "decisions")
+		})
+
+		if err != nil {
+			logger.Error("Failed to parse decisions analysis JSON", "error", err, "output_preview", truncateString(output, 200))
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
 				Error:   fmt.Sprintf("Failed to parse decisions JSON: %v", err),
 			})
 			return
 		}
+	
 
-		// Extract decisions from each alert and convert to normalized Decision format
-		decisions := make([]models.Decision, 0)
-		for _, alert := range rawAlerts {
-			// Each alert has a "decisions" array
-			if decisionsArr, ok := alert["decisions"].([]interface{}); ok {
-				// Get alert-level created_at (decisions don't have their own created_at)
-				alertCreatedAt := getString(alert, "created_at")
-				
-				for _, decisionInterface := range decisionsArr {
-					if raw, ok := decisionInterface.(map[string]interface{}); ok {
-						decision := models.Decision{
-							ID:       int64(getInt(raw, "id")),
-							Duration: getString(raw, "duration"),
-						}
-
-						// Handle origin/source field (CrowdSec might use either)
-						decision.Source = getString(raw, "source")
-						if decision.Source == "" {
-							decision.Source = getString(raw, "origin")
-						}
-						decision.Origin = decision.Source
-
-						// Handle type field
-						decision.Type = getString(raw, "type")
-
-						// Handle scope field
-						decision.Scope = getString(raw, "scope")
-
-						// Handle value field
-						decision.Value = getString(raw, "value")
-
-						// Handle scenario/reason field (CrowdSec might use either)
-						decision.Scenario = getString(raw, "scenario")
-						if decision.Scenario == "" {
-							decision.Scenario = getString(raw, "reason")
-						}
-						decision.Reason = decision.Scenario
-
-						// Use alert-level created_at (decisions inherit from their alert)
-						decision.CreatedAt = alertCreatedAt
-
-						// Calculate until/expires timestamp from created_at and duration
-						if decision.CreatedAt != "" && decision.Duration != "" {
-							if untilTime := calculateUntil(decision.CreatedAt, decision.Duration); untilTime != nil {
-								decision.Until = untilTime.Format(time.RFC3339)
-							}
-						}
-
-						decisions = append(decisions, decision)
-					}
-				}
-			}
-		}
-
-		logger.Info("Decisions retrieved successfully",
+		logger.Info("Decisions analysis retrieved successfully",
 			"count", len(decisions),
-			"filters_applied", len(activeFilters(c)))
+			"cmd", cmd)
 
-		// Return properly formatted data
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
 			Data:    gin.H{"decisions": decisions, "count": len(decisions)},
@@ -407,63 +377,49 @@ func GetDecisionsAnalysis(dockerClient *docker.Client, cfg *config.Config) gin.H
 // GetAlertsAnalysis retrieves CrowdSec alerts with advanced filtering
 func GetAlertsAnalysis(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		logger.Info("Getting CrowdSec alerts with filters")
+		logger.Info("Getting CrowdSec alerts analysis via cscli")
 
-		// Build command with filters from query parameters
 		cmd := []string{"cscli", "alerts", "list", "-o", "json"}
 
-		// Add time-based filters
-		if since := c.Query("since"); since != "" {
-			cmd = append(cmd, "--since", since)
+		// Add filters based on query parameters
+		// Add filters based on query parameters
+		if v := c.Query("id"); v != "" {
+			cmd = append(cmd, "--id", v)
 		}
-		if until := c.Query("until"); until != "" {
-			cmd = append(cmd, "--until", until)
+		if v := c.Query("ip"); v != "" {
+			cmd = append(cmd, "--ip", v)
 		}
-
-		// Add IP filter
-		if ip := c.Query("ip"); ip != "" {
-			cmd = append(cmd, "-i", ip)
+		if v := c.Query("range"); v != "" {
+			cmd = append(cmd, "--range", v)
 		}
-
-		// Add range filter
-		if ipRange := c.Query("range"); ipRange != "" {
-			cmd = append(cmd, "-r", ipRange)
+		if v := c.Query("type"); v != "" && v != "all" {
+			cmd = append(cmd, "--type", v)
 		}
-
-		// Add scope filter
-		if scope := c.Query("scope"); scope != "" && scope != "all" {
-			cmd = append(cmd, "--scope", scope)
+		if v := c.Query("scope"); v != "" && v != "all" {
+			cmd = append(cmd, "--scope", v)
 		}
-
-		// Add value filter
-		if value := c.Query("value"); value != "" {
-			cmd = append(cmd, "-v", value)
+		if v := c.Query("value"); v != "" {
+			cmd = append(cmd, "--value", v)
 		}
-
-		// Add scenario filter
-		if scenario := c.Query("scenario"); scenario != "" {
-			cmd = append(cmd, "-s", scenario)
+		if v := c.Query("scenario"); v != "" {
+			cmd = append(cmd, "--scenario", v)
 		}
-
-		// Add type filter (decision type associated with alert)
-		if alertType := c.Query("type"); alertType != "" && alertType != "all" {
-			cmd = append(cmd, "--type", alertType)
+		if v := c.Query("origin"); v != "" && v != "all" {
+			cmd = append(cmd, "--origin", v)
 		}
-
-		// Add origin filter
-		if origin := c.Query("origin"); origin != "" && origin != "all" {
-			cmd = append(cmd, "--origin", origin)
+		if v := c.Query("since"); v != "" {
+			cmd = append(cmd, "--since", v)
 		}
-
-		// Add --all flag to include alerts from Central API
-		if includeAll := c.Query("includeAll"); includeAll == "true" {
+		if v := c.Query("until"); v != "" {
+			cmd = append(cmd, "--until", v)
+		}
+		if v := c.Query("includeAll"); v == "true" {
 			cmd = append(cmd, "-a")
 		}
-
-		logger.Debug("Executing alert analysis command", "cmd", cmd)
-
+		
 		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, cmd)
 		if err != nil {
+			logger.Error("Failed to get alerts analysis", "error", err)
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
 				Error:   fmt.Sprintf("Failed to get alerts: %v", err),
@@ -471,21 +427,26 @@ func GetAlertsAnalysis(dockerClient *docker.Client, cfg *config.Config) gin.Hand
 			return
 		}
 
-		// Parse the JSON output
-		var alerts []interface{}
+		// Parse JSON
+		var alerts []interface{} // Using interface{} for now as Alert model might need adjustment
 		if err := json.Unmarshal([]byte(output), &alerts); err != nil {
-			logger.Warn("Failed to parse alerts JSON",
-				"error", err,
-				"output_length", len(output),
-				"output_preview", truncateString(output, 100))
+			if output == "null" || output == "" {
+				c.JSON(http.StatusOK, models.Response{
+					Success: true,
+					Data:    gin.H{"alerts": []interface{}{}, "count": 0},
+				})
+				return
+			}
+			
+			logger.Warn("Failed to parse alerts JSON", "error", err)
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
-				Error:   fmt.Sprintf("Failed to parse alerts JSON: %v", err),
+				Error:   fmt.Sprintf("Failed to parse alerts: %v", err),
 			})
 			return
 		}
 
-		logger.Debug("Alerts analysis retrieved successfully", "count", len(alerts))
+		logger.Info("Alerts analysis retrieved successfully", "count", len(alerts))
 
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
@@ -493,3 +454,5 @@ func GetAlertsAnalysis(dockerClient *docker.Client, cfg *config.Config) gin.Hand
 		})
 	}
 }
+
+

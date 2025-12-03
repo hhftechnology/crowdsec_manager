@@ -41,11 +41,11 @@ services:
       # Backups
       - ./backups:/app/backups
       # Logs
-      - ./logs:/app/logs
+      - ./logs/app:/app/logs
       # Database for settings
       - ./data:/app/data
       # Traefik logs (read-only access)
-      - traefik-logs:/var/log/traefik:ro
+      - ./logs/traefik:/var/log/traefik:ro
     networks:
       - crowdsec-network
     depends_on:
@@ -93,7 +93,7 @@ services:
       - ./config/crowdsec/acquis.yaml:/etc/crowdsec/acquis.yaml:ro
       - crowdsec-db:/var/lib/crowdsec/data/
       - crowdsec-config:/etc/crowdsec/
-      - traefik-logs:/var/log/traefik:ro
+      - ./logs/traefik:/var/log/traefik:ro
     networks:
       - crowdsec-network
     labels:
@@ -125,7 +125,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./config/traefik:/etc/traefik:ro
-      - traefik-logs:/var/log/traefik
+      - ./logs/traefik:/var/log/traefik
     networks:
       - crowdsec-network
     labels:
@@ -141,4 +141,3 @@ networks:
 volumes:
   crowdsec-db:
   crowdsec-config:
-  traefik-logs:

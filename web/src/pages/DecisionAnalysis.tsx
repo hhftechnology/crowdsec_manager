@@ -9,7 +9,19 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Shield, Filter, RefreshCw, AlertCircle, Download } from 'lucide-react'
+import { Shield, Filter, RefreshCw, AlertCircle, Download, Trash2 } from 'lucide-react'
+import { AddDecisionDialog } from '@/components/decisions/AddDecisionDialog'
+import { ImportDecisionsDialog } from '@/components/decisions/ImportDecisionsDialog'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import {
   Table,
   TableBody,
@@ -35,6 +47,20 @@ interface DecisionFilters {
 export default function DecisionAnalysis() {
   const [filters, setFilters] = useState<DecisionFilters>({})
   const [activeFilters, setActiveFilters] = useState<DecisionFilters>({})
+  const [deleteId, setDeleteId] = useState<number | null>(null)
+
+  const handleDelete = async () => {
+    if (!deleteId) return
+    try {
+      await api.crowdsec.deleteDecision({ id: deleteId.toString() })
+      toast.success('Decision deleted successfully')
+      refetch()
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Failed to delete decision')
+    } finally {
+      setDeleteId(null)
+    }
+  }
 
   const { data: decisionsData, isLoading, refetch } = useQuery({
     queryKey: ['decisions-analysis', activeFilters],
@@ -63,9 +89,9 @@ export default function DecisionAnalysis() {
     }
 
     const csvContent = [
-      ['ID', 'Type', 'Scope', 'Value', 'Origin', 'Scenario', 'Duration', 'Created At'].join(','),
+      ['ID', 'Alert ID', 'Type', 'Scope', 'Value', 'Origin', 'Scenario', 'Duration', 'Created At'].join(','),
       ...decisionsData.decisions.map((d: Decision) =>
-        [d.id, d.type, d.scope, d.value, d.origin, d.scenario, d.duration, d.created_at].join(',')
+        [d.id, d.alert_id, d.type, d.scope, d.value, d.origin, d.scenario, d.duration, d.created_at].join(',')
       ),
     ].join('\n')
 
@@ -272,6 +298,8 @@ export default function DecisionAnalysis() {
               </CardDescription>
             </div>
             <div className="flex gap-2">
+              <AddDecisionDialog onSuccess={refetch} />
+              <ImportDecisionsDialog onSuccess={refetch} />
               <Button
                 variant="outline"
                 size="sm"
@@ -299,6 +327,8 @@ export default function DecisionAnalysis() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead>ID</TableHead>
+                    <TableHead>Alert ID</TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead>Scope</TableHead>
                     <TableHead>Value</TableHead>
@@ -306,11 +336,14 @@ export default function DecisionAnalysis() {
                     <TableHead>Scenario</TableHead>
                     <TableHead>Duration</TableHead>
                     <TableHead>Expires</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {decisionsData.decisions.map((decision: Decision, index: number) => (
                     <TableRow key={decision.id || index}>
+                      <TableCell className="font-mono text-xs">{decision.id}</TableCell>
+                      <TableCell className="font-mono text-xs">{decision.alert_id}</TableCell>
                       <TableCell>
                         <Badge variant={decision.type === 'ban' ? 'destructive' : 'default'}>
                           {decision.type}
@@ -327,6 +360,16 @@ export default function DecisionAnalysis() {
                       <TableCell className="text-sm">{decision.duration}</TableCell>
                       <TableCell className="text-sm">
                         {decision.until ? new Date(decision.until).toLocaleString() : 'N/A'}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-destructive"
+                          onClick={() => setDeleteId(decision.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -372,6 +415,23 @@ export default function DecisionAnalysis() {
           </p>
         </CardContent>
       </Card>
+      <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the decision
+              #{deleteId} from CrowdSec.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

@@ -1,6 +1,9 @@
 package models
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 // Response is the standard API response
 type Response struct {
@@ -25,38 +28,63 @@ type HealthStatus struct {
 	Timestamp  time.Time   `json:"timestamp"`
 }
 
+// HealthCheckItem represents a single health check item
+type HealthCheckItem struct {
+	Status  string                 `json:"status"`            // healthy, unhealthy, degraded, warning, info
+	Message string                 `json:"message"`           // Human-readable message
+	Error   string                 `json:"error,omitempty"`   // Error details if check failed
+	Details string                 `json:"details,omitempty"` // Additional details
+	Metrics map[string]interface{} `json:"metrics,omitempty"` // Structured metrics data
+}
+
+// CrowdSecHealthCheck represents the complete CrowdSec Security Engine health status
+type CrowdSecHealthCheck struct {
+	Status    string                     `json:"status"`    // Overall status: healthy, degraded, unhealthy
+	Timestamp time.Time                  `json:"timestamp"` // When the check was performed
+	Checks    map[string]HealthCheckItem `json:"checks"`    // Individual health checks
+}
+
+// Alert represents a CrowdSec alert that contains decisions
+type Alert struct {
+	Capacity  int                      `json:"capacity"`
+	CreatedAt string                   `json:"created_at"`
+	Decisions []Decision               `json:"decisions"`
+	Events    []map[string]interface{} `json:"events,omitempty"`
+}
+
 // Decision represents a CrowdSec decision
 type Decision struct {
 	ID        int64  `json:"id"`
-	Source    string `json:"source"`     // Changed from "origin" to "source"
-	Type      string `json:"type"`       // This is the decision type (ban, captcha, etc.)
-	Scope     string `json:"scope"`      // This should be correct
-	Value     string `json:"value"`      // This should be correct
-	Duration  string `json:"duration"`   // This should be correct
-	Scenario  string `json:"scenario"`   // Changed from "scenario" - let's check if it's "reason"
-	CreatedAt string `json:"created_at"` // Changed from time.Time to string for flexibility
+	AlertID   int64  `json:"alert_id"`           // ID of the parent alert
+	Origin    string `json:"origin"`             // Source of the decision (crowdsec, cscli, etc.)
+	Type      string `json:"type"`               // Decision type (ban, captcha, etc.)
+	Scope     string `json:"scope"`              // Scope (Ip, Range, etc.)
+	Value     string `json:"value"`              // IP address or range
+	Duration  string `json:"duration"`           // Duration like "3h45m3s"
+	Scenario  string `json:"scenario"`           // Scenario name
+	Simulated bool   `json:"simulated"`          // Whether decision is simulated
+	CreatedAt string `json:"created_at"`         // Creation timestamp
 
-	// Alternative field names that CrowdSec might use
-	Reason    string `json:"reason,omitempty"`    // CrowdSec might call scenario "reason"
-	Origin    string `json:"origin,omitempty"`    // Backup field name
-	Until     string `json:"until,omitempty"`     // Expiration timestamp
-	Simulated *bool  `json:"simulated,omitempty"` // Whether decision is simulated
-	UUID      string `json:"uuid,omitempty"`      // Unique identifier for LAPI→CAPI
+	// Legacy/additional fields for backward compatibility
+	Source    string `json:"source,omitempty"`   // Alias for Origin (backward compat)
+	Reason    string `json:"reason,omitempty"`   // Alias for Scenario (some versions use this)
+	Until     string `json:"until,omitempty"`    // Expiration timestamp
+	UUID      string `json:"uuid,omitempty"`     // Unique identifier
 }
 
 // DecisionRaw is the raw structure from CrowdSec JSON output
 // This matches CrowdSec's actual JSON field names
 type DecisionRaw struct {
-	ID        int64  `json:"id"`
-	Source    string `json:"source"`
-	Type      string `json:"type"`
-	Scope     string `json:"scope"`
-	Value     string `json:"value"`
-	Duration  string `json:"duration"`
-	Scenario  string `json:"scenario"`
-	Reason    string `json:"reason"` // CrowdSec uses "reason" for the scenario
-	CreatedAt string `json:"created_at"`
-	Origin    string `json:"origin"`
+	ID        int64       `json:"id"`
+	Source    interface{} `json:"source"` // Changed to interface{} as it can be a string or object
+	Type      string      `json:"type"`
+	Scope     string      `json:"scope"`
+	Value     string      `json:"value"`
+	Duration  string      `json:"duration"`
+	Scenario  string      `json:"scenario"`
+	Reason    string      `json:"reason"` // CrowdSec uses "reason" for the scenario
+	CreatedAt string      `json:"created_at"`
+	Origin    string      `json:"origin"`
 }
 
 // Normalize converts DecisionRaw to Decision with normalized fields
@@ -67,10 +95,40 @@ func (d *DecisionRaw) Normalize() Decision {
 		scenario = d.Reason
 	}
 
-	// Use Source if Origin is empty
-	origin := d.Source
-	if origin == "" && d.Origin != "" {
-		origin = d.Origin
+	// Handle Source which can be string or object
+	var sourceStr string
+	switch v := d.Source.(type) {
+	case string:
+		sourceStr = v
+	case map[string]interface{}:
+		// Try to find a meaningful name in the object
+		if name, ok := v["name"].(string); ok {
+			sourceStr = name
+		} else if typeStr, ok := v["type"].(string); ok {
+			sourceStr = typeStr
+		} else {
+			// Fallback to generic string, but we'll check Origin later
+			sourceStr = "unknown_source_object"
+		}
+	case nil:
+		sourceStr = ""
+	default:
+		sourceStr = fmt.Sprintf("%v", v)
+	}
+
+	// Use Origin if Source is empty or generic/unknown
+	origin := d.Origin
+	if origin == "" || sourceStr != "unknown_source_object" {
+		// If Origin is empty, OR if we found a good Source, use Source
+		// But if Source is "unknown_source_object" and we have an Origin, keep Origin
+		if sourceStr != "" && sourceStr != "unknown_source_object" {
+			origin = sourceStr
+		}
+	}
+	
+	// If we still have unknown source object and no origin, try to be cleaner
+	if origin == "" && sourceStr == "unknown_source_object" {
+		origin = "unknown"
 	}
 
 	return Decision{
@@ -247,9 +305,12 @@ type ConfigPathRequest struct {
 
 // Allowlist represents a CrowdSec allowlist
 type Allowlist struct {
-	Name        string    `json:"name"`
-	Description string    `json:"description"`
-	CreatedAt   time.Time `json:"created_at,omitempty"`
+	Name        string           `json:"name"`
+	Description string           `json:"description"`
+	CreatedAt   string           `json:"created_at,omitempty"`
+	UpdatedAt   string           `json:"updated_at,omitempty"`
+	Items       []AllowlistEntry `json:"items,omitempty"`
+	Size        int              `json:"size,omitempty"` // Computed from Items length
 }
 
 // AllowlistEntry represents an entry in an allowlist
@@ -286,7 +347,30 @@ type AllowlistInspectResponse struct {
 	Name        string           `json:"name"`
 	Description string           `json:"description"`
 	Items       []AllowlistEntry `json:"items"`      // CrowdSec uses "items", not "entries"
-	CreatedAt   time.Time        `json:"created_at"` // When the allowlist was created
-	UpdatedAt   time.Time        `json:"updated_at"` // When the allowlist was last updated
-	Count       int              `json:"-"`          // Computed field, not in JSON
+	CreatedAt   string           `json:"created_at"` // When the allowlist was created
+	UpdatedAt   string           `json:"updated_at"` // When the allowlist was last updated
+	Count       int              `json:"count,omitempty"` // Number of items
+}
+
+// DiscordConfig represents the configuration for Discord notifications
+type DiscordConfig struct {
+	Enabled           bool   `json:"enabled"`
+	WebhookID         string `json:"webhook_id"`
+	WebhookToken      string `json:"webhook_token"`
+	GeoapifyKey       string `json:"geoapify_key"`
+	CTIKey            string `json:"cti_key"`
+	CrowdSecRestarted bool   `json:"crowdsec_restarted,omitempty"` // Status flag
+	ManuallyConfigured bool  `json:"manually_configured,omitempty"` // Indicates if config was manually added by user
+	ConfigSource      string `json:"config_source,omitempty"`       // Where config was found: "database", "container", "both"
+}
+
+// ConsoleStatus represents the CrowdSec Console enrollment status
+type ConsoleStatus struct {
+	Enrolled          bool `json:"enrolled"`
+	Validated         bool `json:"validated"`
+	Manual            bool `json:"manual"`
+	ConsoleManagement bool `json:"console_management"`
+	Context           bool `json:"context"`
+	Custom            bool `json:"custom"`
+	Tainted           bool `json:"tainted"`
 }

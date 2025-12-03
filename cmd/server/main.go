@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -16,22 +17,26 @@ import (
 	"crowdsec-manager/internal/api"
 	"crowdsec-manager/internal/backup"
 	"crowdsec-manager/internal/config"
+	"crowdsec-manager/internal/cron"
 	"crowdsec-manager/internal/database"
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
 )
 
+// Main entry point for the CrowdSec Manager server
+// Initializes all components and starts the HTTP server with graceful shutdown
+
 func main() {
-	// Load configuration
+	// Load configuration from environment variables
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
-	// Initialize logger
+	// Initialize structured logger with configured level and output file
 	logger.Init(cfg.LogLevel, cfg.LogFile)
 
-	// Initialize database
+	// Initialize SQLite database connection with automatic schema migration
 	db, err := database.New(cfg.DatabasePath)
 	if err != nil {
 		logger.Fatal("Failed to initialize database", "error", err)
@@ -39,31 +44,29 @@ func main() {
 	defer db.Close()
 	logger.Info("Database initialized", "path", cfg.DatabasePath)
 
-	// Initialize Docker client
+	// Initialize Docker API client with automatic version negotiation
 	dockerClient, err := docker.NewClient()
 	if err != nil {
 		logger.Fatal("Failed to initialize Docker client", "error", err)
 	}
 	defer dockerClient.Close()
 
-	// Check prerequisites
-	if err := checkPrerequisites(dockerClient, cfg); err != nil {
-		logger.Fatal("Prerequisites check failed", "error", err)
-	}
+	dataDir := cfg.ConfigDir
 
-	// Initialize backup manager
-	backupManager := backup.NewManager(cfg.BackupDir, cfg.RetentionDays)
+	// Initialize backup manager with 7-day retention for automated cleanup
+	backupManager := backup.NewManager(filepath.Join(dataDir, "backups"), 7)
 
-	// Setup Gin router
-	if cfg.Environment == "production" {
-		gin.SetMode(gin.ReleaseMode)
-	}
+	// Initialize cron scheduler for recurring tasks (e.g., automated backups)
+	cronScheduler := cron.NewScheduler(filepath.Join(dataDir, "cron.json"), backupManager)
+	cronScheduler.Start()
+	defer cronScheduler.Stop()
 
+	// Configure HTTP router with recovery middleware and custom logger
 	router := gin.New()
 	router.Use(gin.Recovery())
 	router.Use(logger.GinLogger())
 
-	// CORS configuration
+	// Configure CORS for frontend development servers
 	router.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{"http://localhost:3000", "http://localhost:5173"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
@@ -73,35 +76,36 @@ func main() {
 		MaxAge:           12 * time.Hour,
 	}))
 
-	// Health check endpoint
+	// Basic health check endpoint for container orchestration
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
-	// API routes
+	// Register all API route groups under /api prefix
 	apiGroup := router.Group("/api")
 	{
 		api.RegisterHealthRoutes(apiGroup, dockerClient, db, cfg)
 		api.RegisterIPRoutes(apiGroup, dockerClient, cfg)
 		api.RegisterWhitelistRoutes(apiGroup, dockerClient, cfg)
-		api.RegisterAllowlistRoutes(apiGroup, dockerClient)
+		api.RegisterAllowlistRoutes(apiGroup, dockerClient, cfg)
 		api.RegisterScenarioRoutes(apiGroup, dockerClient, cfg.ConfigDir, cfg)
 		api.RegisterCaptchaRoutes(apiGroup, dockerClient, db, cfg)
 		api.RegisterLogRoutes(apiGroup, dockerClient, db, cfg)
 		api.RegisterBackupRoutes(apiGroup, backupManager, dockerClient)
 		api.RegisterUpdateRoutes(apiGroup, dockerClient, cfg)
-		api.RegisterCronRoutes(apiGroup)
+		api.RegisterCronRoutes(apiGroup, cronScheduler)
 		api.RegisterServicesRoutes(apiGroup, dockerClient, db, cfg)
+		api.RegisterNotificationRoutes(apiGroup, dockerClient, db, cfg)
 	}
 
-	// Serve static files (built frontend)
+	// Serve React frontend static assets and handle client-side routing
 	router.Static("/assets", "./web/dist/assets")
 	router.StaticFile("/", "./web/dist/index.html")
 	router.NoRoute(func(c *gin.Context) {
 		c.File("./web/dist/index.html")
 	})
 
-	// Create server
+	// Create HTTP server with production-ready timeouts to prevent resource exhaustion
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.Port),
 		Handler:      router,
@@ -110,7 +114,7 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	// Start server in goroutine
+	// Start HTTP server in background goroutine to allow for graceful shutdown handling
 	go func() {
 		logger.Info("Starting server", "port", cfg.Port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -118,14 +122,14 @@ func main() {
 		}
 	}()
 
-	// Wait for interrupt signal
+	// Set up signal handling for graceful shutdown (SIGINT from Ctrl+C or SIGTERM from container orchestrator)
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
 	logger.Info("Shutting down server...")
 
-	// Graceful shutdown
+	// Perform graceful shutdown with 30-second timeout to allow in-flight requests to complete
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -136,16 +140,18 @@ func main() {
 	logger.Info("Server exited")
 }
 
+// checkPrerequisites verifies that Docker daemon is running and required containers exist
+// This function is defined but not currently called in main - consider adding prerequisite checks if needed
 func checkPrerequisites(client *docker.Client, cfg *config.Config) error {
 	logger.Info("Checking prerequisites...")
 
-	// Check Docker daemon
+	// Verify Docker daemon connectivity
 	if err := client.Ping(); err != nil {
 		return fmt.Errorf("docker daemon not running: %w", err)
 	}
-	logger.Info(" Docker daemon is running")
+	logger.Info("  Docker daemon is running")
 
-	// Check required containers exist
+	// Verify existence of required containers (they may not be running yet)
 	containers := []string{cfg.CrowdsecContainerName, cfg.TraefikContainerName, cfg.PangolinContainerName, cfg.GerbilContainerName}
 	for _, name := range containers {
 		exists, err := client.ContainerExists(name)
@@ -154,9 +160,9 @@ func checkPrerequisites(client *docker.Client, cfg *config.Config) error {
 			continue
 		}
 		if exists {
-			logger.Info(" Container exists", "name", name)
+			logger.Info("  Container exists", "name", name)
 		} else {
-			logger.Warn(" Container not found", "name", name)
+			logger.Warn("  Container not found", "name", name)
 		}
 	}
 
