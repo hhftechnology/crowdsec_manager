@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import api, { UpdateRequest, ServiceUpdateStatus } from '@/lib/api'
+import api, { UpdateRequest } from '@/lib/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -157,29 +157,33 @@ export default function Update() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="pangolin-tag">Pangolin Tag</Label>
-            <Input
-              id="pangolin-tag"
-              type="text"
-              placeholder="e.g., latest, v1.0.0, stable"
-              value={pangolinTag}
-              onChange={(e) => setPangolinTag(e.target.value)}
-              disabled={isUpdating}
-            />
-          </div>
+          {updateStatus && updateStatus['pangolin'] && (
+            <div className="space-y-2">
+              <Label htmlFor="pangolin-tag">Pangolin Tag</Label>
+              <Input
+                id="pangolin-tag"
+                type="text"
+                placeholder="e.g., latest, v1.0.0, stable"
+                value={pangolinTag}
+                onChange={(e) => setPangolinTag(e.target.value)}
+                disabled={isUpdating}
+              />
+            </div>
+          )}
 
-          <div className="space-y-2">
-            <Label htmlFor="gerbil-tag">Gerbil Tag</Label>
-            <Input
-              id="gerbil-tag"
-              type="text"
-              placeholder="e.g., latest, v1.0.0, stable"
-              value={gerbilTag}
-              onChange={(e) => setGerbilTag(e.target.value)}
-              disabled={isUpdating}
-            />
-          </div>
+          {updateStatus && updateStatus['gerbil'] && (
+            <div className="space-y-2">
+              <Label htmlFor="gerbil-tag">Gerbil Tag</Label>
+              <Input
+                id="gerbil-tag"
+                type="text"
+                placeholder="e.g., latest, v1.0.0, stable"
+                value={gerbilTag}
+                onChange={(e) => setGerbilTag(e.target.value)}
+                disabled={isUpdating}
+              />
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="traefik-tag">Traefik Tag</Label>

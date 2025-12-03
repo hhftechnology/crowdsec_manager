@@ -31,6 +31,7 @@ export interface HealthStatus {
 
 export interface Decision {
   id: number
+  alert_id: number
   origin: string
   type: string
   scope: string
@@ -41,6 +42,27 @@ export interface Decision {
   until?: string
 }
 
+export interface AddDecisionRequest {
+  ip?: string
+  range?: string
+  duration?: string
+  type?: string
+  scope?: string
+  value?: string
+  reason?: string
+}
+
+export interface DeleteDecisionRequest {
+  id?: string
+  ip?: string
+  range?: string
+  type?: string
+  scope?: string
+  value?: string
+  scenario?: string
+  origin?: string
+}
+
 export interface Bouncer {
   name: string
   ip_address: string
@@ -48,6 +70,7 @@ export interface Bouncer {
   last_pull: string
   type: string
   version: string
+  status?: string
 }
 
 export interface IPInfo {
@@ -186,6 +209,7 @@ export interface ServiceActionRequest {
 
 export interface EnrollRequest {
   enrollment_key: string
+  name?: string
 }
 
 export interface ConfigPathRequest {
@@ -241,6 +265,9 @@ export interface AllowlistInspectResponse {
 export const healthAPI = {
   checkStack: () =>
     api.get<ApiResponse<HealthStatus>>('/health/stack'),
+
+  crowdsecHealth: () =>
+    api.get<ApiResponse>('/health/crowdsec'),
 
   completeDiagnostics: () =>
     api.get<ApiResponse<DiagnosticResult>>('/health/complete'),
@@ -447,6 +474,12 @@ export const crowdsecAPI = {
   getBouncers: () =>
      api.get<ApiResponse<{ bouncers: Bouncer[]; count: number }>>('/crowdsec/bouncers'),
 
+  addBouncer: (name: string) =>
+    api.post<ApiResponse<{ name: string; api_key: string }>>('/crowdsec/bouncers', { name }),
+
+  deleteBouncer: (name: string) =>
+    api.delete<ApiResponse>(`/crowdsec/bouncers/${name}`),
+
   getDecisions: () =>
     api.get<ApiResponse<{ decisions: Decision[]; count: number }>>('/crowdsec/decisions'),
 
@@ -459,8 +492,27 @@ export const crowdsecAPI = {
   enroll: (data: EnrollRequest) =>
     api.post<ApiResponse<{ output: string }>>('/crowdsec/enroll', data),
 
+  getStatus: () =>
+    api.get<ApiResponse<{ enrolled: boolean; validated: boolean }>>('/crowdsec/status'),
+
   getAlertsAnalysis: (filters: AlertFilters) =>
     api.get<ApiResponse<{ alerts: any[]; count: number }>>('/crowdsec/alerts/analysis', { params: filters }),
+
+  addDecision: (data: AddDecisionRequest) =>
+    api.post<ApiResponse>('/crowdsec/decisions', data),
+
+  deleteDecision: (params: DeleteDecisionRequest) =>
+    api.delete<ApiResponse>('/crowdsec/decisions', { params }),
+
+  importDecisions: (file: File) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return api.post<ApiResponse>('/crowdsec/decisions/import', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+  },
 }
 
 // =============================================================================
@@ -487,7 +539,7 @@ export const traefikAPI = {
 
 export const allowlistAPI = {
   list: () =>
-    api.get<ApiResponse<Allowlist[]>>('/allowlist/list'),
+    api.get<ApiResponse<{ allowlists: Allowlist[]; count: number }>>('/allowlist/list'),
 
   create: (data: AllowlistCreateRequest) =>
     api.post<ApiResponse<Allowlist>>('/allowlist/create', data),

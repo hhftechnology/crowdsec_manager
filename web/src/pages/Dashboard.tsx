@@ -32,7 +32,6 @@ export default function Dashboard() {
     refetchInterval: 30000, // Refresh every 30 seconds
   })
 
-  // FIXED: Properly handle the structured JSON response from the API
   const parseDecisionsCount = (data: any): number => {
     if (!data) return 0
     // If the API returns a count field, use it (preferred)
@@ -49,15 +48,9 @@ export default function Dashboard() {
 
   const parseBouncersCount = (data: any): number => {
     if (!data) return 0
-    // If the API returns a count field, use it
     if (typeof data.count === 'number') return data.count
-    // If bouncers array is available, use its length
-    if (Array.isArray(data.bouncers)) return data.bouncers.length
-    // Fallback to parsing the string
-    if (typeof data.bouncers === 'string') {
-      const lines = data.bouncers.split('\n').filter((line: string) => line.trim())
-      return Math.max(0, lines.length - 2)
-    }
+    if (Array.isArray(data)) return data.length
+    if (data.bouncers && Array.isArray(data.bouncers)) return data.bouncers.length
     return 0
   }
 
@@ -94,7 +87,7 @@ export default function Dashboard() {
         </CardHeader>
         <CardContent>
           <div className="space-y-2">
-            {healthData?.containers.map((container) => (
+            {healthData?.containers.map((container: any) => (
               <div
                 key={container.id}
                 className="flex items-center justify-between p-3 rounded-lg border"
@@ -179,7 +172,7 @@ export default function Dashboard() {
                 <div className="h-8 w-16 animate-pulse bg-muted rounded" />
               ) : (
                 <>
-                  {healthData?.containers.filter(c => c.running).length || 0}
+                  {healthData?.containers.filter((c: any) => c.running).length || 0}
                   <span className="text-muted-foreground text-base">
                     /{healthData?.containers.length || 0}
                   </span>

@@ -59,9 +59,9 @@ export default function Logs() {
           prevStreamLengthRef.current = 0
         }
 
-        ws.onmessage = (event) => {
+        ws.onmessage = (event: MessageEvent) => {
           // Filter out empty messages
-          const message = event.data?.trim()
+          const message = (event.data as string)?.trim()
           if (!message || message === '') {
             return
           }
