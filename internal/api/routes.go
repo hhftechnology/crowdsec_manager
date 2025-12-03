@@ -170,7 +170,7 @@ func RegisterServicesRoutes(router *gin.RouterGroup, dockerClient *docker.Client
 func RegisterNotificationRoutes(router *gin.RouterGroup, dockerClient *docker.Client, db *database.Database, cfg *config.Config) {
 	notifications := router.Group("/notifications")
 	{
-		notifications.GET("/discord", handlers.GetDiscordConfig(db, cfg))
+		notifications.GET("/discord", handlers.GetDiscordConfig(db, cfg, dockerClient))
 		notifications.POST("/discord", handlers.UpdateDiscordConfig(db, cfg, dockerClient))
 	}
 }

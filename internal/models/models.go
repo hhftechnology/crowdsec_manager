@@ -360,6 +360,8 @@ type DiscordConfig struct {
 	GeoapifyKey       string `json:"geoapify_key"`
 	CTIKey            string `json:"cti_key"`
 	CrowdSecRestarted bool   `json:"crowdsec_restarted,omitempty"` // Status flag
+	ManuallyConfigured bool  `json:"manually_configured,omitempty"` // Indicates if config was manually added by user
+	ConfigSource      string `json:"config_source,omitempty"`       // Where config was found: "database", "container", "both"
 }
 
 // ConsoleStatus represents the CrowdSec Console enrollment status

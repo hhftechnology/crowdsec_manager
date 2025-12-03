@@ -170,8 +170,72 @@ func parseDiscordYaml(path string) (*models.DiscordConfig, error) {
 	return config, nil
 }
 
+// readDiscordConfigFromContainer reads discord.yaml from CrowdSec container and detects manual configuration
+func readDiscordConfigFromContainer(dockerClient *docker.Client, cfg *config.Config) (*models.DiscordConfig, error) {
+	// Read discord.yaml from container
+	output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
+		"cat", "/etc/crowdsec/notifications/discord.yaml",
+	})
+	if err != nil {
+		return nil, fmt.Errorf("discord.yaml not found in container: %w", err)
+	}
+
+	yamlContent := strings.TrimSpace(output)
+	if yamlContent == "" {
+		return nil, fmt.Errorf("discord.yaml is empty")
+	}
+
+	var yamlData map[string]interface{}
+	if err := yaml.Unmarshal([]byte(yamlContent), &yamlData); err != nil {
+		return nil, fmt.Errorf("failed to parse discord.yaml: %w", err)
+	}
+
+	config := &models.DiscordConfig{}
+	hasManualConfig := false
+
+	// Extract URL and check if it has hardcoded values or template variables
+	if urlStr, ok := yamlData["url"].(string); ok {
+		// Check if URL contains actual values (not template variables)
+		if strings.Contains(urlStr, "discord.com/api/webhooks/") {
+			// Check if it uses template variables like ${DISCORD_WEBHOOK_ID}
+			if !strings.Contains(urlStr, "${DISCORD_WEBHOOK_ID}") && !strings.Contains(urlStr, "${DISCORD_WEBHOOK_TOKEN}") {
+				// Has hardcoded values - extract them
+				parts := strings.Split(urlStr, "/")
+				if len(parts) >= 7 {
+					config.WebhookID = parts[5]
+					config.WebhookToken = parts[6]
+					hasManualConfig = true
+				}
+			}
+		}
+	}
+
+	// Extract Geoapify key if hardcoded (not template variable)
+	if formatStr, ok := yamlData["format"].(string); ok {
+		if strings.Contains(formatStr, "geoapify") {
+			// Check if it's NOT using template variable
+			if !strings.Contains(formatStr, "${GEOAPIFY_API_KEY}") && !strings.Contains(formatStr, "{{env \"GEOAPIFY_API_KEY\"}}") {
+				// Look for actual API key value
+				re := regexp.MustCompile(`apiKey=([A-Za-z0-9_-]+)`)
+				matches := re.FindStringSubmatch(formatStr)
+				if len(matches) > 1 && matches[1] != "" {
+					config.GeoapifyKey = matches[1]
+					hasManualConfig = true
+				}
+			}
+		}
+	}
+
+	config.ManuallyConfigured = hasManualConfig
+	if hasManualConfig {
+		logger.Info("Detected manually configured discord.yaml in container")
+	}
+
+	return config, nil
+}
+
 // GetDiscordConfig retrieves the current Discord configuration
-func GetDiscordConfig(db *database.Database, cfg *config.Config) gin.HandlerFunc {
+func GetDiscordConfig(db *database.Database, cfg *config.Config, dockerClient *docker.Client) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		settings, err := db.GetSettings()
 		if err != nil {
@@ -196,11 +260,46 @@ func GetDiscordConfig(db *database.Database, cfg *config.Config) gin.HandlerFunc
 			WebhookToken: settings.DiscordWebhookToken,
 			GeoapifyKey:  settings.GeoapifyKey,
 			CTIKey:       settings.CTIKey,
+			ConfigSource: "database",
 		}
 
-		// Note: We don't read from container's discord.yaml because it uses environment variable syntax
-		// The database is the source of truth for the actual values
-		// The container file just references ${DISCORD_WEBHOOK_ID} etc.
+		// Try to read from container to detect manual configuration
+		containerConfig, err := readDiscordConfigFromContainer(dockerClient, cfg)
+		if err == nil && containerConfig != nil {
+			// Container config exists - check if it's manually configured or uses templates
+			if containerConfig.ManuallyConfigured {
+				// User manually configured discord.yaml with hardcoded values
+				config.ManuallyConfigured = true
+				config.ConfigSource = "container"
+
+				// Pre-populate with container values if database is empty
+				if config.WebhookID == "" && containerConfig.WebhookID != "" {
+					config.WebhookID = containerConfig.WebhookID
+					logger.Info("Pre-populated WebhookID from manually configured container discord.yaml")
+				}
+				if config.WebhookToken == "" && containerConfig.WebhookToken != "" {
+					config.WebhookToken = containerConfig.WebhookToken
+					logger.Info("Pre-populated WebhookToken from manually configured container discord.yaml")
+				}
+				if config.GeoapifyKey == "" && containerConfig.GeoapifyKey != "" {
+					config.GeoapifyKey = containerConfig.GeoapifyKey
+					logger.Info("Pre-populated GeoapifyKey from manually configured container discord.yaml")
+				}
+
+				// If both sources have values, indicate that
+				if settings.DiscordWebhookID != "" || settings.DiscordWebhookToken != "" {
+					config.ConfigSource = "both"
+				}
+			} else {
+				// Container has discord.yaml but it uses template variables (normal case)
+				config.ConfigSource = "database"
+			}
+		} else {
+			// No container config found (file doesn't exist or error reading)
+			if config.WebhookID == "" && config.WebhookToken == "" {
+				config.ConfigSource = "none"
+			}
+		}
 
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
