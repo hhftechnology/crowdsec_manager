@@ -184,3 +184,12 @@ func RegisterCronRoutes(router *gin.RouterGroup, scheduler *cron.Scheduler) {
 		cronRoutes.DELETE("/:id", handlers.DeleteCronJob(scheduler))
 	}
 }
+
+// RegisterProfileRoutes configures endpoints for managing profiles.yaml
+func RegisterProfileRoutes(router *gin.RouterGroup, db *database.Database, cfg *config.Config, dockerClient *docker.Client) {
+	profiles := router.Group("/profiles")
+	{
+		profiles.GET("", handlers.GetProfiles(cfg))
+		profiles.POST("", handlers.UpdateProfiles(db, cfg, dockerClient))
+	}
+}

@@ -73,6 +73,7 @@ const navigation = [
       { name: 'Notification settings', href: '/notifications', icon: Bell },
       { name: 'Allowlists', href: '/allowlist', icon: ListChecks },
       { name: 'Whitelists', href: '/whitelist', icon: ListFilter },
+      { name: 'Profiles', href: '/profiles', icon: FileText },
       { name: 'IP Management', href: '/ip-management', icon: Network },
     ]
   },

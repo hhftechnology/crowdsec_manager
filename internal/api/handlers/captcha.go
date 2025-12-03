@@ -339,8 +339,8 @@ func GetCaptchaStatus(dockerClient *docker.Client, db *database.Database, cfg *c
 func detectCaptchaInConfig(configContent string) (enabled bool, provider string, hasHTMLPath bool) {
 	configLower := strings.ToLower(configContent)
 
-	// Check if captcha is enabled in Traefik config
-	if strings.Contains(configLower, "captcha:") && strings.Contains(configLower, "enabled: true") {
+	// Check if captcha keys exist (flat structure)
+	if strings.Contains(configLower, "captchaprovider") || strings.Contains(configLower, "captchasitekey") {
 		enabled = true
 
 		// Detect provider
@@ -355,8 +355,8 @@ func detectCaptchaInConfig(configContent string) (enabled bool, provider string,
 		}
 	}
 
-	// Check for HTML path (custom template)
-	if strings.Contains(configLower, "htmlpath:") {
+	// Check for HTML path
+	if strings.Contains(configLower, "captchahtmlfilepath") {
 		hasHTMLPath = true
 	}
 
@@ -371,19 +371,27 @@ func extractCaptchaKeys(configContent string) (siteKey string, secretKey string)
 		return "", ""
 	}
 
-	// Navigate: http -> middlewares -> crowdsec-plugin -> plugin -> crowdsec
+	// Navigate: http -> middlewares -> (any) -> plugin -> (crowdsec*)
 	if http, ok := config["http"].(map[string]interface{}); ok {
 		if middlewares, ok := http["middlewares"].(map[string]interface{}); ok {
-			if crowdsecPlugin, ok := middlewares["crowdsec-plugin"].(map[string]interface{}); ok {
-				if plugin, ok := crowdsecPlugin["plugin"].(map[string]interface{}); ok {
-					if crowdsec, ok := plugin["crowdsec"].(map[string]interface{}); ok {
-						// Extract captchaSiteKey
-						if key, ok := crowdsec["captchaSiteKey"].(string); ok {
-							siteKey = key
-						}
-						// Extract captchaSecretKey
-						if key, ok := crowdsec["captchaSecretKey"].(string); ok {
-							secretKey = key
+			// Iterate over all middlewares to find the one with CrowdSec plugin
+			for _, mw := range middlewares {
+				if mwMap, ok := mw.(map[string]interface{}); ok {
+					if plugin, ok := mwMap["plugin"].(map[string]interface{}); ok {
+						// Check for crowdsec plugin (key containing "crowdsec")
+						for k, v := range plugin {
+							if strings.Contains(strings.ToLower(k), "crowdsec") {
+								if crowdsec, ok := v.(map[string]interface{}); ok {
+									// Extract keys from flat structure
+									if key, ok := crowdsec["captchaSiteKey"].(string); ok {
+										siteKey = key
+									}
+									if key, ok := crowdsec["captchaSecretKey"].(string); ok {
+										secretKey = key
+									}
+									return siteKey, secretKey
+								}
+							}
 						}
 					}
 				}

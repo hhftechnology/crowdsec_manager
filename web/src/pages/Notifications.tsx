@@ -13,7 +13,7 @@ interface DiscordConfig {
   webhook_id: string
   webhook_token: string
   geoapify_key: string
-  cti_key: string
+  crowdsec_cti_api_key: string
   crowdsec_restarted?: boolean
   manually_configured?: boolean
   config_source?: string
@@ -25,7 +25,7 @@ export default function Notifications() {
     webhook_id: '',
     webhook_token: '',
     geoapify_key: '',
-    cti_key: '',
+    crowdsec_cti_api_key: '',
   })
   const [webhookUrl, setWebhookUrl] = useState('')
   const [loading, setLoading] = useState(true)
@@ -199,8 +199,8 @@ export default function Notifications() {
               <Input
                 id="cti-key"
                 type="password"
-                value={config.cti_key}
-                onChange={(e) => setConfig(prev => ({ ...prev, cti_key: e.target.value }))}
+                value={config.crowdsec_cti_api_key}
+                onChange={(e) => setConfig(prev => ({ ...prev, crowdsec_cti_api_key: e.target.value }))}
               />
               <p className="text-sm text-muted-foreground">
                 For enhanced IP information and maliciousness scores.

@@ -358,7 +358,7 @@ type DiscordConfig struct {
 	WebhookID         string `json:"webhook_id"`
 	WebhookToken      string `json:"webhook_token"`
 	GeoapifyKey       string `json:"geoapify_key"`
-	CTIKey            string `json:"cti_key"`
+	CrowdSecCTIKey    string `json:"crowdsec_cti_api_key"`
 	CrowdSecRestarted bool   `json:"crowdsec_restarted,omitempty"` // Status flag
 	ManuallyConfigured bool  `json:"manually_configured,omitempty"` // Indicates if config was manually added by user
 	ConfigSource      string `json:"config_source,omitempty"`       // Where config was found: "database", "container", "both"
@@ -373,4 +373,17 @@ type ConsoleStatus struct {
 	Context           bool `json:"context"`
 	Custom            bool `json:"custom"`
 	Tainted           bool `json:"tainted"`
+}
+
+// ProfileRequest represents the request to update profiles.yaml
+type ProfileRequest struct {
+	Content string `json:"content"`
+	Restart bool   `json:"restart"`
+}
+
+// ProfileHistory represents a historical version of profiles.yaml
+type ProfileHistory struct {
+	ID        int       `json:"id"`
+	Content   string    `json:"content"`
+	CreatedAt time.Time `json:"created_at"`
 }

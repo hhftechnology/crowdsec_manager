@@ -259,7 +259,7 @@ func GetDiscordConfig(db *database.Database, cfg *config.Config, dockerClient *d
 			WebhookID:    settings.DiscordWebhookID,
 			WebhookToken: settings.DiscordWebhookToken,
 			GeoapifyKey:  settings.GeoapifyKey,
-			CTIKey:       settings.CTIKey,
+			CrowdSecCTIKey:       settings.CrowdSecCTIKey,
 			ConfigSource: "database",
 		}
 
@@ -333,7 +333,7 @@ func UpdateDiscordConfig(db *database.Database, cfg *config.Config, dockerClient
 		settings.DiscordWebhookID = req.WebhookID
 		settings.DiscordWebhookToken = req.WebhookToken
 		settings.GeoapifyKey = req.GeoapifyKey
-		settings.CTIKey = req.CTIKey
+		settings.CrowdSecCTIKey = req.CrowdSecCTIKey
 
 		if err := db.UpdateSettings(settings); err != nil {
 			c.JSON(http.StatusInternalServerError, models.Response{
@@ -379,7 +379,7 @@ func UpdateDiscordConfig(db *database.Database, cfg *config.Config, dockerClient
 		}
 
 		// 3. Update config.yaml for CTI API if CTI key is provided
-		if req.CTIKey != "" {
+		if req.CrowdSecCTIKey != "" {
 			configPath := filepath.Join(cfg.ConfigDir, "crowdsec", "config.yaml")
 			if err := updateCrowdSecConfig(configPath, true); err != nil {
 				logger.Warn("Failed to update config.yaml for CTI", "error", err)
@@ -787,8 +787,8 @@ func updateDockerComposeEnvOnly(composePath string, config models.DiscordConfig)
 		setScalar(envNode, "GEOAPIFY_API_KEY", config.GeoapifyKey)
 		setScalar(envNode, "DISCORD_WEBHOOK_ID", config.WebhookID)
 		setScalar(envNode, "DISCORD_WEBHOOK_TOKEN", config.WebhookToken)
-		if config.CTIKey != "" {
-			setScalar(envNode, "CTI_API_KEY", config.CTIKey)
+		if config.CrowdSecCTIKey != "" {
+			setScalar(envNode, "CROWDSEC_CTI_API_KEY", config.CrowdSecCTIKey)
 		}
 	} else if envNode.Kind == yaml.SequenceNode {
 		// Handle list format: - KEY=VALUE
@@ -810,8 +810,8 @@ func updateDockerComposeEnvOnly(composePath string, config models.DiscordConfig)
 		updateListEnv("GEOAPIFY_API_KEY", config.GeoapifyKey)
 		updateListEnv("DISCORD_WEBHOOK_ID", config.WebhookID)
 		updateListEnv("DISCORD_WEBHOOK_TOKEN", config.WebhookToken)
-		if config.CTIKey != "" {
-			updateListEnv("CTI_API_KEY", config.CTIKey)
+		if config.CrowdSecCTIKey != "" {
+			updateListEnv("CROWDSEC_CTI_API_KEY", config.CrowdSecCTIKey)
 		}
 	} else {
 		return fmt.Errorf("environment section has unexpected format")
@@ -860,8 +860,8 @@ func createOrUpdateEnvFile(envPath string, config models.DiscordConfig) error {
 	envVars["GEOAPIFY_API_KEY"] = config.GeoapifyKey
 	envVars["DISCORD_WEBHOOK_ID"] = config.WebhookID
 	envVars["DISCORD_WEBHOOK_TOKEN"] = config.WebhookToken
-	if config.CTIKey != "" {
-		envVars["CTI_API_KEY"] = config.CTIKey
+	if config.CrowdSecCTIKey != "" {
+		envVars["CROWDSEC_CTI_API_KEY"] = config.CrowdSecCTIKey
 	}
 
 	// Build new .env content
@@ -870,15 +870,15 @@ func createOrUpdateEnvFile(envPath string, config models.DiscordConfig) error {
 	lines = append(lines, fmt.Sprintf("GEOAPIFY_API_KEY=%s", envVars["GEOAPIFY_API_KEY"]))
 	lines = append(lines, fmt.Sprintf("DISCORD_WEBHOOK_ID=%s", envVars["DISCORD_WEBHOOK_ID"]))
 	lines = append(lines, fmt.Sprintf("DISCORD_WEBHOOK_TOKEN=%s", envVars["DISCORD_WEBHOOK_TOKEN"]))
-	if config.CTIKey != "" {
-		lines = append(lines, fmt.Sprintf("CTI_API_KEY=%s", envVars["CTI_API_KEY"]))
+	if config.CrowdSecCTIKey != "" {
+		lines = append(lines, fmt.Sprintf("CROWDSEC_CTI_API_KEY=%s", envVars["CROWDSEC_CTI_API_KEY"]))
 	}
 	lines = append(lines, "")
 
 	// Append other non-Discord variables
 	for key, value := range envVars {
 		if key != "GEOAPIFY_API_KEY" && key != "DISCORD_WEBHOOK_ID" &&
-		   key != "DISCORD_WEBHOOK_TOKEN" && key != "CTI_API_KEY" {
+		   key != "DISCORD_WEBHOOK_TOKEN" && key != "CROWDSEC_CTI_API_KEY" {
 			lines = append(lines, fmt.Sprintf("%s=%s", key, value))
 		}
 	}
@@ -937,7 +937,7 @@ func updateCrowdSecConfig(configPath string, enableCTI bool) error {
 
 	// Add CTI configuration
 	ctiConfigYAML := `
-key: "${CTI_API_KEY}"
+key: "${CROWDSEC_CTI_API_KEY}"
 cache_timeout: 60m
 cache_size: 50
 enabled: true

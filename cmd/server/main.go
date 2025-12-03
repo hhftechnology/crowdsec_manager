@@ -96,6 +96,7 @@ func main() {
 		api.RegisterCronRoutes(apiGroup, cronScheduler)
 		api.RegisterServicesRoutes(apiGroup, dockerClient, db, cfg)
 		api.RegisterNotificationRoutes(apiGroup, dockerClient, db, cfg)
+		api.RegisterProfileRoutes(apiGroup, db, cfg, dockerClient)
 	}
 
 	// Serve React frontend static assets and handle client-side routing
