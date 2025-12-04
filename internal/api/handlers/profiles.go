@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -47,6 +48,25 @@ func getProfilesPath(cfg *config.Config) string {
 	return filepath.Join(filepath.Dir(cfg.CrowdSecAcquisFile), "profiles.yaml")
 }
 
+// readProfilesFromContainer reads profiles.yaml from CrowdSec container
+func readProfilesFromContainer(dockerClient *docker.Client, cfg *config.Config) (string, error) {
+	// Try to read profiles.yaml from container
+	output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
+		"cat", "/etc/crowdsec/profiles.yaml",
+	})
+	if err != nil {
+		return "", fmt.Errorf("profiles.yaml not found in container: %w", err)
+	}
+
+	content := strings.TrimSpace(output)
+	if content == "" {
+		return "", fmt.Errorf("profiles.yaml is empty in container")
+	}
+
+	logger.Info("Read profiles.yaml from container")
+	return content, nil
+}
+
 // createDefaultProfilesYaml creates a default profiles.yaml file
 func createDefaultProfilesYaml(path string) error {
 	// Ensure the directory exists
@@ -65,32 +85,59 @@ func createDefaultProfilesYaml(path string) error {
 }
 
 // GetProfiles reads the content of profiles.yaml
-// If the file doesn't exist, it creates a default one
-func GetProfiles(cfg *config.Config) gin.HandlerFunc {
+// Priority: 1) Host file, 2) Container file, 3) Default template
+// Query parameter ?default=true forces using default template
+func GetProfiles(cfg *config.Config, dockerClient *docker.Client) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		profilesPath := getProfilesPath(cfg)
-		content, err := os.ReadFile(profilesPath)
-		if err != nil {
-			if os.IsNotExist(err) {
-				// Create default profiles.yaml if it doesn't exist
-				logger.Info("profiles.yaml not found, creating default", "path", profilesPath)
-				if err := createDefaultProfilesYaml(profilesPath); err != nil {
-					c.JSON(http.StatusInternalServerError, models.Response{
-						Success: false,
-						Error:   fmt.Sprintf("failed to create default profiles.yaml: %v", err),
-					})
-					return
-				}
-				// Read the newly created file
-				content, err = os.ReadFile(profilesPath)
-				if err != nil {
-					c.JSON(http.StatusInternalServerError, models.Response{
-						Success: false,
-						Error:   fmt.Sprintf("failed to read profiles.yaml after creation: %v", err),
-					})
-					return
+		var content []byte
+		var err error
+		var source string
+
+		// Check if user wants to force default template
+		useDefault := c.Query("default") == "true"
+
+		if useDefault {
+			logger.Info("User requested default profiles.yaml template")
+			content = []byte(DefaultProfilesYAML)
+			source = "default_template"
+		} else {
+			// Step 1: Try to read from host path
+			content, err = os.ReadFile(profilesPath)
+			if err == nil {
+				source = "host_file"
+				logger.Info("Read profiles.yaml from host", "path", profilesPath)
+			} else if os.IsNotExist(err) {
+				// Step 2: Try to read from container
+				logger.Info("profiles.yaml not found on host, checking container")
+				containerContent, containerErr := readProfilesFromContainer(dockerClient, cfg)
+				if containerErr == nil {
+					content = []byte(containerContent)
+					source = "container"
+					logger.Info("Read profiles.yaml from container, saving to host")
+
+					// Save container content to host for future use
+					dir := filepath.Dir(profilesPath)
+					if err := os.MkdirAll(dir, 0755); err != nil {
+						logger.Warn("Failed to create directory for profiles.yaml", "error", err)
+					} else if err := os.WriteFile(profilesPath, content, 0644); err != nil {
+						logger.Warn("Failed to save profiles.yaml to host", "error", err)
+					} else {
+						logger.Info("Saved profiles.yaml to host", "path", profilesPath)
+					}
+				} else {
+					// Step 3: Use default template
+					logger.Info("profiles.yaml not found in container, using default template")
+					content = []byte(DefaultProfilesYAML)
+					source = "default_template"
+
+					// Save default to host
+					if err := createDefaultProfilesYaml(profilesPath); err != nil {
+						logger.Warn("Failed to save default profiles.yaml", "error", err)
+					}
 				}
 			} else {
+				// Other error reading file
 				c.JSON(http.StatusInternalServerError, models.Response{
 					Success: false,
 					Error:   fmt.Sprintf("failed to read profiles.yaml: %v", err),
@@ -102,6 +149,7 @@ func GetProfiles(cfg *config.Config) gin.HandlerFunc {
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
 			Data:    string(content),
+			Message: fmt.Sprintf("Loaded from: %s", source),
 		})
 	}
 }

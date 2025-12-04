@@ -189,7 +189,7 @@ func RegisterCronRoutes(router *gin.RouterGroup, scheduler *cron.Scheduler) {
 func RegisterProfileRoutes(router *gin.RouterGroup, db *database.Database, cfg *config.Config, dockerClient *docker.Client) {
 	profiles := router.Group("/profiles")
 	{
-		profiles.GET("", handlers.GetProfiles(cfg))
+		profiles.GET("", handlers.GetProfiles(cfg, dockerClient))
 		profiles.POST("", handlers.UpdateProfiles(db, cfg, dockerClient))
 	}
 }

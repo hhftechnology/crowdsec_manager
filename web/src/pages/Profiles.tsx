@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
-import { Save, RefreshCw, FileText } from 'lucide-react'
+import { Save, RefreshCw, FileText, RotateCcw } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -15,12 +15,16 @@ export default function Profiles() {
     fetchProfiles()
   }, [])
 
-  const fetchProfiles = async () => {
+  const fetchProfiles = async (useDefault = false) => {
     try {
-      const response = await fetch('/api/profiles')
+      const url = useDefault ? '/api/profiles?default=true' : '/api/profiles'
+      const response = await fetch(url)
       const data = await response.json()
       if (data.success) {
         setContent(data.data)
+        if (data.message) {
+          toast.success(data.message)
+        }
       } else {
         toast.error(data.error || 'Failed to fetch profiles')
       }
@@ -29,6 +33,11 @@ export default function Profiles() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const loadDefaultTemplate = () => {
+    setLoading(true)
+    fetchProfiles(true)
   }
 
   const handleSave = async (restart: boolean) => {
@@ -78,6 +87,14 @@ export default function Profiles() {
           </p>
         </div>
         <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={loadDefaultTemplate}
+            disabled={saving || restarting || loading}
+          >
+            <RotateCcw className="mr-2 h-4 w-4" />
+            Reset to Default
+          </Button>
           <Button
             variant="outline"
             onClick={() => handleSave(false)}
