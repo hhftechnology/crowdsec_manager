@@ -44,7 +44,11 @@ export default function Allowlist() {
     queryKey: ['allowlists'],
     queryFn: async () => {
       const response = await api.allowlist.list()
-      return response.data.data
+      // Handle both array (legacy) and object (new) formats
+      if (Array.isArray(response.data.data)) {
+        return response.data.data
+      }
+      return response.data.data?.allowlists || []
     },
   })
 

@@ -1,0 +1,40 @@
+---
+title: API Overview
+description: General information about the CrowdSec Manager API
+---
+
+# API Overview
+
+CrowdSec Manager exposes a RESTful API for all its operations. The frontend communicates with the backend exclusively through this API.
+
+## Base URL
+
+All API endpoints are prefixed with `/api`.
+
+Example: `http://localhost:8080/api/health/stack`
+
+## Authentication
+
+Currently, the API is protected by the internal network configuration. Access is restricted to the local network or via the exposed port/reverse proxy.
+
+## Response Format
+
+Responses are generally returned in JSON format.
+
+### Success Response
+
+```json
+{
+  "status": "success",
+  "data": { ... }
+}
+```
+
+### Error Response
+
+```json
+{
+  "status": "error",
+  "message": "Error description"
+}
+```

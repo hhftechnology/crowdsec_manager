@@ -1,20 +1,17 @@
-import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import api, { ServiceActionRequest, EnrollRequest } from '@/lib/api'
+import api, { ServiceActionRequest } from '@/lib/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { CheckCircle2, XCircle, Play, Square, RotateCw, Power, Key } from 'lucide-react'
+import EnrollDialog from '@/components/EnrollDialog'
 
 export default function Services() {
   const queryClient = useQueryClient()
-  const [enrollmentKey, setEnrollmentKey] = useState('')
-  const [isEnrollDialogOpen, setIsEnrollDialogOpen] = useState(false)
+
+
 
   const { data: servicesData, isLoading } = useQuery({
     queryKey: ['services'],
@@ -24,6 +21,10 @@ export default function Services() {
     },
     refetchInterval: 10000, // Refresh every 10 seconds
   })
+
+  // Poll for enrollment status (keep this for the page-level awareness if needed, or remove if EnrollDialog handles it all)
+  // Actually, the page doesn't use enrollmentData other than for the dialog.
+  // So we can remove the polling here as EnrollDialog handles it.
 
   const actionMutation = useMutation({
     mutationFn: (data: ServiceActionRequest) => api.services.action(data),
@@ -47,36 +48,12 @@ export default function Services() {
     },
   })
 
-  const enrollMutation = useMutation({
-    mutationFn: (data: EnrollRequest) => api.crowdsec.enroll(data),
-    onSuccess: (response: { data: { data?: { output?: string } } }) => {
-      toast.success('Enrollment completed successfully')
-      setEnrollmentKey('')
-      setIsEnrollDialogOpen(false)
-      if (response.data.data?.output) {
-        console.log('Enrollment output:', response.data.data.output)
-      }
-    },
-    onError: () => {
-      toast.error('Failed to enroll with CrowdSec')
-    },
-  })
-
   const handleAction = (service: string, action: 'start' | 'stop' | 'restart') => {
     actionMutation.mutate({ service, action })
   }
 
   const handleShutdown = () => {
     shutdownMutation.mutate()
-  }
-
-  const handleEnroll = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!enrollmentKey.trim()) {
-      toast.error('Please enter an enrollment key')
-      return
-    }
-    enrollMutation.mutate({ enrollment_key: enrollmentKey.trim() })
   }
 
   const getServiceStatus = (service: any): 'running' | 'stopped' | 'unknown' => {
@@ -94,46 +71,14 @@ export default function Services() {
             Control and monitor system services
           </p>
         </div>
-        <Dialog open={isEnrollDialogOpen} onOpenChange={setIsEnrollDialogOpen}>
-          <DialogTrigger asChild>
+        <EnrollDialog 
+          trigger={
             <Button variant="outline">
               <Key className="mr-2 h-4 w-4" />
               Enroll CrowdSec
             </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Enroll with CrowdSec Console</DialogTitle>
-              <DialogDescription>
-                Connect your instance to CrowdSec Console for centralized management
-              </DialogDescription>
-            </DialogHeader>
-            <form onSubmit={handleEnroll} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="enrollment-key">
-                  Enrollment Key <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  id="enrollment-key"
-                  type="text"
-                  placeholder="Your CrowdSec Console enrollment key"
-                  value={enrollmentKey}
-                  onChange={(e) => setEnrollmentKey(e.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Get your enrollment key from the CrowdSec Console
-                </p>
-              </div>
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={enrollMutation.isPending}
-              >
-                {enrollMutation.isPending ? 'Enrolling...' : 'Enroll Instance'}
-              </Button>
-            </form>
-          </DialogContent>
-        </Dialog>
+          }
+        />
       </div>
 
       {/* Services Status Grid */}

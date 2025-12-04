@@ -1,27 +1,27 @@
 import { ReactNode, useState } from 'react'
 import Sidebar from './Sidebar'
 import Header from './Header'
-import Footer from './Footer'
 
 interface LayoutProps {
   children: ReactNode
 }
 
 export default function Layout({ children }: LayoutProps) {
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
+  const [isCollapsed, setIsCollapsed] = useState(false)
 
   return (
-    <div className="flex h-screen bg-background">
-      <Sidebar
-        isCollapsed={isSidebarCollapsed}
-        onToggle={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-      />
+    <div className="flex h-full bg-background overflow-hidden">
+      <Sidebar isCollapsed={isCollapsed} setIsCollapsed={setIsCollapsed} />
       <div className="flex flex-col flex-1 overflow-hidden">
-        <Header onMenuToggle={() => setIsSidebarCollapsed(!isSidebarCollapsed)} />
-        <main className="flex-1 overflow-y-auto p-6">
+        <Header />
+        <main className="flex-1 overflow-y-auto bg-background p-6">
           {children}
         </main>
-        <Footer />
+        <footer className="border-t p-4 text-center text-xs text-muted-foreground bg-background">
+          <p>&copy; {new Date().getFullYear()} HHF Technology</p>
+          <p>Powered by CrowdSec (Only for Pangolin Users)</p>
+          <p>CrowdSec Manager - Beta-version - v0.0.1</p>
+        </footer>
       </div>
     </div>
   )

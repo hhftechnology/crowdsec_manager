@@ -1,0 +1,52 @@
+---
+title: Volumes & Persistence
+description: Understanding data persistence and volume mappings
+---
+
+# Volumes & Persistence
+
+Proper volume mapping is critical for data persistence and functionality.
+
+## Required Volumes
+
+### Docker Socket
+- **Host Path**: `/var/run/docker.sock`
+- **Container Path**: `/var/run/docker.sock`
+- **Purpose**: Allows the manager to control Docker containers (start, stop, update).
+
+### Configuration Directory
+- **Host Path**: `/root/config` (example)
+- **Container Path**: `/app/config`
+- **Purpose**: Stores application configuration files.
+
+### Docker Compose File
+- **Host Path**: `/root/docker-compose.yml` (example)
+- **Container Path**: `/app/docker-compose.yml`
+- **Purpose**: Allows the manager to read and update the stack configuration.
+
+### Data Directory
+- **Host Path**: `./data`
+- **Container Path**: `/app/data`
+- **Purpose**: Persists the SQLite database (`settings.db`). **Critical for saving settings.**
+
+### Backups
+- **Host Path**: `./backups`
+- **Container Path**: `/app/backups`
+- **Purpose**: Stores generated system backups.
+
+### Logs (Optional but Recommended)
+- **Host Path**: `/root/config/traefik/logs`
+- **Container Path**: `/var/log/traefik`
+- **Purpose**: Allows the manager to read and analyze Traefik logs.
+
+## Example Configuration
+
+```yaml
+volumes:
+  - /var/run/docker.sock:/var/run/docker.sock
+  - /root/config:/app/config
+  - /root/docker-compose.yml:/app/docker-compose.yml
+  - ./backups:/app/backups
+  - ./data:/app/data
+  - /root/config/traefik/logs:/var/log/traefik
+```

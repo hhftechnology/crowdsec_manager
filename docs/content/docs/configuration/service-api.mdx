@@ -1,0 +1,43 @@
+---
+title: Service Management
+description: Control system services and enrollment
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+# Service Management
+
+The **Services** page provides direct control over the core components of the CrowdSec stack. You can monitor their status, perform lifecycle actions, and manage console enrollment.
+
+## Service Controls
+
+For each detected service (e.g., `crowdsec`, `traefik`), you can perform the following actions:
+
+- **Start**: Start a stopped service.
+- **Stop**: Stop a running service.
+- **Restart**: Restart the service (useful for applying configuration changes).
+
+Status indicators show whether a service is `running` (Green) or `stopped` (Red).
+
+## System Actions
+
+### Graceful Shutdown
+The **Graceful Shutdown** button initiates a controlled shutdown of the entire system. This ensures that all containers are stopped safely, preventing data corruption.
+
+<Callout type="warn">
+  This action will stop the entire CrowdSec stack. The web interface will become unavailable until the system is manually restarted from the host.
+</Callout>
+
+## Console Enrollment
+
+You can enroll your CrowdSec instance with the **CrowdSec Central Console** to unlock advanced features:
+
+- Centralized management of multiple instances.
+- Access to Cyber Threat Intelligence (CTI).
+- Real-time metrics and alerts.
+- Community blocklists.
+
+### How to Enroll
+1. Click **Enroll CrowdSec**.
+2. Enter the enrollment key obtained from your [CrowdSec Console](https://app.crowdsec.net) account.
+3. Click **Enroll**.

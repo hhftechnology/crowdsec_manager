@@ -1,0 +1,21 @@
+---
+title: Cron Jobs
+description: Scheduled tasks and automation
+---
+
+# Cron Jobs
+
+CrowdSec Manager uses internal cron jobs to automate maintenance tasks.
+
+## Default Jobs
+
+### Backup Rotation
+- **Schedule**: Daily at midnight.
+- **Action**: Checks for backups older than `RETENTION_DAYS` and removes them.
+
+### Stack Updates (Optional)
+- **Schedule**: Configurable (default: weekly).
+- **Action**: Checks for updates to the Docker images and applies them if configured.
+
+## Configuration
+Cron jobs are configured via environment variables or the `settings.db`. Currently, the backup rotation schedule is fixed, but the retention period is configurable.

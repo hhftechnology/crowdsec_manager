@@ -1,0 +1,55 @@
+---
+title: Environment Variables
+description: Comprehensive guide to environment configuration
+---
+
+# Environment Variables
+
+CrowdSec Manager is configured primarily through environment variables passed to the Docker container.
+
+## Server Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `8080` | The internal port the application listens on. |
+| `ENVIRONMENT` | `production` | Set to `development` for verbose logging and dev features. |
+| `LOG_LEVEL` | `info` | Logging verbosity: `debug`, `info`, `warn`, `error`. |
+| `LOG_FILE` | `/app/logs/crowdsec-manager.log` | Path to the internal application log file. |
+
+## Docker Integration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DOCKER_HOST` | `unix:///var/run/docker.sock` | Path to the Docker socket. Required for container management. |
+| `COMPOSE_FILE` | `/app/docker-compose.yml` | Path to the compose file inside the container. |
+| `PANGOLIN_DIR` | `/app` | Base working directory for the application. |
+| `CONFIG_DIR` | `/app/config` | Directory where configuration files are stored. |
+
+## Database
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DATABASE_PATH` | `/app/data/settings.db` | Path to the SQLite database file. Ensure this path is persistent. |
+
+## Traefik Integration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `TRAEFIK_DYNAMIC_CONFIG` | `/dynamic_config.yml` | Path to Traefik's dynamic configuration file. |
+| `TRAEFIK_STATIC_CONFIG` | `/etc/traefik/traefik_config.yml` | Path to Traefik's static configuration file. |
+| `TRAEFIK_ACCESS_LOG` | `/var/log/traefik/access.log` | Path to read Traefik access logs from. |
+| `TRAEFIK_ERROR_LOG` | `/var/log/traefik/traefik.log` | Path to read Traefik error logs from. |
+
+## CrowdSec Integration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CROWDSEC_ACQUIS_FILE` | `/etc/crowdsec/acquis.yaml` | Path to CrowdSec acquisition configuration. |
+| `INCLUDE_CROWDSEC` | `false` | Whether to manage CrowdSec container updates/restarts. |
+
+## Backup Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `BACKUP_DIR` | `/app/backups` | Directory where backups are stored. |
+| `RETENTION_DAYS` | `60` | Number of days to keep backups before auto-deletion. |

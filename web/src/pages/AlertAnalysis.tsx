@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/collapsible'
 
 interface AlertFilters {
+  id?: string
   since?: string
   until?: string
   ip?: string
@@ -120,6 +121,17 @@ export default function AlertAnalysis() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {/* Alert ID */}
+            <div className="space-y-2">
+              <Label htmlFor="id">Alert ID</Label>
+              <Input
+                id="id"
+                placeholder="123"
+                value={filters.id || ''}
+                onChange={(e) => setFilters({ ...filters, id: e.target.value })}
+              />
+            </div>
+
             {/* Time-based Filters */}
             <div className="space-y-2">
               <Label htmlFor="since">Since (e.g., 4h, 30d)</Label>

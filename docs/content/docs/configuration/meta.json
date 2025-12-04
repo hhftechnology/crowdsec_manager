@@ -1,0 +1,10 @@
+{
+  "pages": [
+    "service-api",
+    "notifications",
+    "settings",
+    "environment",
+    "networking",
+    "volumes"
+  ]
+}

@@ -1,0 +1,46 @@
+---
+title: Introduction
+description: Welcome to the CrowdSec Manager documentation
+---
+
+# CrowdSec Manager
+
+A web-based management interface for CrowdSec security stack with Pangolin integration. This project provides a modern, user-friendly web UI built with Go and React for managing your CrowdSec security infrastructure.
+
+## Features
+
+### Complete Security Management
+
+- **System Health Monitoring**: Real-time container status and diagnostics
+- **IP Management**: Block, unban, and monitor IP addresses
+- **Whitelist Management**: Comprehensive IP and CIDR whitelisting for CrowdSec and Traefik
+- **Decision Management**: View and manage CrowdSec security decisions
+- **Bouncer Management**: Monitor CrowdSec bouncers and their status
+- **Modular Architecture**: Run with or without optional components (Pangolin, Gerbil)
+
+### Advanced Security Features
+
+- **Custom Scenarios**: Deploy custom CrowdSec detection scenarios
+- **Captcha Protection**: Configure Cloudflare Turnstile captcha integration
+- **Traefik Integration**: Seamless CrowdSec-Traefik middleware configuration
+- **Console Enrollment**: Easy CrowdSec Console integration
+
+### Monitoring & Logs
+
+- **Real-time Log Streaming**: WebSocket-based live log viewing
+- **Advanced Log Analysis**: Analyze Traefik logs with statistics
+- **Prometheus Metrics**: View CrowdSec metrics
+- **Multi-service Logs**: View logs from all services (CrowdSec, Traefik, Pangolin, Gerbil)
+
+### Backup & Recovery
+
+- **Automated Backups**: Create full system backups
+- **Scheduled Backups**: Configure cron jobs for automatic backups
+- **Easy Restoration**: Restore from any backup with confirmation
+- **Retention Management**: Automatic cleanup of old backups
+
+### Stack Updates
+
+- **Version Management**: Update Docker images with custom tags
+- **Graceful Updates**: Safe updates with automatic rollback on failure
+- **Flexible Configuration**: Update with or without CrowdSec

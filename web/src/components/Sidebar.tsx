@@ -16,106 +16,195 @@ import {
   Sliders,
   AlertTriangle,
   Target,
-  ChevronLeft,
-  ChevronRight,
+  Bell,
+  HeartPulse,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Moon,
+  Sun,
 } from 'lucide-react'
-import { Separator } from './ui/separator'
 import { Button } from './ui/button'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip'
+import { ScrollArea } from './ui/scroll-area'
+import { useTheme } from './ThemeProvider'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 
-const navigation = [
-  { name: 'Dashboard', href: '/', icon: LayoutDashboard },
-  { name: 'Health & Diagnostics', href: '/health', icon: Activity },
-  { name: 'IP Management', href: '/ip-management', icon: Network },
-  { name: 'Whitelist', href: '/whitelist', icon: ListFilter },
-  { name: 'Allowlist', href: '/allowlist', icon: ListChecks },
-  { name: 'Scenarios', href: '/scenarios', icon: Shield },
-  { name: 'Captcha', href: '/captcha', icon: ScanFace },
-  { name: 'Decision Analysis', href: '/decisions', icon: Target },
-  { name: 'Alert Analysis', href: '/alerts', icon: AlertTriangle },
-  { name: 'Logs & Monitoring', href: '/logs', icon: FileText },
-  { name: 'Backups', href: '/backup', icon: Database },
-  { name: 'Stack Update', href: '/update', icon: RefreshCw },
-  { name: 'Cron Jobs', href: '/cron', icon: Clock },
-  { name: 'Services', href: '/services', icon: Settings },
-  { name: 'Configuration', href: '/configuration', icon: Sliders },
-]
+import { Badge } from "@/components/ui/badge"
 
 interface SidebarProps {
   isCollapsed: boolean
-  onToggle: () => void
+  setIsCollapsed: (collapsed: boolean) => void
 }
 
-export default function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
+
+
+const navigation = [
+  {
+    title: "Getting started",
+    items: [
+      { name: 'Dashboard', href: '/', icon: LayoutDashboard },
+      { name: 'Engines', href: '/bouncers', icon: Shield },
+      { name: 'Health', href: '/health', icon: HeartPulse },
+    ]
+  },
+  {
+    title: "Activity",
+    items: [
+      { name: 'Alerts', href: '/alerts', icon: AlertTriangle },
+      { name: 'Decisions', href: '/decisions', icon: Target },
+      { name: 'Remediation Metrics', href: '/crowdsec-health', icon: Activity },
+    ]
+  },
+  {
+    title: "Hub",
+    items: [
+      { name: 'Scenarios', href: '/scenarios', icon: FileText },
+      { name: 'Captcha', href: '/captcha', icon: ScanFace },
+    ]
+  },
+  {
+    title: "Configuration",
+    items: [
+      { name: 'Service API', href: '/services', icon: Settings },
+      { name: 'Notification settings', href: '/notifications', icon: Bell },
+      { name: 'Allowlists', href: '/allowlist', icon: ListChecks },
+      { name: 'Whitelists', href: '/whitelist', icon: ListFilter },
+      { name: 'Profiles', href: '/profiles', icon: FileText },
+      { name: 'IP Management', href: '/ip-management', icon: Network },
+    ]
+  },
+  {
+    title: "System",
+    items: [
+      { name: 'Backups', href: '/backup', icon: Database },
+      { name: 'Cron Jobs', href: '/cron', icon: Clock },
+      { name: 'Logs', href: '/logs', icon: FileText },
+      { name: 'Updates', href: '/update', icon: RefreshCw },
+      { name: 'Settings', href: '/configuration', icon: Sliders },
+    ]
+  }
+]
+
+export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   const location = useLocation()
+  const { theme, setTheme } = useTheme()
+
+  const toggleTheme = () => {
+    setTheme(theme === "dark" ? "light" : "dark")
+  }
 
   return (
     <div
       className={cn(
-        'bg-card border-r border-border flex flex-col transition-all duration-300',
-        isCollapsed ? 'w-16' : 'w-64'
+        "flex flex-col h-full bg-card text-card-foreground border-r transition-all duration-300",
+        isCollapsed ? "w-16" : "w-64"
       )}
     >
-      <div className={cn('p-6 flex items-center', isCollapsed ? 'justify-center' : 'justify-between')}>
+      {/* Header with Toggle */}
+      <div className={cn("flex items-center p-4 border-b", isCollapsed ? "justify-center" : "justify-between")}>
         {!isCollapsed && (
-          <div>
-            <h2 className="text-2xl font-bold text-primary">Panel</h2>
-            <p className="text-sm text-muted-foreground mt-1">Management</p>
+          <div className="flex items-center gap-2 font-semibold text-lg">
+            <Shield className="h-6 w-6 text-primary" />
+            <div className="flex flex-col">
+              <span>CrowdSec Manager</span>
+              <Badge variant="secondary" className="text-[10px] px-1 py-0 h-5 mt-1 w-fit whitespace-nowrap">
+              Beta-v0.0.6
+              </Badge>
+            </div>
           </div>
         )}
         <Button
           variant="ghost"
           size="icon"
-          onClick={onToggle}
-          className="h-8 w-8"
+          onClick={() => setIsCollapsed(!isCollapsed)}
+          className={cn("h-8 w-8", isCollapsed && "w-full")}
         >
-          {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+          {isCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
         </Button>
       </div>
-      <Separator />
-      <nav className="flex-1 overflow-y-auto p-4">
-        <TooltipProvider>
-          <ul className="space-y-1">
-            {navigation.map((item) => {
-              const isActive = location.pathname === item.href
-              const Icon = item.icon
 
-              const linkContent = (
-                <Link
-                  to={item.href}
-                  className={cn(
-                    'flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors',
-                    isActive
-                      ? 'bg-primary text-primary-foreground'
-                      : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
-                    isCollapsed && 'justify-center'
-                  )}
-                >
-                  <Icon className="h-5 w-5 flex-shrink-0" />
-                  {!isCollapsed && <span>{item.name}</span>}
-                </Link>
-              )
+      {/* Navigation */}
+      <ScrollArea className="flex-1 px-2 py-4">
+        <div className="space-y-6">
+          {navigation.map((group) => (
+            <div key={group.title}>
+              {!isCollapsed && (
+                <h4 className="mb-2 px-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  {group.title}
+                </h4>
+              )}
+              <div className="space-y-1">
+                {group.items.map((item) => {
+                  const isActive = location.pathname === item.href
+                  const Icon = item.icon
+                  
+                  if (isCollapsed) {
+                    return (
+                      <TooltipProvider key={item.name}>
+                        <Tooltip delayDuration={0}>
+                          <TooltipTrigger asChild>
+                            <Link
+                              to={item.href}
+                              className={cn(
+                                "flex items-center justify-center p-2 rounded-md transition-colors",
+                                isActive
+                                  ? "bg-primary text-primary-foreground"
+                                  : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                              )}
+                            >
+                              <Icon className="h-5 w-5" />
+                            </Link>
+                          </TooltipTrigger>
+                          <TooltipContent side="right">
+                            {item.name}
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )
+                  }
 
-              return (
-                <li key={item.name}>
-                  {isCollapsed ? (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        {linkContent}
-                      </TooltipTrigger>
-                      <TooltipContent side="right">
-                        <p>{item.name}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  ) : (
-                    linkContent
-                  )}
-                </li>
-              )
-            })}
-          </ul>
-        </TooltipProvider>
-      </nav>
+                  return (
+                    <Link
+                      key={item.name}
+                      to={item.href}
+                      className={cn(
+                        "flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors",
+                        isActive
+                          ? "bg-primary text-primary-foreground"
+                          : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                      )}
+                    >
+                      <Icon className="h-4 w-4" />
+                      {item.name}
+                    </Link>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      </ScrollArea>
+
+      {/* Footer with Theme Toggle */}
+      <div className="p-4 border-t">
+        <Button
+          variant="ghost"
+          size={isCollapsed ? "icon" : "default"}
+          onClick={toggleTheme}
+          className={cn("w-full justify-start", isCollapsed && "justify-center")}
+        >
+          {theme === "dark" ? (
+            <Sun className="h-4 w-4" />
+          ) : (
+            <Moon className="h-4 w-4" />
+          )}
+          {!isCollapsed && <span className="ml-2">Toggle Theme</span>}
+        </Button>
+      </div>
     </div>
   )
 }

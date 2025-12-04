@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -141,7 +142,7 @@ export default function Scenarios() {
         )
         console.log('Text lines to parse:', lines.length)
 
-        const parsed = lines.map(line => {
+        const parsed = lines.map((line): ScenarioItem | null => {
           const parts = line.split(/\s{2,}/).filter(p => p && p !== '│')
           if (parts.length >= 2) {
             return {
@@ -197,6 +198,7 @@ export default function Scenarios() {
   return (
     <div className="space-y-6">
       <div>
+
         <h1 className="text-3xl font-bold">Scenario Management</h1>
         <p className="text-muted-foreground mt-2">
           Setup and manage custom CrowdSec scenarios
@@ -241,7 +243,7 @@ export default function Scenarios() {
           )}
 
           {/* Debug panel (development only) */}
-          {debugInfo && process.env.NODE_ENV === 'development' && (
+          {debugInfo && import.meta.env.DEV && (
             <Alert>
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>

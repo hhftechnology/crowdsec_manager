@@ -1,0 +1,70 @@
+---
+title: Quick Start
+description: Get CrowdSec Manager up and running in minutes
+---
+
+# Quick Start
+
+This guide will help you get CrowdSec Manager running quickly on your local machine or server.
+
+## 1. Create a Directory
+
+Create a new directory for your CrowdSec Manager deployment:
+
+```bash
+mkdir crowdsec-manager
+cd crowdsec-manager
+```
+
+## 2. Create Docker Compose File
+
+Create a `docker-compose.yml` file with the following content:
+
+```yaml
+version: '3.8'
+
+services:
+  crowdsec-manager:
+    image: hhftechnology/crowdsec-manager:latest
+    container_name: crowdsec-manager
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - ENVIRONMENT=production
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./data:/app/data
+    networks:
+      - pangolin
+
+networks:
+  pangolin:
+    external: true
+```
+
+## 3. Create Network
+
+Ensure the required network exists:
+
+```bash
+docker network create pangolin
+```
+
+## 4. Start the Service
+
+Run the following command to start the container:
+
+```bash
+docker-compose up -d
+```
+
+## 5. Access the Dashboard
+
+Open your browser and navigate to:
+
+`http://localhost:8080`
+
+You should see the CrowdSec Manager dashboard.

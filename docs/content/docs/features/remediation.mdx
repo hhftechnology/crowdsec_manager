@@ -1,0 +1,43 @@
+---
+title: Remediation Metrics
+description: Monitor security engine health and metrics
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+# Remediation Metrics
+
+The **Remediation Metrics** page (labeled as CrowdSec Health in the UI) provides a deep dive into the operational status of your CrowdSec Security Engine. It goes beyond simple up/down checks to provide detailed metrics on internal components.
+
+## Health Checks
+
+The system performs real-time checks on the following components:
+
+- **Container Status**: Verifies that the CrowdSec Docker container is running and healthy.
+- **Local API (LAPI)**: Checks connectivity and responsiveness of the Local API.
+- **Metrics Endpoint**: Ensures that Prometheus metrics are being exposed correctly.
+- **Bouncers**: Verifies that registered bouncers are connecting and pulling decisions.
+- **CrowdSec Console**: Checks enrollment status with the Central Console (if configured).
+
+## Status Indicators
+
+Each component displays a status indicator:
+
+- **Healthy** (Green): Operating normally.
+- **Degraded** (Yellow): Working but with some non-critical issues.
+- **Unhealthy** (Red): Critical failure, immediate attention required.
+- **Warning** (Orange): Potential issue that needs investigation.
+- **Info** (Blue): Informational status.
+
+## Detailed Metrics
+
+For the **Metrics Endpoint**, you can expand the card to view detailed internal counters, such as:
+
+- **Acquisition**: Number of lines read, parsed, and unparsed.
+- **Bucket**: Number of buckets created, poured, and overflowed.
+- **Parser**: Hits and misses for various parsers.
+- **LAPI**: Request counts and latency.
+
+<Callout title="Troubleshooting">
+If you see an **Unhealthy** status for the LAPI or Container, check the [Logs](/docs/features/logs-monitoring) page for error messages that might explain the failure.
+</Callout>

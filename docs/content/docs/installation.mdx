@@ -1,0 +1,124 @@
+---
+title: Installation
+description: How to install and deploy CrowdSec Manager
+---
+
+# Installation
+
+## Prerequisites
+
+Before deploying CrowdSec Manager, ensure you have:
+
+- **Docker** 20.10+ installed and running
+- **Docker Compose** 2.0+ installed
+- **Network access** to pull Docker images
+- **Sufficient disk space** (minimum 2GB recommended)
+- **Test environment** for initial deployment
+
+### System Requirements
+
+- **CPU**: 1 core minimum, 2+ cores recommended
+- **RAM**: 512MB minimum, 1GB+ recommended
+- **Disk**: 2GB minimum for application and logs
+- **Network**: Internet access for Docker image pulls
+
+## Deployment Steps
+
+### Step 1: Prepare Your Test Environment
+
+1. Set up a test server or VM
+2. Install Docker and Docker Compose
+3. Ensure you have backups of any existing configurations
+
+### Step 2: Create Required Directories
+
+```bash
+# Create configuration directory
+sudo mkdir -p /root/config
+sudo mkdir -p /root/config/traefik/logs
+
+# Create backup directory (in your project directory)
+mkdir -p ./backups
+
+# Create data directory (in your project directory)
+mkdir -p ./data
+```
+
+### Step 3: Prepare Docker Compose File
+
+Create or update your `docker-compose.yml` file with the following configuration:
+
+```yaml
+services:
+  crowdsec-manager:
+    image: hhftechnology/crowdsec-manager:latest
+    container_name: crowdsec-manager
+    restart: unless-stopped
+    expose:
+      - "8080"
+    environment:
+      - PORT=8080
+      - ENVIRONMENT=production
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - COMPOSE_FILE=/app/docker-compose.yml
+      - PANGOLIN_DIR=/app
+      - CONFIG_DIR=/app/config
+      - DATABASE_PATH=/app/data/settings.db
+      - TRAEFIK_DYNAMIC_CONFIG=/dynamic_config.yml
+      - TRAEFIK_STATIC_CONFIG=/etc/traefik/traefik_config.yml
+      - TRAEFIK_ACCESS_LOG=/var/log/traefik/access.log
+      - TRAEFIK_ERROR_LOG=/var/log/traefik/traefik.log
+      - CROWDSEC_ACQUIS_FILE=/etc/crowdsec/acquis.yaml
+      - BACKUP_DIR=/app/backups
+      - RETENTION_DAYS=60
+      - INCLUDE_CROWDSEC=false
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /root/config:/app/config
+      - /root/docker-compose.yml:/app/docker-compose.yml
+      - ./backups:/app/backups
+      - /root/config/traefik/logs:/app/logs
+      - ./data:/app/data
+      - /root/config/traefik/logs:/var/log/traefik
+    networks:
+      - pangolin
+
+networks:
+  pangolin:
+    external: true
+```
+
+### Step 4: Ensure External Network Exists
+
+The compose file requires an external network named `pangolin`. Create it if it doesn't exist:
+
+```bash
+docker network create pangolin
+```
+
+### Step 5: Deploy the Container
+
+```bash
+# Pull the latest image
+docker pull hhftechnology/crowdsec-manager:latest
+
+# Start the container
+docker-compose up -d
+
+# Check container status
+docker ps | grep crowdsec-manager
+
+# View logs
+docker logs -f crowdsec-manager
+```
+
+### Step 6: Verify Installation
+
+1. Check container health:
+   ```bash
+   curl http://localhost:8080/health
+   ```
+
+2. Access the web interface:
+   - Open your browser to `http://your-server-ip:8080`
+   - Or configure Traefik routing (see Network Configuration section)

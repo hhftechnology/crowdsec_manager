@@ -1,0 +1,40 @@
+---
+title: IP API
+description: IP address management endpoints
+---
+
+# IP API
+
+Endpoints for managing IP addresses.
+
+## Get Public IP
+
+`GET /api/ip/public`
+
+Returns the current public IP address of the server.
+
+## Check Block Status
+
+`GET /api/ip/blocked/:ip`
+
+Checks if a specific IP address is currently blocked by CrowdSec.
+
+## Security Check
+
+`GET /api/ip/security/:ip`
+
+Performs a comprehensive security check on an IP address, returning details about any active decisions or alerts.
+
+## Unban IP
+
+`POST /api/ip/unban`
+
+Unbans an IP address.
+
+### Body
+
+```json
+{
+  "ip": "1.2.3.4"
+}
+```

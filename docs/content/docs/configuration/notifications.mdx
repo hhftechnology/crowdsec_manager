@@ -1,0 +1,42 @@
+---
+title: Notifications
+description: Configure alert notifications
+---
+
+import { Steps } from 'fumadocs-ui/components/steps';
+import { Callout } from 'fumadocs-ui/components/callout';
+
+# Notifications
+
+The **Notifications** page allows you to configure how you want to be alerted when CrowdSec detects suspicious activity. Currently, Discord integration is supported, with more channels planned.
+
+## Discord Integration
+
+You can send alerts directly to a Discord channel using Webhooks.
+
+<Steps>
+  ### Enable Integration
+  Toggle the **Enable** switch to turn on Discord notifications.
+
+  ### Configure Webhook
+  Paste your **Webhook URL** from Discord. The system will automatically extract the `Webhook ID` and `Webhook Token`.
+
+  ### Optional Settings
+  - **Geoapify API Key**: Required if you want to include static maps in your alert notifications.
+  - **CrowdSec CTI Key**: Optional key for enhanced IP intelligence and maliciousness scores.
+
+  ### Save and Apply
+  Click **Save & Restart** to apply the changes.
+</Steps>
+
+<Callout type="important">
+  Changes to notification settings require a restart of the CrowdSec container to take effect. Use the **Save & Restart** button to handle this automatically.
+</Callout>
+
+## Configuration Sources
+
+The system can detect existing configurations from two sources:
+- **Database**: Settings saved via this web interface.
+- **Container**: Settings defined in environment variables or config files.
+
+If a manual configuration is detected in the container, the UI will pre-populate the fields and alert you to the existing setup.

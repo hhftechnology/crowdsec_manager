@@ -1,0 +1,53 @@
+---
+title: Allowlists
+description: Manage IP-based allowlists
+---
+
+import { Steps } from 'fumadocs-ui/components/steps';
+import { Callout } from 'fumadocs-ui/components/callout';
+
+# Allowlists
+
+The **Allowlists** page allows you to manage centralized IP-based allowlists at the CrowdSec Local API (LAPI) level. These allowlists affect all security decisions, blocklist pulls, and WAF/AppSec behavior.
+
+## Allowlists vs. Whitelists
+
+<Callout type="info" title="Key Difference">
+- **Allowlists**: Centralized filtering at the CrowdSec LAPI level. Affects the entire security engine. Only supports IPs and CIDR ranges.
+- **Whitelists**: Often refers to Traefik-level whitelisting or specific parser whitelists.
+</Callout>
+
+If you need simple IP whitelisting for both CrowdSec and Traefik without the complexity of LAPI allowlists, you can use the separate **Whitelist** feature.
+
+## Managing Allowlists
+
+### Creating an Allowlist
+
+<Steps>
+  ### Click "Create Allowlist"
+  Click the **Create Allowlist** button.
+
+  ### Enter Details
+  - **Name**: A unique name for the allowlist (e.g., `trusted-partners`).
+  - **Description**: A brief explanation of its purpose.
+
+  ### Create
+  Click **Create Allowlist** to save it.
+</Steps>
+
+### Managing Entries
+
+Once an allowlist is created, you can add or remove IPs.
+
+1. Select the allowlist from the dropdown.
+2. **Add Entries**:
+   - Enter IPs or CIDR ranges (one per line).
+   - (Optional) Set an expiration (e.g., `7d`, `24h`).
+   - (Optional) Add a description for the entry.
+3. **Remove Entries**:
+   - Select the allowlist.
+   - Enter the IPs or CIDR ranges to remove.
+
+### Inspecting Allowlists
+
+Click the **Inspect** button on any allowlist to view its current contents, including entry values, creation dates, and expiration times.

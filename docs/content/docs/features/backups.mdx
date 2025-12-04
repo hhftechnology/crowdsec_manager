@@ -1,0 +1,32 @@
+---
+title: Backup & Recovery
+description: Managing system backups
+---
+
+# Backup & Recovery
+
+Protect your configuration with automated and manual backup options.
+
+## Features
+
+### Create Backup
+Manually trigger a full system backup. This captures:
+- Database (`settings.db`)
+- Configuration files
+- Environment settings
+
+### Restore
+Restore your system from any previous backup. The system will verify the backup integrity before restoring.
+> [!WARNING]
+> Restoring a backup will overwrite current settings and restart the application.
+
+### List Backups
+View all available backups with their creation date and size.
+
+### Cleanup
+Automatically or manually remove old backups based on your retention policy.
+
+## Configuration
+Configure backup settings in your `docker-compose.yml`:
+- `BACKUP_DIR`: Location to store backups.
+- `RETENTION_DAYS`: How long to keep backups (default: 60 days).
