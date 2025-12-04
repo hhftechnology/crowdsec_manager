@@ -6,7 +6,7 @@ import { type ReactNode } from 'react';
 
 export default function Layout({ children }: { children: ReactNode }) {
   return (
-    // @ts-expect-error -- Fumadocs types are missing children prop
+    // @ts-ignore -- Fumadocs types are inconsistent
     <DocsLayout tree={source.pageTree} {...baseOptions()}>
       {children}
     </DocsLayout>

@@ -12,7 +12,7 @@ export default function Layout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={inter.className} suppressHydrationWarning>
       <body className="flex flex-col min-h-screen">
-        {/* @ts-expect-error -- Fumadocs types are missing children prop */}
+        {/* @ts-ignore -- Fumadocs types are inconsistent */}
         <RootProvider>{children}</RootProvider>
       </body>
     </html>
