@@ -1,0 +1,62 @@
+---
+title: Networking
+description: Network configuration and port management
+---
+
+# Networking
+
+CrowdSec Manager requires specific network configurations to communicate with other services in your stack.
+
+## The Pangolin Network
+
+The application expects an external Docker network named `pangolin` to exist. This shared network allows CrowdSec Manager to communicate with:
+- CrowdSec
+- Traefik
+- Other integrated services
+
+### Creating the Network
+
+```bash
+docker network create pangolin
+```
+
+### Connecting Services
+
+Ensure all related services in your `docker-compose.yml` are connected to this network:
+
+```yaml
+networks:
+  pangolin:
+    external: true
+
+services:
+  crowdsec-manager:
+    networks:
+      - pangolin
+  
+  traefik:
+    networks:
+      - pangolin
+```
+
+## Port Configuration
+
+The application listens on port `8080` inside the container.
+
+### Direct Access
+Map the port directly to the host:
+
+```yaml
+ports:
+  - "8080:8080"
+```
+
+### Reverse Proxy (Traefik)
+If using Traefik, you don't need to expose the port. Instead, use labels:
+
+```yaml
+labels:
+  - "traefik.enable=true"
+  - "traefik.http.routers.manager.rule=Host(`manager.example.com`)"
+  - "traefik.http.services.manager.loadbalancer.server.port=8080"
+```

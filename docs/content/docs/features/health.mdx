@@ -1,0 +1,48 @@
+---
+title: Health & Diagnostics
+description: Monitor system health and component status
+---
+
+
+
+# Health & Diagnostics
+
+The **Health** page provides a comprehensive overview of your CrowdSec stack's status, including Docker containers, connected bouncers, and integration with Traefik.
+
+## System Status
+
+The top section displays a high-level summary:
+
+- **Overall Status**: Indicates if the system is `Healthy` or if `Issues Detected`.
+- **Containers**: Shows the number of running containers versus the total expected containers.
+- **Active Bouncers**: The count of currently connected enforcement agents.
+
+## Detailed Diagnostics
+
+The diagnostics are divided into three tabs:
+
+### Containers
+
+Lists all Docker containers managed by the CrowdSec stack.
+
+- **Name**: Container name.
+- **Container ID**: Shortened Docker container ID.
+- **Status**: Current state (e.g., `running`, `exited`).
+- **Running**: Visual indicator (Green Check or Red X).
+
+### Bouncers
+
+Displays a quick list of connected bouncers and their status. For full management capabilities, use the [Engines](/docs/features/engines) page.
+
+### Traefik Integration
+
+Monitors the status of the CrowdSec middleware integration with Traefik.
+
+- **Middleware Configured**: Checks if the CrowdSec middleware is properly defined in Traefik.
+- **LAPI Key Found**: Verifies that a valid Local API key is present for the middleware.
+- **AppSec Enabled**: Indicates if Application Security (WAF) features are enabled.
+- **Configuration Files**: Lists the detected Traefik configuration files being used.
+
+## Auto-Refresh
+
+The data on this page automatically refreshes every **10 seconds** to provide near real-time monitoring.

@@ -1,0 +1,54 @@
+---
+title: Backup API
+description: Backup management endpoints
+---
+
+# Backup API
+
+Endpoints for managing system backups.
+
+## List Backups
+
+`GET /api/backup/list`
+
+Returns a list of all available backups.
+
+## Create Backup
+
+`POST /api/backup/create`
+
+Triggers a new backup creation.
+
+### Body
+
+```json
+{
+  "dry_run": false
+}
+```
+
+## Restore Backup
+
+`POST /api/backup/restore`
+
+Restores the system from a specific backup.
+
+### Body
+
+```json
+{
+  "backup_id": "backup_2023-10-27_12-00-00.tar.gz"
+}
+```
+
+## Delete Backup
+
+`DELETE /api/backup/:id`
+
+Deletes a specific backup file.
+
+## Cleanup Backups
+
+`POST /api/backup/cleanup`
+
+Manually triggers the backup retention cleanup process.

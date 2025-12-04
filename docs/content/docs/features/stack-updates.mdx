@@ -1,0 +1,32 @@
+---
+title: Stack Updates
+description: Managing Docker image updates
+---
+
+# Stack Updates
+
+Keep your security stack up to date with the built-in update manager.
+
+## Features
+
+### Version Management
+Update Docker images with custom tags. You can specify a specific version (e.g., `v1.2.3`) or use `latest`.
+
+### Graceful Updates
+The system performs updates gracefully:
+1. Pulls the new image.
+2. Stops the current container.
+3. Starts the new container.
+4. Verifies health.
+5. Rolls back automatically if the new container fails to start.
+
+### Flexible Configuration
+Choose which components to update:
+- **Manager Only**: Update just the CrowdSec Manager.
+- **Full Stack**: Update CrowdSec, Traefik, and the Manager.
+
+## Usage
+1. Navigate to **Settings** > **Updates**.
+2. Check for available updates.
+3. Select the components to update.
+4. Click **Update Now**.

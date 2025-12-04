@@ -1,0 +1,33 @@
+---
+title: Whitelist Management
+description: Managing IP and CIDR whitelists
+---
+
+# Whitelist Management
+
+Manage whitelists for both CrowdSec and Traefik directly from the interface. Whitelisting ensures that trusted IPs are never banned.
+
+## Features
+
+### View Whitelists
+See all currently whitelisted IPs and CIDR ranges in a unified list.
+
+### Quick Whitelist
+Whitelist your current public IP with a single click. This is useful for ensuring you don't accidentally lock yourself out.
+
+### Manual Entry
+Whitelist specific IPs manually. You can add comments to remember why an IP was whitelisted.
+
+### CIDR Support
+Whitelist entire CIDR ranges (e.g., `192.168.1.0/24`) to trust local networks or specific subnets.
+
+### Service Selection
+Choose where to apply the whitelist:
+- **CrowdSec**: Prevents the IP from being banned by CrowdSec.
+- **Traefik**: Allows the IP to bypass Traefik middleware restrictions.
+- **Both**: Applies the whitelist to both services.
+
+## Best Practices
+- Always whitelist your static management IP.
+- Whitelist internal Docker networks to prevent false positives.
+- Regularly review whitelists to remove unused entries.

@@ -1,0 +1,57 @@
+---
+title: Scenarios
+description: Manage detection scenarios
+---
+
+import { Steps } from 'fumadocs-ui/components/steps';
+
+# Scenarios
+
+The **Scenarios** page allows you to view installed detection scenarios and create custom ones. Scenarios are the logic CrowdSec uses to detect attacks (e.g., "5 failed login attempts in 1 minute").
+
+## Active Scenarios
+
+The top section lists all currently installed scenarios.
+
+- **Name**: The scenario name (e.g., `crowdsecurity/ssh-bf`).
+- **Status**: `enabled` or `disabled`.
+- **Version**: The installed version.
+- **Local Path**: The file path on the server (for custom scenarios).
+
+## Creating Custom Scenarios
+
+You can define your own detection rules directly from the UI.
+
+<Steps>
+  ### Add Scenario
+  Click **Add Another Scenario** if you want to create multiple at once, or use the default form.
+
+  ### Define Metadata
+  - **Name**: Must follow the format `namespace/name` (e.g., `custom/my-rule`).
+  - **Description**: A brief explanation of what the scenario detects.
+
+  ### Write YAML Configuration
+  Enter the standard CrowdSec scenario YAML configuration.
+  
+  **Example:**
+  ```yaml
+  type: leaky
+  name: custom/http-bruteforce
+  description: Detect HTTP brute force attempts
+  filter: evt.Meta.log_type == 'http_access-log'
+  leakspeed: 10s
+  capacity: 5
+  groupby: evt.Meta.source_ip
+  labels:
+    service: http
+    type: bruteforce
+    remediation: true
+  ```
+
+  ### Setup
+  Click **Setup Scenarios** to save and apply the new rules. The CrowdSec service will reload to pick up the changes.
+</Steps>
+
+## Removing Scenarios
+
+To remove a custom scenario, simply delete it from the configuration or use the `cscli` command line tool if it was installed via the Hub.

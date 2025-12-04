@@ -1,0 +1,29 @@
+---
+title: Logs API
+description: Log access endpoints
+---
+
+# Logs API
+
+Endpoints for accessing system logs.
+
+## Get Service Logs
+
+`GET /api/logs/:service`
+
+Returns the recent logs for a specific service.
+
+**Parameters:**
+- `service`: `crowdsec`, `traefik`, `pangolin`, or `gerbil`.
+
+## Stream Logs
+
+`GET /api/logs/stream/:service`
+
+Establishes a WebSocket connection to stream logs in real-time.
+
+## Advanced Traefik Analysis
+
+`GET /api/logs/traefik/advanced`
+
+Returns analyzed statistics from Traefik logs.

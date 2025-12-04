@@ -1,0 +1,61 @@
+---
+title: Captcha Protection
+description: Configure captcha for remediation
+---
+
+import { Steps } from 'fumadocs-ui/components/steps';
+import { Callout } from 'fumadocs-ui/components/callout';
+
+# Captcha Protection
+
+The **Captcha** page allows you to configure captcha challenges as a remediation response. When a user triggers a specific scenario (e.g., suspicious browsing behavior), you can present them with a captcha instead of an outright ban.
+
+## Supported Providers
+
+CrowdSec Manager supports the following captcha providers:
+
+- **Google reCAPTCHA** (v2/v3)
+- **hCaptcha**
+- **Cloudflare Turnstile**
+
+## Configuration Status
+
+The dashboard provides real-time feedback on your captcha configuration:
+
+- **Active** (Green): Captcha is fully configured and the required HTML file exists.
+- **Partially Configured** (Yellow): Configuration exists but the HTML file is missing, or vice versa.
+- **Not Configured** (Gray): No captcha settings detected.
+
+## Setup Guide
+
+<Steps>
+  ### Select Provider
+  Choose your preferred provider from the dropdown menu.
+
+  ### Enter Credentials
+  Enter the **Site Key** (public) and **Secret Key** (private) obtained from your provider's dashboard.
+
+  ### Apply Configuration
+  Click **Configure Captcha**. This will update the `dynamic_config.yml` file and ensure the `captcha.html` template is present.
+</Steps>
+
+<Callout type="info">
+  **Note:** After configuring captcha, you may need to restart Traefik and CrowdSec for the changes to take full effect.
+</Callout>
+
+## Obtaining Credentials
+
+### Google reCAPTCHA
+1. Go to the [reCAPTCHA Admin Console](https://www.google.com/recaptcha/admin).
+2. Register a new site.
+3. Copy the Site Key and Secret Key.
+
+### hCaptcha
+1. Go to the [hCaptcha Dashboard](https://dashboard.hcaptcha.com/signup).
+2. Create a new site.
+3. Copy the Site Key and Secret Key.
+
+### Cloudflare Turnstile
+1. Go to the [Cloudflare Turnstile Dashboard](https://dash.cloudflare.com/?to=/:account/turnstile).
+2. Create a new site.
+3. Copy the Site Key and Secret Key.

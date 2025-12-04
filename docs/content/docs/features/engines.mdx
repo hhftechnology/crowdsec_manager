@@ -1,0 +1,57 @@
+---
+title: Engines (Bouncers)
+description: Manage CrowdSec enforcement agents (bouncers)
+---
+
+import { Steps } from 'fumadocs-ui/components/steps';
+
+# Engines (Bouncers)
+
+The **Engines** page (also referred to as Bouncers) allows you to manage the enforcement agents that connect to your CrowdSec Local API (LAPI). Bouncers are responsible for applying decisions (like bans or captchas) at various levels of your infrastructure (e.g., firewall, web server, reverse proxy).
+
+## Overview
+
+The main dashboard provides a list of all registered bouncers with the following information:
+
+- **Name**: The unique identifier for the bouncer.
+- **Type**: The type of bouncer (e.g., `crowdsec-firewall-bouncer`, `crowdsec-nginx-bouncer`).
+- **Version**: The version of the bouncer software.
+- **IP Address**: The IP address from which the bouncer is connecting.
+- **Last Pull**: The timestamp of the last time the bouncer pulled decisions from the LAPI.
+- **Status**: The current connection status (`Connected`, `Disconnected`, or `Stale`).
+
+## Managing Bouncers
+
+### Adding a New Bouncer
+
+To register a new bouncer with your CrowdSec instance:
+
+<Steps>
+  ### Click "Add Bouncer"
+  Click the **Add Bouncer** button in the top right corner of the page.
+
+  ### Enter Name
+  Provide a unique name for the bouncer (e.g., `nginx-load-balancer`).
+
+  ### Copy API Key
+  Once created, the system will generate a unique **API Key**.
+  
+  > [!WARNING]
+  > **Copy this key immediately.** It will not be shown again. You will need this key to configure your bouncer instance.
+</Steps>
+
+### Deleting a Bouncer
+
+If a bouncer is no longer in use, you can revoke its access:
+
+1. Locate the bouncer in the list.
+2. Click the **Trash Icon** (Delete) in the Actions column.
+3. Confirm the deletion in the dialog.
+
+> [!NOTE]
+> Deleting a bouncer immediately revokes its API key. It will no longer be able to pull decisions or send alerts.
+
+## Troubleshooting
+
+- **Stale Status**: If a bouncer shows as `Stale`, it hasn't pulled decisions recently. Check the bouncer's logs and ensure it can reach the LAPI.
+- **Disconnected**: The bouncer has not connected for a significant period.

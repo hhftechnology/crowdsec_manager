@@ -1,0 +1,20 @@
+{
+  "pages": [
+    "dashboard",
+    "engines",
+    "health",
+    "alerts",
+    "decisions",
+    "remediation",
+    "scenarios",
+    "captcha",
+    "allowlists",
+    "whitelist-management",
+    "profiles",
+    "ip-management",
+    "backups",
+    "cron-jobs",
+    "logs-monitoring",
+    "stack-updates"
+  ]
+}

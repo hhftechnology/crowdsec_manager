@@ -1,0 +1,43 @@
+---
+title: Docker API
+description: Docker management endpoints
+---
+
+# Docker API
+
+Endpoints for interacting with the Docker daemon.
+
+## List Containers
+
+`GET /api/docker/containers`
+
+Returns a list of all containers in the stack.
+
+## Container Actions
+
+`POST /api/docker/container/:action`
+
+Performs an action on a specific container.
+
+**Parameters:**
+- `action`: `start`, `stop`, `restart`.
+
+### Body
+
+```json
+{
+  "container_name": "crowdsec"
+}
+```
+
+## Check Updates
+
+`GET /api/docker/updates`
+
+Checks for available updates for the stack images.
+
+## Apply Update
+
+`POST /api/docker/update`
+
+Applies updates to the specified services.

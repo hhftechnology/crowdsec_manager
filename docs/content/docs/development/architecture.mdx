@@ -1,0 +1,33 @@
+---
+title: Architecture
+description: Internal architecture of CrowdSec Manager
+---
+
+# Architecture
+
+CrowdSec Manager is built as a monolithic application with a clear separation between the backend API and the frontend UI.
+
+## Backend (Go)
+
+The backend is written in Go and handles:
+- **API Server**: Exposes REST endpoints using `chi` router.
+- **Docker Integration**: Communicates with the Docker daemon via the Docker SDK.
+- **Database**: Uses SQLite for storing configuration and state.
+- **Background Jobs**: Runs cron jobs for backups and maintenance.
+
+### Key Packages
+- `internal/api`: HTTP handlers and routing.
+- `internal/docker`: Docker client wrapper.
+- `internal/database`: Database models and queries.
+- `internal/cron`: Scheduled task manager.
+
+## Frontend (React)
+
+The frontend is a Single Page Application (SPA) built with React and Vite.
+- **UI Library**: Uses Shadcn UI for components.
+- **State Management**: Uses React Query for data fetching and caching.
+- **Routing**: Client-side routing for navigation.
+
+## Communication
+
+The frontend communicates with the backend via HTTP requests to the `/api` endpoints. Real-time data (logs) is delivered via WebSockets.

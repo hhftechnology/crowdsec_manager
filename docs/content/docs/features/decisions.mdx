@@ -1,0 +1,69 @@
+---
+title: Decisions Analysis
+description: Manage and analyze active decisions
+---
+
+import { Steps } from 'fumadocs-ui/components/steps';
+import { Callout } from 'fumadocs-ui/components/callout';
+
+# Decisions Analysis
+
+The **Decisions** page allows you to view, filter, and manage the active decisions (bans, captchas, etc.) currently enforced by your CrowdSec instance. Unlike alerts, which are historical records of suspicious activity, decisions are the active countermeasures being applied.
+
+## Filtering Decisions
+
+You can filter the list of decisions to find specific entries.
+
+### Available Filters
+
+- **Time Range**: `Since` and `Until` durations.
+- **Type**: `ban`, `captcha`, `throttle`.
+- **Scope**: `ip`, `range`, `session`.
+- **Origin**: `cscli`, `crowdsec`, `console`, `lists`, `CAPI`.
+- **Value**: Specific IP address or target value.
+- **Scenario**: The scenario that triggered the decision.
+- **Include CAPI**: Include decisions from the Central API (community blocklists).
+
+## Managing Decisions
+
+### Adding a Decision Manually
+
+You can manually add a decision (e.g., to ban a specific IP).
+
+<Steps>
+  ### Click "Add Decision"
+  Click the **Add Decision** button in the top right.
+
+  ### Configure Parameters
+  - **Type**: `ban` (default) or `captcha`.
+  - **Value**: The IP address or range to target.
+  - **Duration**: How long the decision should last (e.g., `4h`, `1d`).
+  - **Reason**: A description for why this decision is being added.
+
+  ### Submit
+  Click **Add Decision** to apply it immediately.
+</Steps>
+
+### Importing Decisions
+
+You can import a list of decisions from a CSV file.
+
+1. Click **Import Decisions**.
+2. Paste your CSV content (format: `value,duration,type,reason`).
+3. Click **Import**.
+
+### Deleting a Decision
+
+To remove a ban or other decision:
+
+1. Locate the decision in the list.
+2. Click the **Trash Icon** (Delete).
+3. Confirm the deletion.
+
+<Callout type="warn">
+Deleting a decision will immediately stop enforcement for that target. If the attacker is still active, they may trigger a new alert and decision.
+</Callout>
+
+## Exporting Data
+
+You can export the current list of decisions to a CSV file by clicking the **Export CSV** button.

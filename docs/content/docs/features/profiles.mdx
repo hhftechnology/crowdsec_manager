@@ -1,0 +1,30 @@
+---
+title: Profiles
+description: Edit profile configurations
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+# Profiles
+
+The **Profiles** page provides a raw editor for the `profiles.yaml` configuration file. This file determines how CrowdSec handles alerts and what remediation actions are applied.
+
+## Configuration Editor
+
+You can directly edit the YAML content of your profiles configuration.
+
+<Callout type="warn">
+  **Advanced Feature**: Incorrect configuration in `profiles.yaml` can break your CrowdSec installation. Proceed with caution and ensure your YAML syntax is valid.
+</Callout>
+
+### Actions
+
+- **Save**: Saves the changes to the file but does not apply them immediately.
+- **Save & Restart**: Saves the changes and restarts the CrowdSec container to apply the new configuration.
+- **Reset to Default**: Reverts the configuration to the default template provided by CrowdSec Manager.
+
+## Common Use Cases
+
+- Defining custom remediation policies (e.g., banning for 4 hours instead of the default).
+- Configuring notifications for specific profiles.
+- Setting up specific filters for alerts.

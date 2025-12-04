@@ -1,0 +1,64 @@
+---
+title: Whitelist API
+description: Whitelist management endpoints
+---
+
+# Whitelist API
+
+Endpoints for managing trusted IPs.
+
+## View Whitelists
+
+`GET /api/whitelist/view`
+
+Returns a list of all currently whitelisted IPs and CIDRs.
+
+## Whitelist Current IP
+
+`POST /api/whitelist/current`
+
+Whitelists the IP address making the request.
+
+### Body
+
+```json
+{
+  "add_to_crowdsec": true,
+  "add_to_traefik": true,
+  "comment": "My Home IP"
+}
+```
+
+## Manual Whitelist
+
+`POST /api/whitelist/manual`
+
+Whitelists a specific IP address.
+
+### Body
+
+```json
+{
+  "ip": "1.2.3.4",
+  "add_to_crowdsec": true,
+  "add_to_traefik": true,
+  "comment": "Office VPN"
+}
+```
+
+## CIDR Whitelist
+
+`POST /api/whitelist/cidr`
+
+Whitelists a CIDR range.
+
+### Body
+
+```json
+{
+  "cidr": "192.168.1.0/24",
+  "add_to_crowdsec": true,
+  "add_to_traefik": true,
+  "comment": "Local Network"
+}
+```

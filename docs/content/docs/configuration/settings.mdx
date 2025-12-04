@@ -1,0 +1,28 @@
+---
+title: Settings
+description: System configuration and paths
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+# Settings
+
+The **Settings** page (labeled Configuration in the UI) allows you to manage critical system paths and integration settings.
+
+## Traefik Configuration Path
+
+The most important setting is the **Traefik Dynamic Configuration Path**. This tells CrowdSec Manager where to find the `dynamic_config.yml` file inside the Traefik container.
+
+- **Default Path**: `/etc/traefik/dynamic_config.yml`
+
+### Why is this important?
+
+CrowdSec Manager uses this path to:
+- Verify the integration between Traefik and CrowdSec.
+- Manage the Traefik whitelist.
+- Configure and verify Captcha settings.
+- Check middleware configurations.
+
+<Callout type="important">
+  If your Traefik setup uses a different path or filename for its dynamic configuration, you **must** update it here. Otherwise, features like Captcha and Whitelists will not function correctly.
+</Callout>

@@ -1,0 +1,11 @@
+{
+  "pages": [
+    "index",
+    "installation",
+    "quick-start",
+    "features",
+    "configuration",
+    "development",
+    "api"
+  ]
+}

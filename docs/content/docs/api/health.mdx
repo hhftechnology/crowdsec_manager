@@ -1,0 +1,30 @@
+---
+title: Health API
+description: System health and diagnostics endpoints
+---
+
+# Health API
+
+Endpoints for checking the status of the system and its components.
+
+## Check Stack Health
+
+`GET /api/health/stack`
+
+Returns the status of all monitored containers (CrowdSec, Traefik, etc.).
+
+### Response
+
+```json
+{
+  "crowdsec": "running",
+  "traefik": "running",
+  "manager": "running"
+}
+```
+
+## Complete Diagnostics
+
+`GET /api/health/complete`
+
+Performs a deep diagnostic check of the system, including database connectivity and disk space.
