@@ -1,4 +1,22 @@
-# CrowdSec Manager
+<div align="center">
+    <h1 align="center"><a href="https://github.com/hhftechnology/crowdsec_manager">CrowdSec Manager</a></h1>
+</div>
+
+
+<div align="center">
+    
+[![Docker](https://img.shields.io/docker/pulls/hhftechnology/crowdsec-manager?style=flat-square)](https://hub.docker.com/r/hhftechnology/crowdsec-manager)
+![Stars](https://img.shields.io/github/stars/hhftechnology/crowdsec_manager?style=flat-square)
+[![Discord](https://img.shields.io/discord/994247717368909884?logo=discord&style=flat-square)](https://discord.gg/HDCt9MjyMJ)
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![Go Version](https://img.shields.io/badge/go-1.23+-00ADD8.svg)
+![React Version](https://img.shields.io/badge/react-18.3-61DAFB.svg)
+![Status](https://img.shields.io/badge/status-beta-orange.svg)
+
+**A web-based management interface for CrowdSec security stack with Pangolin integration. This project provides a modern, user-friendly web UI built with Go and React for managing your CrowdSec security infrastructure.**
+
+</div>
+
 
 > ⚠️ **BETA SOFTWARE WARNING** ⚠️
 >
@@ -11,12 +29,8 @@
 >
 > While we strive for stability, beta software may contain bugs, incomplete features, or unexpected behavior. Use at your own risk..
 
-A web-based management interface for CrowdSec security stack with Pangolin integration. This project provides a modern, user-friendly web UI built with Go and React for managing your CrowdSec security infrastructure.
 
-![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![Go Version](https://img.shields.io/badge/go-1.23+-00ADD8.svg)
-![React Version](https://img.shields.io/badge/react-18.3-61DAFB.svg)
-![Status](https://img.shields.io/badge/status-beta-orange.svg)
+
 
 <img width="1200" height="630" alt="Dashboard" src="/images/Dashboard.png"/>
 <img width="1200" height="630" alt="Health & Diagnostics" src="/images/Health & Diagnostics.png"/>
