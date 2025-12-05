@@ -7,49 +7,161 @@ description: Comprehensive guide to environment configuration
 
 CrowdSec Manager is configured primarily through environment variables passed to the Docker container.
 
-## Server Configuration
+## Summary
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PORT` | `8080` | The internal port the application listens on. |
-| `ENVIRONMENT` | `production` | Set to `development` for verbose logging and dev features. |
-| `LOG_LEVEL` | `info` | Logging verbosity: `debug`, `info`, `warn`, `error`. |
-| `LOG_FILE` | `/app/logs/crowdsec-manager.log` | Path to the internal application log file. |
+**Are any variables absolutely necessary?**
+Technically, **no**. The application is designed with sensible defaults for all configuration options. You can run the application without setting any environment variables, provided the default paths (like `./data` and `./logs`) are writable and Docker is available locally.
 
-## Docker Integration
+## Detailed Variable Breakdown
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DOCKER_HOST` | `unix:///var/run/docker.sock` | Path to the Docker socket. Required for container management. |
-| `COMPOSE_FILE` | `/app/docker-compose.yml` | Path to the compose file inside the container. |
+### Core Application Configuration
+
+| Variable | Default | Impact / Description |
+| :--- | :--- | :--- |
+| `PORT` | `8080` | The HTTP port the manager listens on. Change this if port 8080 is already in use. |
+| `ENVIRONMENT` | `production` | Sets the application mode. Use `development` for verbose logging and dev features. |
+| `LOG_LEVEL` | `info` | Controls logging verbosity. Options: `debug`, `info`, `warn`, `error`. |
+| `LOG_FILE` | `/app/logs/crowdsec-manager.log` | Path where the application log file is written. |
+
+### Docker & Service Discovery
+
+| Variable | Default | Impact / Description |
+| :--- | :--- | :--- |
+| `DOCKER_HOST` | `unix:///var/run/docker.sock` | Address of the Docker daemon. If empty, it uses the default local socket. Set this if connecting to a remote Docker instance. |
+| `COMPOSE_FILE` | `/app/docker-compose.yml` | Path to the Docker Compose file. The manager reads this to discover services and manage updates. |
+| `*_CONTAINER_NAME` | `crowdsec`, `traefik`, etc. | Overrides for container names if your stack uses different names (e.g., `CROWDSEC_CONTAINER_NAME`, `TRAEFIK_CONTAINER_NAME`). |
 | `PANGOLIN_DIR` | `/app` | Base working directory for the application. |
 | `CONFIG_DIR` | `/app/config` | Directory where configuration files are stored. |
 
-## Database
+### File Paths & Persistence
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DATABASE_PATH` | `/app/data/settings.db` | Path to the SQLite database file. Ensure this path is persistent. |
-
-## Traefik Integration
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `TRAEFIK_DYNAMIC_CONFIG` | `/dynamic_config.yml` | Path to Traefik's dynamic configuration file. |
-| `TRAEFIK_STATIC_CONFIG` | `/etc/traefik/traefik_config.yml` | Path to Traefik's static configuration file. |
-| `TRAEFIK_ACCESS_LOG` | `/var/log/traefik/access.log` | Path to read Traefik access logs from. |
-| `TRAEFIK_ERROR_LOG` | `/var/log/traefik/traefik.log` | Path to read Traefik error logs from. |
-
-## CrowdSec Integration
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `CROWDSEC_ACQUIS_FILE` | `/etc/crowdsec/acquis.yaml` | Path to CrowdSec acquisition configuration. |
-| `INCLUDE_CROWDSEC` | `false` | Whether to manage CrowdSec container updates/restarts. |
-
-## Backup Configuration
-
-| Variable | Default | Description |
-|----------|---------|-------------|
+| Variable | Default | Impact / Description |
+| :--- | :--- | :--- |
+| `DATABASE_PATH` | `/app/data/settings.db` | Location of the SQLite database storing app settings. Ensure this path is persistent. |
 | `BACKUP_DIR` | `/app/backups` | Directory where backups are stored. |
 | `RETENTION_DAYS` | `60` | Number of days to keep backups before auto-deletion. |
+
+### Integrations (Traefik & CrowdSec)
+
+| Variable | Default | Impact / Description |
+| :--- | :--- | :--- |
+| `TRAEFIK_DYNAMIC_CONFIG` | `/etc/traefik/dynamic_config.yml` | Path to Traefik's dynamic config file. Used to manage middlewares/routers. |
+| `TRAEFIK_STATIC_CONFIG` | `/etc/traefik/traefik_config.yml` | Path to Traefik's static config file. |
+| `TRAEFIK_ACCESS_LOG` | `/var/log/traefik/access.log` | Path to read Traefik access logs from. |
+| `TRAEFIK_ERROR_LOG` | `/var/log/traefik/traefik.log` | Path to read Traefik error logs from. |
+| `CROWDSEC_ACQUIS_FILE` | `/etc/crowdsec/acquis.yaml` | Path to CrowdSec's acquisition configuration. |
+| `INCLUDE_CROWDSEC` | `true` | Whether to manage CrowdSec container updates/restarts. |
+
+## Recommendation
+
+For a standard deployment, you likely only need to configure:
+1.  **`PORT`**: If you have a port conflict.
+2.  **`COMPOSE_FILE`**: If your compose file is not in the default location.
+3.  **`DOCKER_HOST`**: If running in a complex Docker environment.
+
+Everything else can safely be left to defaults unless you have specific customization needs (like changing log locations or backup retention).
+
+## Handling Custom Paths
+
+A common source of confusion is the difference between **internal container paths** (where the app looks for files) and **external host paths** (where files actually exist on your server).
+
+### The Golden Rule
+
+- **Environment Variables** tell the application **where to look inside the container**.
+- **Docker Volumes** map your **real host files** to those **internal container locations**.
+
+### Example: Custom CrowdSec Installation
+
+Suppose your CrowdSec installation is at `/opt/my-custom-crowdsec` instead of the standard `/etc/crowdsec`.
+
+**DO NOT** change the environment variable `CROWDSEC_ACQUIS_FILE` to `/opt/my-custom-crowdsec/acquis.yaml`. The container cannot see your `/opt` directory directly!
+
+**Instead, update your `docker-compose.yml` volumes:**
+
+```yaml
+services:
+  crowdsec-manager:
+    environment:
+      # LEAVE THIS AS DEFAULT
+      - CROWDSEC_ACQUIS_FILE=/etc/crowdsec/acquis.yaml
+    volumes:
+      # Map YOUR custom path (left) to the CONTAINER'S expected path (right)
+      - /opt/my-custom-crowdsec/acquis.yaml:/etc/crowdsec/acquis.yaml:ro
+```
+
+By changing the volume mapping, you "trick" the container into seeing your custom file at the standard location it expects. This is almost always the correct way to handle custom paths.
+
+### Common Customization Examples
+
+Here are examples for the most common customization requests. In all cases, **keep the environment variable at its default value** and change the volume mapping in `docker-compose.yml`.
+
+#### 1. Custom CrowdSec Configuration Folder
+
+If your CrowdSec configuration is stored in `/mnt/security/crowdsec`:
+
+```yaml
+services:
+  crowdsec-manager:
+    environment:
+      - CROWDSEC_ACQUIS_FILE=/etc/crowdsec/acquis.yaml # Default
+    volumes:
+      # Map your custom folder to the standard location
+      - /mnt/security/crowdsec/acquis.yaml:/etc/crowdsec/acquis.yaml:ro
+```
+
+#### 2. Custom Traefik Logs Location
+
+If your Traefik logs are stored in `/var/log/custom-traefik`:
+
+```yaml
+services:
+  crowdsec-manager:
+    environment:
+      - TRAEFIK_ACCESS_LOG=/var/log/traefik/access.log # Default
+      - TRAEFIK_ERROR_LOG=/var/log/traefik/traefik.log # Default
+    volumes:
+      # Map your custom log directory to the standard location
+      - /var/log/custom-traefik:/var/log/traefik:ro
+```
+
+#### 3. Custom Traefik Configuration File
+
+If your Traefik static configuration is at `/opt/traefik/traefik.toml`:
+
+```yaml
+services:
+  crowdsec-manager:
+    environment:
+      - TRAEFIK_STATIC_CONFIG=/etc/traefik/traefik_config.yml # Default
+    volumes:
+      # Map your custom config file to the standard location
+      - /opt/traefik/traefik.toml:/etc/traefik/traefik_config.yml:ro
+```
+
+#### 4. Custom Traefik Dynamic Configuration
+
+If your dynamic configuration is at `/opt/traefik/dynamic/rules.yml`:
+
+```yaml
+services:
+  crowdsec-manager:
+    environment:
+      - TRAEFIK_DYNAMIC_CONFIG=/etc/traefik/dynamic_config.yml # Default
+    volumes:
+      # Map your custom dynamic config to the standard location
+      - /opt/traefik/dynamic/rules.yml:/etc/traefik/dynamic_config.yml:ro
+```
+
+#### 5. Custom CrowdSec Manager Logs
+
+If you want the manager's own logs to be stored in `/var/log/crowdsec-manager`:
+
+```yaml
+services:
+  crowdsec-manager:
+    environment:
+      - LOG_FILE=/app/logs/crowdsec-manager.log # Default
+    volumes:
+      # Map your custom log directory to the standard location
+      - /var/log/crowdsec-manager:/app/logs
+```
