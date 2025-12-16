@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 import { CheckCircle2, XCircle, Play, Square, RotateCw, Power, Key } from 'lucide-react'
-import EnrollDialog from '@/components/EnrollDialog.tsx'
+import EnrollDialog from '@/components/EnrollDialog'
 
 export default function Services() {
   const queryClient = useQueryClient()

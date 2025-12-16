@@ -14,9 +14,9 @@ import {
 } from 'lucide-react'
 import api from '@/lib/api'
 import { ProxyType } from '@/lib/proxy-types'
-import { StatusDashboard } from '@/components/health/StatusDashboard.tsx'
-import { ProxyHealthIndicator } from '@/components/health/ProxyHealthIndicator.tsx'
-import { BouncerStatusMonitor } from '@/components/health/BouncerStatusMonitor.tsx'
+import { StatusDashboard } from '@/components/health/StatusDashboard'
+import { ProxyHealthIndicator } from '@/components/health/ProxyHealthIndicator'
+import { BouncerStatusMonitor } from '@/components/health/BouncerStatusMonitor'
 
 export default function ComprehensiveHealth() {
   const { data: proxyInfo, isLoading: proxyLoading } = useQuery({
