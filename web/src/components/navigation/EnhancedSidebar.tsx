@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { useTheme } from '@/components/ThemeProvider'
+import { useTheme } from '@/components/ThemeProvider.tsx'
 import {
   Tooltip,
   TooltipContent,

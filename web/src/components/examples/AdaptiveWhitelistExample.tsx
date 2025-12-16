@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ProxyType, Feature } from '@/lib/proxy-types'
-import { AdaptiveWhitelistManager } from '@/components/whitelist'
+import { AdaptiveWhitelistManager } from '@/components/whitelist/AdaptiveWhitelistManager.tsx'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'

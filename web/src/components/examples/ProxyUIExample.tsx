@@ -10,16 +10,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
-import {
-  ProxyStatusIndicator,
-  AdaptiveFeaturePanel,
-  ProxyTypeCard,
-  FeatureCard,
-  StatusDashboard,
-  EnhancedSidebar,
-  GlobalSearch,
-  CommandPalette
-} from '@/components/proxy'
+import { ProxyStatusIndicator } from '@/components/proxy/ProxyStatusIndicator.tsx'
+import { AdaptiveFeaturePanel } from '@/components/proxy/AdaptiveFeaturePanel.tsx'
+import { ProxyTypeCard } from '@/components/proxy/ProxyTypeCard.tsx'
+import { FeatureCard } from '@/components/proxy/FeatureCard.tsx'
+import { StatusDashboard } from '@/components/proxy/StatusDashboard.tsx'
+import { EnhancedSidebar } from '@/components/navigation/EnhancedSidebar.tsx'
+import { GlobalSearch } from '@/components/search/GlobalSearch.tsx'
+import { CommandPalette } from '@/components/search/CommandPalette.tsx'
 import { ProxyType, Feature, PROXY_TYPES } from '@/lib/proxy-types'
 import { Shield, Network, Activity } from 'lucide-react'
 

@@ -10,12 +10,10 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Separator } from '@/components/ui/separator'
-import {
-  ProxySetupWizard,
-  ProxySetupConfig,
-  MigrationWizard,
-  ProxySettingsManager
-} from '@/components/setup'
+import { ProxySetupWizard } from '@/components/setup/ProxySetupWizard.tsx'
+import { ProxyConfigurationForm as ProxySetupConfig } from '@/components/setup/ProxyConfigurationForm.tsx'
+import { MigrationWizard } from '@/components/migration/MigrationWizard.tsx'
+import { ProxySettingsManager } from '@/components/settings/ProxySettingsManager.tsx'
 import { ProxyType, Feature } from '@/lib/proxy-types'
 import { Settings, Zap, Database, RefreshCw } from 'lucide-react'
 
