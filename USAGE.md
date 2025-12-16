@@ -1,6 +1,6 @@
 # CrowdSec Manager - Usage Guide
 
-> ⚠️ **BETA SOFTWARE** - Test thoroughly before production use
+> ⚠️ **BETA SOFTWARE** - Test thoroughly before production use.
 
 This guide provides detailed usage instructions, examples, and best practices for CrowdSec Manager.
 
