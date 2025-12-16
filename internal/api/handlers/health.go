@@ -6,6 +6,7 @@ import (
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
 	"crowdsec-manager/internal/models"
+	"crowdsec-manager/internal/proxy"
 	"encoding/json" // Used for arbitrary JSON (metrics, raw decisions)
 	"fmt"
 	"net/http"
@@ -284,7 +285,7 @@ func CheckStackHealth(dockerClient *docker.Client, cfg *config.Config) gin.Handl
 }
 
 // RunCompleteDiagnostics runs a complete system diagnostic
-func RunCompleteDiagnostics(dockerClient *docker.Client, db *database.Database, cfg *config.Config) gin.HandlerFunc {
+func RunCompleteDiagnostics(dockerClient *docker.Client, db *database.Database, cfg *config.Config, proxyAdapter proxy.ProxyAdapter) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		logger.Info("Running complete diagnostics")
 

@@ -387,3 +387,149 @@ type ProfileHistory struct {
 	Content   string    `json:"content"`
 	CreatedAt time.Time `json:"created_at"`
 }
+// Proxy-related models for multi-proxy architecture
+
+// ProxyIntegration represents proxy integration status (replaces TraefikIntegration)
+type ProxyIntegration struct {
+	Type                string   `json:"type"`
+	BouncerConfigured   bool     `json:"bouncer_configured"`
+	BouncerName         string   `json:"bouncer_name"`
+	SupportedFeatures   []string `json:"supported_features"`
+	ConfigFiles         []string `json:"config_files"`
+	ContainerName       string   `json:"container_name"`
+	Running             bool     `json:"running"`
+	IntegrationType     string   `json:"integration_type,omitempty"` // plugin, module, spoa, etc.
+}
+
+// WhitelistRequest (Updated for multi-proxy support)
+type WhitelistRequestV2 struct {
+	IP            string `json:"ip"`
+	CIDR          string `json:"cidr,omitempty"`
+	AddToCrowdSec bool   `json:"add_to_crowdsec"`
+	AddToTraefik  bool   `json:"add_to_traefik"`  // LEGACY - Supported forever
+	AddToProxy    bool   `json:"add_to_proxy"`    // NEW - Generic field
+	Comprehensive bool   `json:"comprehensive,omitempty"`
+}
+
+// IPInfo (Updated for multi-proxy support)
+type IPInfoV2 struct {
+	IP            string `json:"ip"`
+	IsBlocked     bool   `json:"is_blocked"`
+	IsWhitelisted bool   `json:"is_whitelisted"`
+	InCrowdSec    bool   `json:"in_crowdsec"`
+	InTraefik     bool   `json:"in_traefik"`  // LEGACY - Supported forever
+	InProxy       bool   `json:"in_proxy"`    // NEW - Generic field
+}
+
+// ProxySettings represents proxy configuration stored in database
+type ProxySettings struct {
+	ID              int               `json:"id" db:"id"`
+	ProxyType       string            `json:"proxy_type" db:"proxy_type"`
+	ContainerName   string            `json:"container_name" db:"container_name"`
+	ConfigPaths     map[string]string `json:"config_paths" db:"config_paths"`     // JSON field
+	CustomSettings  map[string]string `json:"custom_settings" db:"custom_settings"` // JSON field
+	EnabledFeatures []string          `json:"enabled_features" db:"enabled_features"` // JSON field
+	CreatedAt       string            `json:"created_at" db:"created_at"`
+	UpdatedAt       string            `json:"updated_at" db:"updated_at"`
+}
+
+// ProxyConfigRequest represents a request to configure proxy settings
+type ProxyConfigRequest struct {
+	ProxyType       string            `json:"proxy_type" binding:"required"`
+	ContainerName   string            `json:"container_name" binding:"required"`
+	ConfigPaths     map[string]string `json:"config_paths,omitempty"`
+	CustomSettings  map[string]string `json:"custom_settings,omitempty"`
+	EnabledFeatures []string          `json:"enabled_features,omitempty"`
+}
+
+// ProxyTypesResponse represents available proxy types
+type ProxyTypesResponse struct {
+	Types []ProxyTypeInfo `json:"types"`
+}
+
+// ProxyTypeInfo represents information about a proxy type
+type ProxyTypeInfo struct {
+	Type              string   `json:"type"`
+	Name              string   `json:"name"`
+	Description       string   `json:"description"`
+	SupportedFeatures []string `json:"supported_features"`
+	Registered        bool     `json:"registered"`
+	Experimental      bool     `json:"experimental,omitempty"`
+}
+
+// ProxyCurrentResponse represents current proxy information
+type ProxyCurrentResponse struct {
+	Type              string   `json:"type"`
+	Enabled           bool     `json:"enabled"`
+	ContainerName     string   `json:"container_name"`
+	Running           bool     `json:"running"`
+	SupportedFeatures []string `json:"supported_features"`
+	ConfigFiles       []string `json:"config_files"`
+	Health            string   `json:"health"`
+	LastHealthCheck   string   `json:"last_health_check,omitempty"`
+}
+
+// ProxyFeaturesResponse represents supported features for current proxy
+type ProxyFeaturesResponse struct {
+	ProxyType         string                    `json:"proxy_type"`
+	SupportedFeatures []string                  `json:"supported_features"`
+	FeatureDetails    map[string]FeatureDetail  `json:"feature_details"`
+}
+
+// FeatureDetail provides detailed information about a feature
+type FeatureDetail struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Available   bool   `json:"available"`
+	Reason      string `json:"reason,omitempty"` // Why feature is not available
+}
+// Add-on related models for Traefik add-ons (Pangolin/Gerbil)
+
+// AddonsResponse represents available add-ons for the current proxy type
+type AddonsResponse struct {
+	ProxyType       string      `json:"proxy_type"`
+	AvailableAddons []AddonInfo `json:"available_addons"`
+	TotalAddons     int         `json:"total_addons"`
+	SupportedAddons int         `json:"supported_addons"`
+}
+
+// AddonInfo represents information about an add-on
+type AddonInfo struct {
+	Name        string   `json:"name"`
+	DisplayName string   `json:"display_name"`
+	Description string   `json:"description"`
+	ProxyTypes  []string `json:"proxy_types"`
+	Required    bool     `json:"required"`
+	Category    string   `json:"category"`
+	Status      AddonStatus `json:"status"`
+	Features    []string `json:"features"`
+}
+
+// AddonStatus represents the current status of an add-on
+type AddonStatus struct {
+	Name          string `json:"name"`
+	Enabled       bool   `json:"enabled"`
+	Running       bool   `json:"running"`
+	ContainerName string `json:"container_name"`
+	Version       string `json:"version"`
+	Health        string `json:"health"`
+}
+
+// AddonConfiguration represents configuration settings for an add-on
+type AddonConfiguration struct {
+	Name     string                 `json:"name"`
+	Settings map[string]interface{} `json:"settings"`
+}
+
+// AddonEnableRequest represents a request to enable an add-on
+type AddonEnableRequest struct {
+	Addon   string                 `json:"addon" binding:"required"`
+	Config  map[string]interface{} `json:"config,omitempty"`
+	Restart bool                   `json:"restart,omitempty"`
+}
+
+// AddonDisableRequest represents a request to disable an add-on
+type AddonDisableRequest struct {
+	Addon   string `json:"addon" binding:"required"`
+	Restart bool   `json:"restart,omitempty"`
+}

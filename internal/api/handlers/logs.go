@@ -1,10 +1,12 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -13,6 +15,7 @@ import (
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
 	"crowdsec-manager/internal/models"
+	"crowdsec-manager/internal/proxy"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -361,4 +364,79 @@ func analyzeLogs(logs string) models.LogStats {
 	}
 
 	return stats
+}
+// GetProxyLogs retrieves proxy access logs using the adapter
+func GetProxyLogs(proxyAdapter proxy.ProxyAdapter) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		tail := c.DefaultQuery("tail", "100")
+		logger.Info("Getting proxy logs", "tail", tail, "proxy_type", proxyAdapter.Type())
+
+		ctx := context.Background()
+		logMgr := proxyAdapter.LogManager()
+		if logMgr == nil {
+			c.JSON(http.StatusNotImplemented, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Log management not supported for proxy type: %s", proxyAdapter.Type()),
+			})
+			return
+		}
+
+		// Convert tail to int
+		tailInt := 100
+		if t, err := strconv.Atoi(tail); err == nil {
+			tailInt = t
+		}
+
+		logs, err := logMgr.GetAccessLogs(ctx, tailInt)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to get logs: %v", err),
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, models.Response{
+			Success: true,
+			Data:    gin.H{"logs": logs, "path": logMgr.GetLogPath()},
+		})
+	}
+}
+
+// AnalyzeProxyLogs performs advanced analysis of proxy logs using the adapter
+func AnalyzeProxyLogs(proxyAdapter proxy.ProxyAdapter) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		tail := c.DefaultQuery("tail", "1000")
+		logger.Info("Analyzing proxy logs", "tail", tail, "proxy_type", proxyAdapter.Type())
+
+		ctx := context.Background()
+		logMgr := proxyAdapter.LogManager()
+		if logMgr == nil {
+			c.JSON(http.StatusNotImplemented, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Log analysis not supported for proxy type: %s", proxyAdapter.Type()),
+			})
+			return
+		}
+
+		// Convert tail to int
+		tailInt := 1000
+		if t, err := strconv.Atoi(tail); err == nil {
+			tailInt = t
+		}
+
+		stats, err := logMgr.AnalyzeLogs(ctx, tailInt)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to analyze logs: %v", err),
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, models.Response{
+			Success: true,
+			Data:    stats,
+		})
+	}
 }

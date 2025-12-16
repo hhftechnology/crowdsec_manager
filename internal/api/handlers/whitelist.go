@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
 	"crowdsec-manager/internal/models"
+	"crowdsec-manager/internal/proxy"
 
 	"github.com/gin-gonic/gin"
 )
@@ -19,15 +21,20 @@ import (
 // 3. WHITELIST MANAGEMENT
 // =============================================================================
 
-// ViewWhitelist displays all whitelisted IPs from both CrowdSec and Traefik
-func ViewWhitelist(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
+// ViewWhitelist displays all whitelisted IPs from both CrowdSec and the current proxy
+func ViewWhitelist(dockerClient *docker.Client, cfg *config.Config, proxyAdapter proxy.ProxyAdapter) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		logger.Info("Viewing whitelist")
 
+		ctx := context.Background()
 		whitelist := gin.H{
 			"crowdsec": []string{},
-			"traefik":  []string{},
+			"proxy":    []string{},
 		}
+
+		// Maintain backward compatibility
+		proxyType := string(proxyAdapter.Type())
+		whitelist[proxyType] = []string{} // Add proxy-specific key for backward compatibility
 
 		// Get CrowdSec whitelist
 		crowdsecWL, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
@@ -37,12 +44,17 @@ func ViewWhitelist(dockerClient *docker.Client, cfg *config.Config) gin.HandlerF
 			whitelist["crowdsec"] = parseWhitelistYAML(crowdsecWL)
 		}
 
-		// Get Traefik whitelist
-		traefikWL, err := dockerClient.ExecCommand(cfg.TraefikContainerName, []string{
-			"cat", "/etc/traefik/dynamic_config.yml",
-		})
-		if err == nil {
-			whitelist["traefik"] = parseTraefikWhitelist(traefikWL)
+		// Get proxy whitelist using adapter
+		if whitelistMgr := proxyAdapter.WhitelistManager(); whitelistMgr != nil {
+			proxyWL, err := whitelistMgr.ViewWhitelist(ctx)
+			if err == nil {
+				whitelist["proxy"] = proxyWL
+				whitelist[proxyType] = proxyWL // Backward compatibility
+			} else {
+				logger.Warn("Failed to get proxy whitelist", "error", err)
+			}
+		} else {
+			logger.Info("Proxy whitelist not supported", "proxy_type", proxyType)
 		}
 
 		c.JSON(http.StatusOK, models.Response{
@@ -53,7 +65,7 @@ func ViewWhitelist(dockerClient *docker.Client, cfg *config.Config) gin.HandlerF
 }
 
 // WhitelistCurrentIP whitelists the current public IP
-func WhitelistCurrentIP(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
+func WhitelistCurrentIP(dockerClient *docker.Client, cfg *config.Config, proxyAdapter proxy.ProxyAdapter) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		logger.Info("Whitelisting current IP")
 
@@ -101,7 +113,7 @@ whitelist:
 }
 
 // WhitelistManualIP whitelists a manually specified IP
-func WhitelistManualIP(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
+func WhitelistManualIP(dockerClient *docker.Client, cfg *config.Config, proxyAdapter proxy.ProxyAdapter) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req models.WhitelistRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -198,7 +210,7 @@ whitelist:
 }
 
 // WhitelistCIDR whitelists a CIDR range
-func WhitelistCIDR(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
+func WhitelistCIDR(dockerClient *docker.Client, cfg *config.Config, proxyAdapter proxy.ProxyAdapter) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req models.WhitelistRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -312,7 +324,7 @@ func AddToTraefikWhitelist(dockerClient *docker.Client, cfg *config.Config) gin.
 }
 
 // SetupComprehensiveWhitelist sets up complete whitelist configuration
-func SetupComprehensiveWhitelist(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
+func SetupComprehensiveWhitelist(dockerClient *docker.Client, cfg *config.Config, proxyAdapter proxy.ProxyAdapter) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req models.WhitelistRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -414,4 +426,43 @@ func parseTraefikWhitelist(content string) []string {
 	}
 
 	return ips
+}
+// AddToProxyWhitelist adds an IP to the current proxy whitelist using the adapter
+func AddToProxyWhitelist(proxyAdapter proxy.ProxyAdapter) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req models.WhitelistRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, models.Response{
+				Success: false,
+				Error:   "Invalid request: " + err.Error(),
+			})
+			return
+		}
+
+		logger.Info("Adding to proxy whitelist", "ip", req.IP, "proxy_type", proxyAdapter.Type())
+
+		ctx := context.Background()
+		whitelistMgr := proxyAdapter.WhitelistManager()
+		if whitelistMgr == nil {
+			c.JSON(http.StatusNotImplemented, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Whitelist management not supported for proxy type: %s", proxyAdapter.Type()),
+			})
+			return
+		}
+
+		err := whitelistMgr.AddIP(ctx, req.IP)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to add IP to proxy whitelist: %v", err),
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, models.Response{
+			Success: true,
+			Message: fmt.Sprintf("IP %s added to %s whitelist", req.IP, proxyAdapter.Type()),
+		})
+	}
 }

@@ -1,0 +1,35 @@
+version: "3.8"
+
+# CrowdSec Manager - Nginx Proxy Manager Services (Separate Deployment Mode)
+# This file contains Nginx Proxy Manager service
+# Usage: docker-compose -f docker-compose.nginx.yml up
+
+services:
+  # Nginx Proxy Manager
+  nginx-proxy-manager:
+    image: jc21/nginx-proxy-manager:${NPM_VERSION:-latest}
+    container_name: ${NPM_CONTAINER_NAME:-nginx-proxy-manager}
+    restart: unless-stopped
+    ports:
+      - "${NPM_HTTP_PORT:-80}:80"
+      - "${NPM_HTTPS_PORT:-443}:443"
+      - "${NPM_ADMIN_PORT:-81}:81"
+    environment:
+      - DB_SQLITE_FILE=/data/database.sqlite
+      - DISABLE_IPV6=${NPM_DISABLE_IPV6:-true}
+    volumes:
+      - ./data/npm:/data
+      - ./config/letsencrypt:/etc/letsencrypt
+      - ./logs/nginx:/data/logs
+    networks:
+      - crowdsec-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:81/api"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  crowdsec-network:
+    name: ${NETWORK_NAME:-crowdsec-network}
+    external: true

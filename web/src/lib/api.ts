@@ -85,7 +85,8 @@ export interface WhitelistRequest {
   ip: string
   cidr?: string
   add_to_crowdsec: boolean
-  add_to_traefik: boolean
+  add_to_traefik: boolean // Backward compatibility
+  add_to_proxy?: boolean // New generic proxy field
   comprehensive?: boolean
 }
 
@@ -356,6 +357,13 @@ export const logsAPI = {
   analyzeTraefikAdvanced: (tail: string = '1000') =>
     api.get<ApiResponse<LogStats>>('/logs/traefik/advanced', { params: { tail } }),
 
+  // New generic proxy endpoints
+  getProxy: (tail: string = '100') =>
+    api.get<ApiResponse<{ logs: string }>>('/logs/proxy', { params: { tail } }),
+
+  analyzeProxy: (tail: string = '1000') =>
+    api.get<ApiResponse<LogStats>>('/logs/proxy/analyze', { params: { tail } }),
+
   getService: (service: string, tail: string = '100') =>
     api.get<ApiResponse<{ logs: string; service: string }>>(`/logs/${service}`, { params: { tail } }),
 
@@ -534,6 +542,63 @@ export const traefikAPI = {
 }
 
 // =============================================================================
+// 14. PROXY MANAGEMENT (5 endpoints)
+// =============================================================================
+
+export interface ProxyTypeInfo {
+  type: string
+  name: string
+  description: string
+  features: string[]
+  experimental?: boolean
+}
+
+export interface ProxyCurrentInfo {
+  type: string
+  name: string
+  running: boolean
+  connected: boolean
+  container_name: string
+  supported_features: string[]
+}
+
+export interface ProxyFeatureInfo {
+  feature: string
+  available: boolean
+  description: string
+}
+
+export interface ProxyConfigRequest {
+  proxy_type: string
+  container_name?: string
+  config_paths?: Record<string, string>
+  custom_settings?: Record<string, string>
+}
+
+export const proxyAPI = {
+  getTypes: () =>
+    api.get<ApiResponse<{ proxy_types: ProxyTypeInfo[] }>>('/proxy/types'),
+
+  getCurrent: () =>
+    api.get<ApiResponse<ProxyCurrentInfo>>('/proxy/current'),
+
+  getFeatures: () =>
+    api.get<ApiResponse<{ features: ProxyFeatureInfo[] }>>('/proxy/features'),
+
+  configure: (data: ProxyConfigRequest) =>
+    api.post<ApiResponse>('/proxy/configure', data),
+
+  checkHealth: () =>
+    api.get<ApiResponse<{ status: string; details: any }>>('/proxy/health'),
+
+  getBouncerStatus: () =>
+    api.get<ApiResponse<{ supported: boolean; configured: boolean; status: any; reason?: string }>>('/proxy/bouncer/status'),
+
+  validateBouncerConfiguration: () =>
+    api.post<ApiResponse>('/proxy/bouncer/validate'),
+}
+
+// =============================================================================
 // 13. ALLOWLIST (6 endpoints)
 // =============================================================================
 
@@ -572,6 +637,7 @@ export default {
   crowdsec: crowdsecAPI,
   traefik: traefikAPI,
   allowlist: allowlistAPI,
+  proxy: proxyAPI,
 }
 
 // Total: 51 endpoints

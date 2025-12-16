@@ -1,0 +1,70 @@
+version: "3.8"
+
+# CrowdSec Manager - Traefik Add-on Services (Separate Deployment Mode)
+# This file contains Pangolin and Gerbil services for Traefik
+# Usage: docker-compose -f docker-compose.traefik.yml -f docker-compose.traefik-addons.yml up
+
+services:
+  # Pangolin - Traefik Add-on Service
+  pangolin:
+    image: fosrl/pangolin:${PANGOLIN_VERSION:-latest}
+    container_name: ${PANGOLIN_CONTAINER_NAME:-pangolin}
+    restart: unless-stopped
+    volumes:
+      - ./config/pangolin:/app/config
+      - pangolin-data:/var/certificates
+      - pangolin-data:/var/dynamic
+    networks:
+      - crowdsec-network
+    environment:
+      - PANGOLIN_CONFIG_DIR=/app/config
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.pangolin.rule=Host(`${PANGOLIN_HOST:-pangolin.localhost}`)"
+      - "traefik.http.routers.pangolin.entrypoints=web"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/api/v1/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Gerbil - Traefik Add-on Service
+  gerbil:
+    image: fosrl/gerbil:${GERBIL_VERSION:-latest}
+    container_name: ${GERBIL_CONTAINER_NAME:-gerbil}
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    ports:
+      - "${GERBIL_WIREGUARD_PORT:-51820}:51820/udp"
+      - "${GERBIL_WIREGUARD_PORT2:-51830}:51830/udp"
+      - "${GERBIL_WIREGUARD_PORT3:-21820}:21820/udp"
+      - "${GERBIL_API_PORT:-51821}:51821"
+    volumes:
+      - ./config/gerbil:/var/config
+    networks:
+      - crowdsec-network
+    environment:
+      - GERBIL_CONFIG_DIR=/var/config
+    depends_on:
+      pangolin:
+        condition: service_healthy
+        required: false
+    command:
+      - --reachableAt=http://gerbil:3003
+      - --generateAndSaveKeyTo=/var/config/key
+      - --remoteConfig=http://pangolin:3001/api/v1/
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.gerbil.rule=Host(`${GERBIL_HOST:-gerbil.localhost}`)"
+      - "traefik.http.routers.gerbil.entrypoints=web"
+
+networks:
+  crowdsec-network:
+    name: ${NETWORK_NAME:-crowdsec-network}
+    external: true
+
+volumes:
+  pangolin-data:
+    name: ${PANGOLIN_DATA_VOLUME:-pangolin-data}

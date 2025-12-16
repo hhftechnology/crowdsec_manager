@@ -1,0 +1,740 @@
+# HAProxy Setup Guide
+
+This guide covers setting up CrowdSec Manager with HAProxy using SPOA (Stream Processing Offload API) bouncer integration.
+
+## Overview
+
+HAProxy mode provides CrowdSec integration through SPOA bouncer:
+
+- ❌ **Whitelist Management** - Not supported (use HAProxy ACLs)
+- ❌ **Captcha Protection** - Not supported (use custom backends if needed)
+- ❌ **Log Parsing** - Basic support only
+- ✅ **Bouncer Integration** - cs-haproxy-bouncer SPOA integration
+- ✅ **Health Monitoring** - Container and bouncer status checking
+- ❌ **Add-ons Support** - Traefik-specific features not available
+
+## Prerequisites
+
+- Docker and Docker Compose installed
+- Basic understanding of HAProxy configuration
+- Understanding of SPOA (Stream Processing Offload API)
+- Domain name for SSL certificates (recommended)
+
+## Quick Start
+
+### 1. Environment Configuration
+
+Create your `.env` file:
+
+```bash
+# Proxy Configuration
+PROXY_TYPE=haproxy
+PROXY_ENABLED=true
+PROXY_CONTAINER_NAME=haproxy
+COMPOSE_MODE=single
+
+# HAProxy-specific settings
+HAPROXY_CONFIG_PATH=/usr/local/etc/haproxy/haproxy.cfg
+HAPROXY_CERTS_PATH=/etc/ssl/certs
+HAPROXY_SPOA_CONFIG=/etc/crowdsec/bouncers/crowdsec-haproxy-bouncer.conf
+
+# Domain configuration
+DOMAIN=yourdomain.com
+
+# CrowdSec Configuration
+CROWDSEC_BOUNCER_KEY=your-bouncer-key-here
+CROWDSEC_LAPI_URL=http://crowdsec:8080
+```
+
+### 2. Deploy with Docker Compose
+
+```bash
+# Start haproxy profile
+docker-compose --profile haproxy up -d
+
+# Or with separate files
+docker-compose -f crowdsec-compose.yml -f proxy-haproxy.yml up -d
+```
+
+### 3. Verify Installation
+
+1. Access CrowdSec Manager: `https://manager.yourdomain.com`
+2. Check Dashboard → Proxy Health
+3. Verify HAProxy container is running
+4. Confirm SPOA bouncer connection status
+
+## Detailed Configuration
+
+### Docker Compose Configuration
+
+Your HAProxy service configuration:
+
+```yaml
+services:
+  haproxy:
+    image: haproxy:2.8-alpine
+    container_name: haproxy
+    profiles: ["haproxy"]
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8404:8404"  # HAProxy stats
+    volumes:
+      - ./haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      - ./haproxy/certs:/etc/ssl/certs:ro
+      - haproxy_logs:/var/log/haproxy
+    networks:
+      - crowdsec-network
+    depends_on:
+      - crowdsec
+      - crowdsec-haproxy-bouncer
+
+  crowdsec-haproxy-bouncer:
+    image: crowdsecurity/cs-haproxy-bouncer:latest
+    container_name: crowdsec-haproxy-bouncer
+    profiles: ["haproxy"]
+    restart: unless-stopped
+    environment:
+      - CROWDSEC_BOUNCER_API_KEY=${CROWDSEC_BOUNCER_KEY}
+      - CROWDSEC_AGENT_HOST=crowdsec
+      - CROWDSEC_AGENT_PORT=8080
+    volumes:
+      - ./haproxy/crowdsec-haproxy-bouncer.conf:/etc/crowdsec/bouncers/crowdsec-haproxy-bouncer.conf:ro
+    networks:
+      - crowdsec-network
+    depends_on:
+      - crowdsec
+```
+
+### HAProxy Configuration
+
+Create your main `haproxy.cfg`:
+
+```haproxy
+global
+    # Daemon configuration
+    daemon
+    user haproxy
+    group haproxy
+    
+    # Logging
+    log stdout local0 info
+    
+    # SSL configuration
+    ssl-default-bind-ciphers ECDHE+AESGCM:ECDHE+CHACHA20:RSA+AESGCM:RSA+SHA256
+    ssl-default-bind-options ssl-min-ver TLSv1.2 no-tls-tickets
+    ssl-default-server-ciphers ECDHE+AESGCM:ECDHE+CHACHA20:RSA+AESGCM:RSA+SHA256
+    ssl-default-server-options ssl-min-ver TLSv1.2 no-tls-tickets
+    
+    # CrowdSec SPOA configuration
+    stats socket /var/run/haproxy.sock mode 600 level admin
+    
+    # SPOA engine for CrowdSec
+    filter spoe engine crowdsec-engine config /usr/local/etc/haproxy/spoe-crowdsec.conf
+
+defaults
+    # Mode and timeouts
+    mode http
+    timeout connect 5000ms
+    timeout client 50000ms
+    timeout server 50000ms
+    
+    # Logging
+    option httplog
+    option dontlognull
+    log global
+    
+    # Error pages
+    errorfile 400 /usr/local/etc/haproxy/errors/400.http
+    errorfile 403 /usr/local/etc/haproxy/errors/403.http
+    errorfile 408 /usr/local/etc/haproxy/errors/408.http
+    errorfile 500 /usr/local/etc/haproxy/errors/500.http
+    errorfile 502 /usr/local/etc/haproxy/errors/502.http
+    errorfile 503 /usr/local/etc/haproxy/errors/503.http
+    errorfile 504 /usr/local/etc/haproxy/errors/504.http
+
+# Statistics interface
+frontend stats
+    bind *:8404
+    stats enable
+    stats uri /stats
+    stats refresh 30s
+    stats admin if TRUE
+
+# HTTP frontend (redirect to HTTPS)
+frontend http_frontend
+    bind *:80
+    
+    # Redirect HTTP to HTTPS
+    redirect scheme https code 301 if !{ ssl_fc }
+
+# HTTPS frontend
+frontend https_frontend
+    bind *:443 ssl crt /etc/ssl/certs/
+    
+    # Security headers
+    http-response set-header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    http-response set-header X-Content-Type-Options "nosniff"
+    http-response set-header X-Frame-Options "DENY"
+    http-response set-header X-XSS-Protection "1; mode=block"
+    http-response set-header Referrer-Policy "strict-origin-when-cross-origin"
+    
+    # CrowdSec SPOA filter
+    filter spoe engine crowdsec-engine config /usr/local/etc/haproxy/spoe-crowdsec.conf
+    http-request deny if { var(txn.crowdsec.blocked) -m bool }
+    
+    # Route to backends based on Host header
+    use_backend crowdsec_manager if { hdr(host) -i manager.yourdomain.com }
+    use_backend app_backend if { hdr(host) -i app.yourdomain.com }
+    
+    # Default backend
+    default_backend crowdsec_manager
+
+# CrowdSec Manager backend
+backend crowdsec_manager
+    balance roundrobin
+    option httpchk GET /health
+    http-check expect status 200
+    server manager1 crowdsec-manager:8080 check
+
+# Application backend
+backend app_backend
+    balance roundrobin
+    option httpchk GET /health
+    http-check expect status 200
+    server app1 app:3000 check
+    server app2 app:3001 check backup
+```
+
+### SPOE Configuration
+
+Create `/usr/local/etc/haproxy/spoe-crowdsec.conf`:
+
+```spoe
+[crowdsec-engine]
+
+spoe-agent crowdsec-agent
+    messages check-client-ip
+    option var-prefix crowdsec
+    timeout hello      2s
+    timeout idle       2m
+    timeout processing 500ms
+    use-backend spoe-crowdsec
+
+spoe-message check-client-ip
+    args src
+    event on-frontend-http-request
+
+backend spoe-crowdsec
+    mode tcp
+    balance roundrobin
+    timeout connect 5s
+    timeout server 3m
+    server crowdsec1 crowdsec-haproxy-bouncer:9999 check
+```
+
+### CrowdSec SPOA Bouncer Configuration
+
+Create `crowdsec-haproxy-bouncer.conf`:
+
+```ini
+# CrowdSec HAProxy Bouncer Configuration
+
+[crowdsec_config]
+# CrowdSec LAPI configuration
+lapi_url = http://crowdsec:8080
+lapi_key = your-bouncer-key-here
+
+# Update frequency for decisions
+update_frequency = 10s
+
+# Cache configuration
+cache_size = 100
+cache_expiration_time = 60s
+
+[spoa_config]
+# SPOA server configuration
+listen_addr = 0.0.0.0
+listen_port = 9999
+
+# Timeouts
+idle_timeout = 30s
+processing_timeout = 100ms
+
+# Logging
+log_level = info
+log_format = text
+
+[haproxy_config]
+# HAProxy integration settings
+supported_capabilities = fragmentation,pipelining,async
+
+# Custom ban template (optional)
+ban_template_path = /etc/crowdsec/bouncers/ban.html
+
+# Trusted IPs (bypass CrowdSec checks)
+trusted_ips = 127.0.0.1,::1,192.168.0.0/16,10.0.0.0/8
+```
+
+## CrowdSec SPOA Integration
+
+### How SPOA Works
+
+The SPOA (Stream Processing Offload API) integration works as follows:
+
+1. **Request Processing**: HAProxy receives HTTP request
+2. **SPOA Call**: HAProxy calls CrowdSec bouncer via SPOA
+3. **Decision Check**: Bouncer checks client IP against CrowdSec decisions
+4. **Response**: Bouncer returns allow/deny decision
+5. **Action**: HAProxy allows or blocks request based on decision
+
+### SPOA Message Flow
+
+```
+Client Request → HAProxy → SPOA Engine → CrowdSec Bouncer → CrowdSec LAPI
+                    ↓                           ↓
+              Block/Allow ← SPOA Response ← Decision Check
+```
+
+### Bouncer Status Monitoring
+
+Monitor SPOA bouncer status:
+
+```bash
+# Check bouncer container logs
+docker logs crowdsec-haproxy-bouncer
+
+# Check SPOA connection
+docker exec haproxy echo "show servers state" | socat stdio /var/run/haproxy.sock
+
+# Test SPOA connectivity
+docker exec haproxy nc -zv crowdsec-haproxy-bouncer 9999
+```
+
+## Feature Configuration
+
+### Health Monitoring
+
+HAProxy health monitoring includes:
+
+#### Container Health Checks
+- HAProxy container status and resource usage
+- Configuration file validation
+- Port accessibility (80, 443, 8404)
+- SSL certificate status
+
+#### SPOA Bouncer Health Checks
+- SPOA bouncer container status
+- Socket connectivity to HAProxy
+- LAPI connection verification
+- Decision processing performance
+
+#### Backend Health Checks
+```haproxy
+# Health check configuration
+backend app_backend
+    option httpchk GET /health HTTP/1.1\r\nHost:\ app.yourdomain.com
+    http-check expect status 200
+    http-check expect string "healthy"
+    
+    server app1 app:3000 check inter 30s rise 2 fall 3
+    server app2 app:3001 check inter 30s rise 2 fall 3 backup
+```
+
+### SSL/TLS Configuration
+
+Configure SSL certificates and security:
+
+#### Certificate Management
+```bash
+# Create certificate directory
+mkdir -p ./haproxy/certs
+
+# Combine certificate and key for HAProxy
+cat yourdomain.com.crt yourdomain.com.key > ./haproxy/certs/yourdomain.com.pem
+
+# Set proper permissions
+chmod 600 ./haproxy/certs/*.pem
+```
+
+#### Advanced SSL Configuration
+```haproxy
+# Advanced SSL configuration
+frontend https_frontend
+    bind *:443 ssl crt /etc/ssl/certs/ alpn h2,http/1.1
+    
+    # HSTS
+    http-response set-header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    
+    # OCSP stapling
+    ssl-default-bind-options ssl-min-ver TLSv1.2 no-tls-tickets
+    
+    # Perfect Forward Secrecy
+    ssl-default-bind-ciphers ECDHE+AESGCM:ECDHE+CHACHA20:RSA+AESGCM:RSA+SHA256
+```
+
+### Load Balancing and High Availability
+
+Configure advanced load balancing:
+
+```haproxy
+# Advanced backend configuration
+backend app_backend
+    balance roundrobin
+    
+    # Health checks
+    option httpchk GET /health
+    http-check expect status 200
+    
+    # Sticky sessions (if needed)
+    cookie SERVERID insert indirect nocache
+    
+    # Servers with different weights
+    server app1 app1:3000 check weight 100 cookie app1
+    server app2 app2:3000 check weight 100 cookie app2
+    server app3 app3:3000 check weight 50 cookie app3 backup
+    
+    # Connection limits
+    server app1 app1:3000 check maxconn 100
+```
+
+### Rate Limiting
+
+Implement rate limiting with HAProxy:
+
+```haproxy
+# Rate limiting configuration
+frontend https_frontend
+    # Stick table for rate limiting
+    stick-table type ip size 100k expire 30s store http_req_rate(10s)
+    
+    # Rate limiting rules
+    http-request track-sc0 src
+    http-request deny if { sc_http_req_rate(0) gt 20 }
+    
+    # Different limits for different paths
+    acl is_api path_beg /api/
+    http-request deny if is_api { sc_http_req_rate(0) gt 10 }
+```
+
+## Advanced Configuration
+
+### Multi-Site Configuration
+
+Configure multiple sites with different policies:
+
+```haproxy
+# Multiple frontends for different sites
+frontend public_site
+    bind *:443 ssl crt /etc/ssl/certs/public.pem
+    
+    # Basic CrowdSec protection
+    filter spoe engine crowdsec-engine config /usr/local/etc/haproxy/spoe-crowdsec.conf
+    http-request deny if { var(txn.crowdsec.blocked) -m bool }
+    
+    default_backend public_backend
+
+frontend admin_site
+    bind *:8443 ssl crt /etc/ssl/certs/admin.pem
+    
+    # Enhanced protection for admin
+    filter spoe engine crowdsec-engine config /usr/local/etc/haproxy/spoe-crowdsec.conf
+    http-request deny if { var(txn.crowdsec.blocked) -m bool }
+    
+    # IP whitelist for admin
+    acl allowed_ips src 192.168.1.0/24 10.0.0.0/8
+    http-request deny unless allowed_ips
+    
+    default_backend admin_backend
+```
+
+### Custom Error Pages
+
+Create custom error pages for blocked requests:
+
+```html
+<!-- /usr/local/etc/haproxy/errors/403.http -->
+HTTP/1.0 403 Forbidden
+Cache-Control: no-cache
+Connection: close
+Content-Type: text/html
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Access Denied</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
+        .container { max-width: 600px; margin: 0 auto; }
+        .error-code { font-size: 72px; color: #e74c3c; }
+        .error-message { font-size: 24px; margin: 20px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="error-code">403</div>
+        <div class="error-message">Access Denied</div>
+        <p>Your IP address has been blocked by our security system.</p>
+        <p>If you believe this is an error, please contact support.</p>
+    </div>
+</body>
+</html>
+```
+
+### Logging Configuration
+
+Configure comprehensive logging:
+
+```haproxy
+global
+    # Syslog configuration
+    log 127.0.0.1:514 local0 info
+    
+    # Log format
+    log-tag haproxy
+
+defaults
+    # HTTP log format
+    option httplog
+    option log-health-checks
+    
+    # Custom log format
+    capture request header Host len 32
+    capture request header User-Agent len 64
+    capture response header Content-Type len 32
+
+# Log to file
+frontend https_frontend
+    # Access logs
+    log global
+    option httplog clf
+    
+    # Separate log for blocked requests
+    log-format "%ci:%cp [%t] %ft %b/%s %Tq/%Tw/%Tc/%Tr/%Ta %ST %B %CC %CS %tsc %ac/%fc/%bc/%sc/%rc %sq/%bq %hr %hs %{+Q}r"
+```
+
+## Troubleshooting
+
+### Common Issues
+
+#### HAProxy Container Won't Start
+```bash
+# Check container logs
+docker logs haproxy
+
+# Common issues:
+# - Invalid configuration syntax
+# - Port conflicts (80, 443, 8404)
+# - Missing SSL certificates
+# - SPOE configuration errors
+```
+
+#### SPOA Bouncer Connection Issues
+```bash
+# Check bouncer container
+docker logs crowdsec-haproxy-bouncer
+
+# Test SPOA connectivity
+docker exec haproxy nc -zv crowdsec-haproxy-bouncer 9999
+
+# Check HAProxy SPOA status
+docker exec haproxy echo "show servers state" | socat stdio /var/run/haproxy.sock
+```
+
+#### SSL Certificate Problems
+```bash
+# Check certificate format
+openssl x509 -in /path/to/cert.pem -text -noout
+
+# Verify certificate chain
+openssl verify -CAfile ca-bundle.crt certificate.pem
+
+# Test SSL configuration
+openssl s_client -connect yourdomain.com:443 -servername yourdomain.com
+```
+
+#### Configuration Validation
+```bash
+# Validate HAProxy configuration
+docker exec haproxy haproxy -c -f /usr/local/etc/haproxy/haproxy.cfg
+
+# Check SPOE configuration
+docker exec haproxy haproxy -c -f /usr/local/etc/haproxy/haproxy.cfg -f /usr/local/etc/haproxy/spoe-crowdsec.conf
+```
+
+### Performance Optimization
+
+#### HAProxy Performance Tuning
+```haproxy
+global
+    # Performance tuning
+    nbproc 1
+    nbthread 4
+    cpu-map auto:1/1-4 0-3
+    
+    # Buffer sizes
+    tune.bufsize 32768
+    tune.maxrewrite 8192
+    
+    # Connection limits
+    maxconn 4096
+    
+defaults
+    # Timeouts optimization
+    timeout connect 3s
+    timeout client 30s
+    timeout server 30s
+    timeout http-keep-alive 3s
+    timeout http-request 5s
+```
+
+#### SPOA Performance Tuning
+```ini
+# SPOA bouncer performance tuning
+[spoa_config]
+# Increase worker processes
+workers = 4
+
+# Optimize timeouts
+idle_timeout = 10s
+processing_timeout = 50ms
+
+# Cache optimization
+[crowdsec_config]
+cache_size = 1000
+cache_expiration_time = 300s
+```
+
+### Log Analysis and Debugging
+
+#### HAProxy Logs
+```bash
+# Access logs
+docker logs haproxy | grep -E "(GET|POST|PUT|DELETE)"
+
+# Error logs
+docker logs haproxy | grep -E "(error|warn|crit)"
+
+# SPOA-specific logs
+docker logs haproxy | grep spoe
+```
+
+#### SPOA Bouncer Logs
+```bash
+# Bouncer application logs
+docker logs crowdsec-haproxy-bouncer
+
+# Check decision processing
+docker logs crowdsec-haproxy-bouncer | grep "decision"
+
+# Monitor performance
+docker logs crowdsec-haproxy-bouncer | grep "processing_time"
+```
+
+## Limitations and Workarounds
+
+### Whitelist Management
+**Limitation**: No direct proxy-level whitelist management
+**Workaround**: Use HAProxy ACLs and trusted IPs in bouncer config:
+
+```haproxy
+# HAProxy ACL whitelist
+acl whitelist_ips src 192.168.1.0/24 10.0.0.0/8
+http-request allow if whitelist_ips
+```
+
+### Captcha Protection
+**Limitation**: No built-in captcha middleware
+**Workaround**: Use custom backend services for captcha:
+
+```haproxy
+# Captcha backend
+backend captcha_backend
+    server captcha1 captcha-service:3000 check
+
+# Route suspicious traffic to captcha
+http-request redirect location /captcha-challenge if { var(txn.crowdsec.captcha) -m bool }
+```
+
+### Advanced Security Features
+**Limitation**: Limited compared to Traefik mode
+**Workaround**: Combine HAProxy features with external services:
+
+- Use HAProxy rate limiting + CrowdSec decisions
+- Implement custom security backends
+- Use external WAF services if needed
+
+## Migration from Other Proxies
+
+### From Nginx to HAProxy
+
+1. **Convert Configuration**
+   ```bash
+   # Convert nginx upstream to HAProxy backend
+   # nginx: upstream app { server app1:3000; }
+   # haproxy: backend app_backend { server app1 app1:3000 check; }
+   ```
+
+2. **Update SSL Configuration**
+   ```haproxy
+   # Convert nginx SSL to HAProxy format
+   bind *:443 ssl crt /etc/ssl/certs/yourdomain.com.pem
+   ```
+
+3. **Migrate Security Rules**
+   ```haproxy
+   # Convert nginx security rules
+   # Rate limiting, IP filtering, etc.
+   ```
+
+### From Apache to HAProxy
+
+1. **Convert Virtual Hosts**
+   - Convert each Apache virtual host to HAProxy frontend/backend pair
+   - Update proxy configurations
+   - Migrate SSL settings
+
+2. **Update Load Balancing**
+   ```haproxy
+   # Convert Apache mod_proxy_balancer to HAProxy
+   backend app_backend
+       balance roundrobin
+       server app1 app1:3000 check
+       server app2 app2:3000 check
+   ```
+
+## Best Practices
+
+### Security
+- Use strong API keys for CrowdSec bouncer
+- Regularly update HAProxy and bouncer containers
+- Monitor SPOA connectivity and performance
+- Implement proper SSL/TLS configuration
+- Use security headers for all sites
+
+### Performance
+- Optimize SPOA timeouts for your traffic patterns
+- Use appropriate load balancing algorithms
+- Monitor backend health and performance
+- Configure proper connection limits
+- Use efficient logging levels
+
+### Maintenance
+- Regular configuration backups
+- Monitor SSL certificate expiration
+- Keep CrowdSec scenarios updated
+- Review and update security policies
+- Monitor SPOA bouncer performance
+
+## Next Steps
+
+After completing HAProxy setup:
+
+1. **Configure Backends**: Set up all your backend services
+2. **Security Hardening**: Implement additional security measures
+3. **Monitoring Setup**: Configure comprehensive monitoring
+4. **Backup Strategy**: Set up automated configuration backups
+5. **Performance Optimization**: Tune for your specific workload
+
+For more advanced HAProxy configurations and SPOA integration patterns, see the [Advanced HAProxy Configuration](./advanced-haproxy.mdx) guide.

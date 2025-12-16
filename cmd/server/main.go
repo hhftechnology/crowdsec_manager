@@ -21,6 +21,8 @@ import (
 	"crowdsec-manager/internal/database"
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
+	"crowdsec-manager/internal/proxy"
+	"crowdsec-manager/internal/proxy/adapters/standalone"
 )
 
 // Main entry point for the CrowdSec Manager server
@@ -50,6 +52,74 @@ func main() {
 		logger.Fatal("Failed to initialize Docker client", "error", err)
 	}
 	defer dockerClient.Close()
+
+	// Register proxy adapters to avoid import cycles
+	if err := proxy.RegisterAdapter(proxy.ProxyTypeStandalone, standalone.NewStandaloneAdapter); err != nil {
+		logger.Fatal("Failed to register standalone adapter", "error", err)
+	}
+	
+	// Initialize proxy manager with adapter registry
+	proxy.MustInitializeAdapters()
+	proxyManager := proxy.NewProxyManager(nil) // Use global registry
+	
+	// Determine proxy type from configuration (default to traefik for backward compatibility)
+	proxyType := proxy.ProxyTypeTraefik
+	if cfg.ProxyType != "" {
+		if err := proxy.ValidateProxyType(cfg.ProxyType); err != nil {
+			logger.Warn("Invalid proxy type in config, defaulting to traefik", "proxy_type", cfg.ProxyType, "error", err)
+		} else {
+			proxyType = proxy.ProxyType(cfg.ProxyType)
+		}
+	}
+	
+	// Create proxy configuration
+	proxyConfig := &proxy.ProxyConfig{
+		Type:          proxyType,
+		Enabled:       true,
+		ContainerName: cfg.TraefikContainerName, // Will be updated based on proxy type
+		ConfigPaths: map[string]string{
+			"dynamic":    cfg.TraefikDynamicConfig,
+			"static":     cfg.TraefikStaticConfig,
+			"access_log": cfg.TraefikAccessLog,
+			"error_log":  cfg.TraefikErrorLog,
+		},
+		CustomSettings: make(map[string]string),
+		DockerClient:   dockerClient,
+	}
+	
+	// Update container name based on proxy type
+	switch proxyType {
+	case proxy.ProxyTypeTraefik:
+		proxyConfig.ContainerName = cfg.TraefikContainerName
+	case proxy.ProxyTypeNginx:
+		proxyConfig.ContainerName = "nginx-proxy-manager"
+	case proxy.ProxyTypeCaddy:
+		proxyConfig.ContainerName = "caddy"
+	case proxy.ProxyTypeHAProxy:
+		proxyConfig.ContainerName = "haproxy"
+	case proxy.ProxyTypeZoraxy:
+		proxyConfig.ContainerName = "zoraxy"
+	case proxy.ProxyTypeStandalone:
+		proxyConfig.ContainerName = ""
+	}
+	
+	// Get or create proxy adapter
+	ctx := context.Background()
+	proxyAdapter, err := proxyManager.GetAdapter(ctx, proxyType, proxyConfig)
+	if err != nil {
+		logger.Warn("Failed to initialize proxy adapter, falling back to standalone mode", "proxy_type", proxyType, "error", err)
+		// Fallback to standalone mode
+		proxyAdapter, err = proxyManager.GetAdapter(ctx, proxy.ProxyTypeStandalone, &proxy.ProxyConfig{
+			Type:         proxy.ProxyTypeStandalone,
+			Enabled:      true,
+			DockerClient: dockerClient,
+		})
+		if err != nil {
+			logger.Fatal("Failed to initialize standalone proxy adapter", "error", err)
+		}
+	}
+	
+	logger.Info("Proxy adapter initialized", "type", proxyAdapter.Type(), "features", proxyAdapter.SupportedFeatures())
 
 	dataDir := cfg.ConfigDir
 
@@ -84,19 +154,20 @@ func main() {
 	// Register all API route groups under /api prefix
 	apiGroup := router.Group("/api")
 	{
-		api.RegisterHealthRoutes(apiGroup, dockerClient, db, cfg)
+		api.RegisterHealthRoutes(apiGroup, dockerClient, db, cfg, proxyAdapter)
 		api.RegisterIPRoutes(apiGroup, dockerClient, cfg)
-		api.RegisterWhitelistRoutes(apiGroup, dockerClient, cfg)
+		api.RegisterWhitelistRoutes(apiGroup, dockerClient, cfg, proxyAdapter)
 		api.RegisterAllowlistRoutes(apiGroup, dockerClient, cfg)
 		api.RegisterScenarioRoutes(apiGroup, dockerClient, cfg.ConfigDir, cfg)
-		api.RegisterCaptchaRoutes(apiGroup, dockerClient, db, cfg)
-		api.RegisterLogRoutes(apiGroup, dockerClient, db, cfg)
+		api.RegisterCaptchaRoutes(apiGroup, dockerClient, db, cfg, proxyAdapter)
+		api.RegisterLogRoutes(apiGroup, dockerClient, db, cfg, proxyAdapter)
 		api.RegisterBackupRoutes(apiGroup, backupManager, dockerClient)
 		api.RegisterUpdateRoutes(apiGroup, dockerClient, cfg)
 		api.RegisterCronRoutes(apiGroup, cronScheduler)
-		api.RegisterServicesRoutes(apiGroup, dockerClient, db, cfg)
+		api.RegisterServicesRoutes(apiGroup, dockerClient, db, cfg, proxyAdapter)
 		api.RegisterNotificationRoutes(apiGroup, dockerClient, db, cfg)
 		api.RegisterProfileRoutes(apiGroup, db, cfg, dockerClient)
+		api.RegisterProxyRoutes(apiGroup, proxyManager, proxyAdapter) // New proxy management routes
 	}
 
 	// Serve React frontend static assets and handle client-side routing

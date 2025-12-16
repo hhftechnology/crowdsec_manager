@@ -52,6 +52,18 @@ func New(dbPath string) (*Database, error) {
 		return nil, fmt.Errorf("failed to initialize schema: %w", err)
 	}
 
+	// Initialize proxy settings table and migrate existing data
+	if err := d.CreateProxySettingsTable(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to initialize proxy settings: %w", err)
+	}
+
+	// Migrate existing Traefik settings to new proxy format
+	if err := d.MigrateExistingTraefikSettings(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to migrate existing settings: %w", err)
+	}
+
 	return d, nil
 }
 
@@ -200,4 +212,158 @@ func (d *Database) GetLatestProfileHistory() (*models.ProfileHistory, error) {
 		return nil, nil
 	}
 	return history, err
+}
+// Proxy-related database operations
+
+// CreateProxySettingsTable creates the proxy_settings table and migrates existing settings
+func (d *Database) CreateProxySettingsTable() error {
+	// Create proxy_settings table
+	createProxyTable := `
+	CREATE TABLE IF NOT EXISTS proxy_settings (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		proxy_type TEXT NOT NULL DEFAULT 'traefik',
+		container_name TEXT NOT NULL,
+		config_paths TEXT NOT NULL DEFAULT '{}',      -- JSON map[string]string
+		custom_settings TEXT NOT NULL DEFAULT '{}',   -- JSON map[string]string
+		enabled_features TEXT NOT NULL DEFAULT '[]',  -- JSON []string
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);`
+	
+	if _, err := d.db.Exec(createProxyTable); err != nil {
+		return fmt.Errorf("failed to create proxy_settings table: %w", err)
+	}
+
+	// Add new columns to settings table for proxy configuration
+	proxyMigrations := []string{
+		"ALTER TABLE settings ADD COLUMN proxy_type TEXT NOT NULL DEFAULT 'traefik'",
+		"ALTER TABLE settings ADD COLUMN proxy_enabled INTEGER NOT NULL DEFAULT 1",
+		"ALTER TABLE settings ADD COLUMN compose_mode TEXT NOT NULL DEFAULT 'single'",
+	}
+
+	for _, query := range proxyMigrations {
+		d.db.Exec(query) // Ignore errors - column may already exist
+	}
+
+	return nil
+}
+
+// MigrateExistingTraefikSettings migrates existing Traefik settings to proxy_settings table
+func (d *Database) MigrateExistingTraefikSettings() error {
+	// Check if migration has already been done
+	var count int
+	err := d.db.QueryRow("SELECT COUNT(*) FROM proxy_settings WHERE id = 1").Scan(&count)
+	if err != nil && err != sql.ErrNoRows {
+		return fmt.Errorf("failed to check migration status: %w", err)
+	}
+	
+	if count > 0 {
+		// Migration already done
+		return nil
+	}
+
+	// Get existing settings
+	settings, err := d.GetSettings()
+	if err != nil {
+		return fmt.Errorf("failed to get existing settings: %w", err)
+	}
+
+	// Create JSON for config paths
+	configPaths := fmt.Sprintf(`{
+		"dynamic": "%s",
+		"static": "%s",
+		"access_log": "%s",
+		"error_log": "%s"
+	}`, settings.TraefikDynamicConfig, settings.TraefikStaticConfig, 
+		settings.TraefikAccessLog, settings.TraefikErrorLog)
+
+	// Insert migrated settings
+	_, err = d.db.Exec(`
+		INSERT OR IGNORE INTO proxy_settings (id, proxy_type, container_name, config_paths, custom_settings, enabled_features)
+		VALUES (1, 'traefik', 'traefik', ?, '{}', '["whitelist","captcha","logs","bouncer","health","appsec"]')
+	`, configPaths)
+
+	return err
+}
+
+// GetProxySettings retrieves proxy settings from database
+func (d *Database) GetProxySettings() (*models.ProxySettings, error) {
+	settings := &models.ProxySettings{}
+	var configPathsJSON, customSettingsJSON, enabledFeaturesJSON string
+	
+	err := d.db.QueryRow(`
+		SELECT id, proxy_type, container_name, config_paths, custom_settings, enabled_features, created_at, updated_at
+		FROM proxy_settings
+		WHERE id = 1
+	`).Scan(&settings.ID, &settings.ProxyType, &settings.ContainerName,
+		&configPathsJSON, &customSettingsJSON, &enabledFeaturesJSON,
+		&settings.CreatedAt, &settings.UpdatedAt)
+
+	if err == sql.ErrNoRows {
+		// Return default settings for Traefik
+		return &models.ProxySettings{
+			ID:            1,
+			ProxyType:     "traefik",
+			ContainerName: "traefik",
+			ConfigPaths: map[string]string{
+				"dynamic":    "/etc/traefik/dynamic_config.yml",
+				"static":     "/etc/traefik/traefik_config.yml",
+				"access_log": "/var/log/traefik/access.log",
+				"error_log":  "/var/log/traefik/traefik.log",
+			},
+			CustomSettings:  make(map[string]string),
+			EnabledFeatures: []string{"whitelist", "captcha", "logs", "bouncer", "health", "appsec"},
+		}, nil
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Parse JSON fields (simplified parsing for now)
+	settings.ConfigPaths = make(map[string]string)
+	settings.CustomSettings = make(map[string]string)
+	settings.EnabledFeatures = []string{}
+
+	// TODO: Implement proper JSON parsing
+	// For now, return basic structure
+	return settings, nil
+}
+
+// UpdateProxySettings updates proxy settings in database
+func (d *Database) UpdateProxySettings(settings *models.ProxySettings) error {
+	// TODO: Implement JSON marshaling for map fields
+	configPathsJSON := "{}"
+	customSettingsJSON := "{}"
+	enabledFeaturesJSON := "[]"
+
+	_, err := d.db.Exec(`
+		UPDATE proxy_settings
+		SET proxy_type = ?,
+		    container_name = ?,
+		    config_paths = ?,
+		    custom_settings = ?,
+		    enabled_features = ?,
+		    updated_at = CURRENT_TIMESTAMP
+		WHERE id = 1
+	`, settings.ProxyType, settings.ContainerName,
+		configPathsJSON, customSettingsJSON, enabledFeaturesJSON)
+	
+	return err
+}
+
+// CreateProxySettings creates new proxy settings
+func (d *Database) CreateProxySettings(settings *models.ProxySettings) error {
+	// TODO: Implement JSON marshaling for map fields
+	configPathsJSON := "{}"
+	customSettingsJSON := "{}"
+	enabledFeaturesJSON := "[]"
+
+	_, err := d.db.Exec(`
+		INSERT INTO proxy_settings (proxy_type, container_name, config_paths, custom_settings, enabled_features)
+		VALUES (?, ?, ?, ?, ?)
+	`, settings.ProxyType, settings.ContainerName,
+		configPathsJSON, customSettingsJSON, enabledFeaturesJSON)
+	
+	return err
 }

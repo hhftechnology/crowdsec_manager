@@ -1,6 +1,43 @@
-version: '3.8'
+version: "3.8"
+
+# CrowdSec Manager - Multi-Proxy Docker Compose Configuration
+# Supports: Traefik, Nginx Proxy Manager, Caddy, HAProxy, Zoraxy, Standalone
+# Usage: docker-compose --profile <proxy-type> up
+# Example: docker-compose --profile traefik up
+# Example: docker-compose --profile nginx up
+# Example: docker-compose --profile traefik --profile pangolin up
 
 services:
+  # ============================================================================
+  # CORE SERVICES (Always deployed)
+  # ============================================================================
+
+  # CrowdSec Security Engine
+  crowdsec:
+    image: crowdsecurity/crowdsec:latest
+    container_name: crowdsec
+    restart: unless-stopped
+    environment:
+      - GID=${GID:-1000}
+      - COLLECTIONS=${CROWDSEC_COLLECTIONS:-crowdsecurity/linux}
+      - ENROLL_INSTANCE_NAME=${ENROLL_INSTANCE_NAME:-crowdsec-manager}
+      - ENROLL_TAGS=${ENROLL_TAGS:-docker}
+    volumes:
+      - ./config/crowdsec/acquis.yaml:/etc/crowdsec/acquis.yaml:ro
+      - crowdsec-db:/var/lib/crowdsec/data/
+      - crowdsec-config:/etc/crowdsec/
+      # Proxy logs (mounted based on proxy type)
+      - ./logs:/var/log:ro
+    networks:
+      - crowdsec-network
+    labels:
+      - "traefik.enable=false"
+    healthcheck:
+      test: ["CMD", "cscli", "capi", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
   # CrowdSec Manager - Web UI and API
   crowdsec-manager:
     build:
@@ -9,28 +46,38 @@ services:
     container_name: crowdsec-manager
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "${MANAGER_PORT:-8080}:8080"
     environment:
+      # Core Configuration
       - PORT=8080
-      - ENVIRONMENT=production
-      - LOG_LEVEL=info
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
       - LOG_FILE=/app/logs/crowdsec-manager.log
       - DOCKER_HOST=unix:///var/run/docker.sock
       - COMPOSE_FILE=/app/docker-compose.yml
-      - PANGOLIN_DIR=/app
       - CONFIG_DIR=/app/config
       - DATABASE_PATH=/app/data/settings.db
-      # Traefik Configuration Paths
-      - TRAEFIK_DYNAMIC_CONFIG=/etc/traefik/dynamic_config.yml
-      - TRAEFIK_STATIC_CONFIG=/etc/traefik/traefik_config.yml
-      - TRAEFIK_ACCESS_LOG=/var/log/traefik/access.log
-      - TRAEFIK_ERROR_LOG=/var/log/traefik/traefik.log
-      # CrowdSec Configuration Paths
+
+      # Multi-Proxy Configuration
+      - PROXY_TYPE=${PROXY_TYPE:-traefik}
+      - PROXY_ENABLED=${PROXY_ENABLED:-true}
+      - PROXY_CONTAINER_NAME=${PROXY_CONTAINER_NAME:-}
+      - COMPOSE_MODE=${COMPOSE_MODE:-single}
+
+      # Legacy Traefik Configuration (Backward Compatibility)
+      - TRAEFIK_CONTAINER_NAME=${TRAEFIK_CONTAINER_NAME:-traefik}
+      - TRAEFIK_DYNAMIC_CONFIG=${TRAEFIK_DYNAMIC_CONFIG:-/etc/traefik/dynamic_config.yml}
+      - TRAEFIK_STATIC_CONFIG=${TRAEFIK_STATIC_CONFIG:-/etc/traefik/traefik_config.yml}
+      - TRAEFIK_ACCESS_LOG=${TRAEFIK_ACCESS_LOG:-/var/log/traefik/access.log}
+      - TRAEFIK_ERROR_LOG=${TRAEFIK_ERROR_LOG:-/var/log/traefik/traefik.log}
+
+      # CrowdSec Configuration
       - CROWDSEC_ACQUIS_FILE=/etc/crowdsec/acquis.yaml
+
       # Backup Configuration
       - BACKUP_DIR=/app/backups
-      - RETENTION_DAYS=60
-      - INCLUDE_CROWDSEC=true
+      - RETENTION_DAYS=${RETENTION_DAYS:-60}
+      - INCLUDE_CROWDSEC=${INCLUDE_CROWDSEC:-true}
     volumes:
       # Docker socket for container management
       - /var/run/docker.sock:/var/run/docker.sock
@@ -41,76 +88,39 @@ services:
       # Backups
       - ./backups:/app/backups
       # Logs
-      - ./logs/app:/app/logs
+      - ./logs:/app/logs
       # Database for settings
       - ./data:/app/data
-      # Traefik logs (read-only access)
-      - ./logs/traefik:/var/log/traefik:ro
+      # Proxy logs (read-only access)
+      - ./logs:/var/log:ro
     networks:
       - crowdsec-network
     depends_on:
-      - crowdsec
-      - traefik
+      crowdsec:
+        condition: service_healthy
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.crowdsec-manager.rule=Host(`manager.localhost`)"
+      - "traefik.http.routers.crowdsec-manager.rule=Host(`${MANAGER_HOST:-manager.localhost}`)"
       - "traefik.http.routers.crowdsec-manager.entrypoints=web"
       - "traefik.http.services.crowdsec-manager.loadbalancer.server.port=8080"
 
-  # Pangolin service
-  pangolin:
-    image: fosrl/pangolin:latest
-    container_name: pangolin
-    restart: unless-stopped
-    networks:
-      - crowdsec-network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.pangolin.rule=Host(`pangolin.localhost`)"
-      - "traefik.http.routers.pangolin.entrypoints=web"
-
-  # Gerbil service
-  gerbil:
-    image: fosrl/gerbil:latest
-    container_name: gerbil
-    restart: unless-stopped
-    networks:
-      - crowdsec-network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.gerbil.rule=Host(`gerbil.localhost`)"
-      - "traefik.http.routers.gerbil.entrypoints=web"
-
-  # CrowdSec Security Engine
-  crowdsec:
-    image: crowdsecurity/crowdsec:latest
-    container_name: crowdsec
-    restart: unless-stopped
-    environment:
-      - GID=${GID-1000}
-      - COLLECTIONS=crowdsecurity/linux crowdsecurity/traefik
-    volumes:
-      - ./config/crowdsec/acquis.yaml:/etc/crowdsec/acquis.yaml:ro
-      - crowdsec-db:/var/lib/crowdsec/data/
-      - crowdsec-config:/etc/crowdsec/
-      - ./logs/traefik:/var/log/traefik:ro
-    networks:
-      - crowdsec-network
-    labels:
-      - "traefik.enable=false"
+  # ============================================================================
+  # TRAEFIK PROXY SERVICES (Profile: traefik)
+  # ============================================================================
 
   # Traefik Reverse Proxy
   traefik:
-    image: traefik:latest
-    container_name: traefik
+    profiles: ["traefik"]
+    image: traefik:${TRAEFIK_VERSION:-latest}
+    container_name: ${TRAEFIK_CONTAINER_NAME:-traefik}
     restart: unless-stopped
     stop_grace_period: 60s
     ports:
-      - "80:80"
-      - "443:443"
-      - "8081:8080"  # Traefik dashboard
+      - "${TRAEFIK_HTTP_PORT:-80}:80"
+      - "${TRAEFIK_HTTPS_PORT:-443}:443"
+      - "${TRAEFIK_DASHBOARD_PORT:-8081}:8080" # Traefik dashboard
     command:
-      - "--api.insecure=true"
+      - "--api.insecure=${TRAEFIK_API_INSECURE:-true}"
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
       - "--providers.file.directory=/etc/traefik"
@@ -121,23 +131,207 @@ services:
       - "--entrypoints.websecure.transport.lifecycle.gracetimeout=60s"
       - "--accesslog=true"
       - "--accesslog.filepath=/var/log/traefik/access.log"
-      - "--log.level=INFO"
+      - "--log.level=${TRAEFIK_LOG_LEVEL:-INFO}"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./config/traefik:/etc/traefik:ro
       - ./logs/traefik:/var/log/traefik
     networks:
       - crowdsec-network
+    environment:
+      - CROWDSEC_COLLECTIONS=crowdsecurity/traefik
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.traefik.rule=Host(`traefik.localhost`)"
+      - "traefik.http.routers.traefik.rule=Host(`${TRAEFIK_HOST:-traefik.localhost}`)"
       - "traefik.http.routers.traefik.entrypoints=web"
       - "traefik.http.routers.traefik.service=api@internal"
+
+  # ============================================================================
+  # NGINX PROXY MANAGER SERVICES (Profile: nginx)
+  # ============================================================================
+
+  # Nginx Proxy Manager
+  nginx-proxy-manager:
+    profiles: ["nginx"]
+    image: jc21/nginx-proxy-manager:${NPM_VERSION:-latest}
+    container_name: ${NPM_CONTAINER_NAME:-nginx-proxy-manager}
+    restart: unless-stopped
+    ports:
+      - "${NPM_HTTP_PORT:-80}:80"
+      - "${NPM_HTTPS_PORT:-443}:443"
+      - "${NPM_ADMIN_PORT:-81}:81"
+    environment:
+      - DB_SQLITE_FILE=/data/database.sqlite
+      - DISABLE_IPV6=${NPM_DISABLE_IPV6:-true}
+    volumes:
+      - ./data/npm:/data
+      - ./config/letsencrypt:/etc/letsencrypt
+      - ./logs/nginx:/data/logs
+    networks:
+      - crowdsec-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:81/api"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ============================================================================
+  # CADDY PROXY SERVICES (Profile: caddy)
+  # ============================================================================
+
+  # Caddy Reverse Proxy
+  caddy:
+    profiles: ["caddy"]
+    image: caddy:${CADDY_VERSION:-latest}
+    container_name: ${CADDY_CONTAINER_NAME:-caddy}
+    restart: unless-stopped
+    ports:
+      - "${CADDY_HTTP_PORT:-80}:80"
+      - "${CADDY_HTTPS_PORT:-443}:443"
+      - "${CADDY_ADMIN_PORT:-2019}:2019"
+    volumes:
+      - ./config/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./data/caddy:/data
+      - ./config/caddy:/config
+      - ./logs/caddy:/var/log/caddy
+    networks:
+      - crowdsec-network
+    environment:
+      - CADDY_ADMIN=${CADDY_ADMIN:-0.0.0.0:2019}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:2019/config/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ============================================================================
+  # HAPROXY SERVICES (Profile: haproxy)
+  # ============================================================================
+
+  # HAProxy Load Balancer
+  haproxy:
+    profiles: ["haproxy"]
+    image: haproxy:${HAPROXY_VERSION:-latest}
+    container_name: ${HAPROXY_CONTAINER_NAME:-haproxy}
+    restart: unless-stopped
+    ports:
+      - "${HAPROXY_HTTP_PORT:-80}:80"
+      - "${HAPROXY_HTTPS_PORT:-443}:443"
+      - "${HAPROXY_STATS_PORT:-8404}:8404"
+    volumes:
+      - ./config/haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      - ./config/haproxy/certs:/etc/ssl/certs:ro
+      - ./logs/haproxy:/var/log/haproxy
+    networks:
+      - crowdsec-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8404/stats"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ============================================================================
+  # ZORAXY PROXY SERVICES (Profile: zoraxy) - EXPERIMENTAL
+  # ============================================================================
+
+  # Zoraxy Reverse Proxy (Experimental)
+  zoraxy:
+    profiles: ["zoraxy"]
+    image: zoraxydocker/zoraxy:${ZORAXY_VERSION:-latest}
+    container_name: ${ZORAXY_CONTAINER_NAME:-zoraxy}
+    restart: unless-stopped
+    ports:
+      - "${ZORAXY_HTTP_PORT:-80}:80"
+      - "${ZORAXY_HTTPS_PORT:-443}:443"
+      - "${ZORAXY_ADMIN_PORT:-8000}:8000"
+    volumes:
+      - ./config/zoraxy:/opt/zoraxy/config
+      - ./data/zoraxy:/opt/zoraxy/data
+      - ./logs/zoraxy:/opt/zoraxy/logs
+    networks:
+      - crowdsec-network
+    environment:
+      - ZORAXY_PORT=8000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/info"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ============================================================================
+  # TRAEFIK ADD-ON SERVICES (Profiles: traefik + pangolin/gerbil)
+  # ============================================================================
+
+  # Pangolin - Traefik Add-on Service
+  pangolin:
+    profiles: ["traefik", "pangolin"]
+    image: fosrl/pangolin:${PANGOLIN_VERSION:-latest}
+    container_name: ${PANGOLIN_CONTAINER_NAME:-pangolin}
+    restart: unless-stopped
+    volumes:
+      - ./config/pangolin:/app/config
+      - pangolin-data:/var/certificates
+      - pangolin-data:/var/dynamic
+    networks:
+      - crowdsec-network
+    environment:
+      - PANGOLIN_CONFIG_DIR=/app/config
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.pangolin.rule=Host(`${PANGOLIN_HOST:-pangolin.localhost}`)"
+      - "traefik.http.routers.pangolin.entrypoints=web"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/api/v1/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Gerbil - Traefik Add-on Service
+  gerbil:
+    profiles: ["traefik", "gerbil"]
+    image: fosrl/gerbil:${GERBIL_VERSION:-latest}
+    container_name: ${GERBIL_CONTAINER_NAME:-gerbil}
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    ports:
+      - "${GERBIL_WIREGUARD_PORT:-51820}:51820/udp"
+      - "${GERBIL_WIREGUARD_PORT2:-51830}:51830/udp"
+      - "${GERBIL_WIREGUARD_PORT3:-21820}:21820/udp"
+      - "${GERBIL_API_PORT:-51821}:51821"
+    volumes:
+      - ./config/gerbil:/var/config
+    networks:
+      - crowdsec-network
+    environment:
+      - GERBIL_CONFIG_DIR=/var/config
+    depends_on:
+      pangolin:
+        condition: service_healthy
+        required: false
+    command:
+      - --reachableAt=http://gerbil:3003
+      - --generateAndSaveKeyTo=/var/config/key
+      - --remoteConfig=http://pangolin:3001/api/v1/
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.gerbil.rule=Host(`${GERBIL_HOST:-gerbil.localhost}`)"
+      - "traefik.http.routers.gerbil.entrypoints=web"
+
+# ============================================================================
+# NETWORKS AND VOLUMES
+# ============================================================================
 
 networks:
   crowdsec-network:
     driver: bridge
+    name: ${NETWORK_NAME:-crowdsec-network}
 
 volumes:
   crowdsec-db:
+    name: ${CROWDSEC_DB_VOLUME:-crowdsec-db}
   crowdsec-config:
+    name: ${CROWDSEC_CONFIG_VOLUME:-crowdsec-config}
+  pangolin-data:
+    name: ${PANGOLIN_DATA_VOLUME:-pangolin-data}

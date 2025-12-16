@@ -1,0 +1,210 @@
+# Proxy Selection Guide
+
+This guide helps you choose the right reverse proxy for your CrowdSec Manager deployment and understand the features available with each option.
+
+## Overview
+
+CrowdSec Manager supports six deployment modes, each with different capabilities and integration levels:
+
+- **Traefik** - Full feature support with advanced integrations
+- **Nginx Proxy Manager** - Log parsing and bouncer integration
+- **Caddy** - Basic bouncer integration
+- **HAProxy** - SPOA bouncer integration
+- **Zoraxy** - Experimental support
+- **Standalone** - CrowdSec only, no proxy integration
+
+## Feature Comparison Matrix
+
+| Feature | Traefik | Nginx PM | Caddy | HAProxy | Zoraxy | Standalone |
+|---------|---------|----------|-------|---------|--------|------------|
+| **Whitelist Management** | ✅ Full | ❌ No | ❌ No | ❌ No | ❌ No | ❌ No |
+| **Captcha Protection** | ✅ Turnstile | ❌ No | ❌ No | ❌ No | ❌ No | ❌ No |
+| **Log Parsing** | ✅ Advanced | ✅ Basic | ❌ No | ❌ No | ❌ No | ❌ No |
+| **Bouncer Integration** | ✅ Plugin | ✅ cs-nginx | ✅ Module | ✅ SPOA | ⚠️ Experimental | ❌ No |
+| **Health Monitoring** | ✅ Full | ✅ Basic | ✅ Basic | ✅ Basic | ✅ Basic | ✅ CrowdSec Only |
+| **Add-ons Support** | ✅ Pangolin/Gerbil | ❌ No | ❌ No | ❌ No | ❌ No | ❌ No |
+
+## Proxy Selection Decision Tree
+
+### Choose Traefik if:
+- You need full whitelist management at the proxy level
+- You want Cloudflare Turnstile captcha protection
+- You require advanced log parsing and analysis
+- You want to use Pangolin and Gerbil add-ons
+- You're migrating from an existing Traefik setup
+
+### Choose Nginx Proxy Manager if:
+- You prefer NPM's web-based configuration interface
+- You need basic log monitoring capabilities
+- You want CrowdSec protection with minimal setup
+- You're already using NPM in your infrastructure
+
+### Choose Caddy if:
+- You prefer Caddy's automatic HTTPS capabilities
+- You want a lightweight proxy with CrowdSec protection
+- You need minimal configuration overhead
+- You're building a simple web service setup
+
+### Choose HAProxy if:
+- You require HAProxy's advanced load balancing features
+- You need SPOA-based integration
+- You're working with high-performance requirements
+- You have existing HAProxy expertise
+
+### Choose Zoraxy if:
+- You want to experiment with newer proxy technologies
+- You're comfortable with experimental features
+- You need basic proxy functionality with CrowdSec
+
+### Choose Standalone if:
+- You don't use a reverse proxy
+- You want CrowdSec protection for direct services
+- You're building API-only applications
+- You need maximum simplicity
+
+## Initial Setup Process
+
+### 1. Environment Configuration
+
+Set your proxy type during initial deployment:
+
+```bash
+# For Traefik (default)
+PROXY_TYPE=traefik
+
+# For Nginx Proxy Manager
+PROXY_TYPE=nginx
+
+# For Caddy
+PROXY_TYPE=caddy
+
+# For HAProxy
+PROXY_TYPE=haproxy
+
+# For Zoraxy (experimental)
+PROXY_TYPE=zoraxy
+
+# For standalone mode
+PROXY_TYPE=standalone
+```
+
+### 2. Docker Compose Mode Selection
+
+Choose your deployment strategy:
+
+```bash
+# Single file with profiles (recommended)
+COMPOSE_MODE=single
+
+# Separate files for core and proxy
+COMPOSE_MODE=separate
+```
+
+### 3. Container Configuration
+
+Configure your proxy container name:
+
+```bash
+# Default container names
+PROXY_CONTAINER_NAME=traefik        # for Traefik
+PROXY_CONTAINER_NAME=nginx          # for NPM
+PROXY_CONTAINER_NAME=caddy          # for Caddy
+PROXY_CONTAINER_NAME=haproxy        # for HAProxy
+PROXY_CONTAINER_NAME=zoraxy         # for Zoraxy
+```
+
+## Migration from Existing Setups
+
+### From Traefik-only CrowdSec Manager
+
+Your existing setup will be automatically detected and migrated:
+
+1. **Automatic Detection**: The system detects existing Traefik configuration
+2. **Settings Migration**: All current settings are preserved
+3. **API Compatibility**: Existing integrations continue working
+4. **Feature Availability**: All Traefik features remain available
+
+No manual intervention required - your setup continues working seamlessly.
+
+### From Other Proxy Solutions
+
+1. **Backup Current Configuration**: Always backup before migration
+2. **Update Environment Variables**: Set `PROXY_TYPE` to your target proxy
+3. **Update Docker Compose**: Use appropriate compose files
+4. **Verify Integration**: Check bouncer connectivity after deployment
+
+## Post-Setup Verification
+
+After selecting and deploying your proxy type:
+
+### 1. Check Proxy Status
+- Navigate to Dashboard → Proxy Health
+- Verify container is running and responsive
+- Check connection status indicators
+
+### 2. Verify Bouncer Integration
+- Go to Bouncers page
+- Confirm bouncer is connected to CrowdSec LAPI
+- Test decision enforcement
+
+### 3. Test Available Features
+- Try features specific to your proxy type
+- Verify unsupported features show appropriate messages
+- Check that all navigation items work correctly
+
+### 4. Review Configuration
+- Visit Proxy Settings page
+- Verify container name and paths are correct
+- Test configuration changes if needed
+
+## Best Practices
+
+### Security Considerations
+- Always use the latest bouncer versions
+- Regularly update proxy containers
+- Monitor bouncer connectivity status
+- Review security decisions periodically
+
+### Performance Optimization
+- Enable appropriate logging levels
+- Configure log rotation for large deployments
+- Monitor resource usage of proxy containers
+- Use health checks for container monitoring
+
+### Maintenance
+- Keep CrowdSec scenarios updated
+- Backup configurations before changes
+- Test updates in non-production environments first
+- Monitor system health dashboards regularly
+
+## Troubleshooting Common Issues
+
+### Proxy Container Not Starting
+1. Check Docker logs: `docker logs [container-name]`
+2. Verify environment variables are set correctly
+3. Ensure no port conflicts exist
+4. Check Docker Compose file syntax
+
+### Bouncer Not Connecting
+1. Verify LAPI is accessible from proxy container
+2. Check bouncer configuration files
+3. Confirm API keys are valid
+4. Review network connectivity between containers
+
+### Features Not Available
+1. Confirm your proxy type supports the feature
+2. Check feature availability indicators in UI
+3. Verify proxy adapter is loaded correctly
+4. Review proxy-specific documentation
+
+## Next Steps
+
+After selecting your proxy type:
+
+1. **Configure Features**: Set up available features for your proxy type
+2. **Review Security**: Configure appropriate security scenarios
+3. **Monitor Health**: Set up monitoring and alerting
+4. **Backup Setup**: Configure automated backups
+5. **Documentation**: Review proxy-specific guides for advanced configuration
+
+For detailed setup instructions for your specific proxy type, see the proxy-specific setup guides in the next sections.

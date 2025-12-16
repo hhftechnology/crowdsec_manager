@@ -1,0 +1,89 @@
+# CrowdSec Manager Standalone - Production Deployment Template
+# CrowdSec only deployment without reverse proxy integration
+# Copy this file as docker-compose.yml and customize the .env file
+
+version: "3.8"
+
+services:
+  # CrowdSec Security Engine
+  crowdsec:
+    image: crowdsecurity/crowdsec:latest
+    container_name: crowdsec
+    restart: unless-stopped
+    environment:
+      - GID=${GID:-1000}
+      - COLLECTIONS=crowdsecurity/linux
+      - ENROLL_INSTANCE_NAME=${ENROLL_INSTANCE_NAME:-crowdsec-manager-standalone}
+      - ENROLL_TAGS=${ENROLL_TAGS:-docker,standalone}
+    volumes:
+      - ./config/crowdsec/acquis.yaml:/etc/crowdsec/acquis.yaml:ro
+      - crowdsec-db:/var/lib/crowdsec/data/
+      - crowdsec-config:/etc/crowdsec/
+      - ./logs:/var/log:ro
+    networks:
+      - crowdsec-network
+    healthcheck:
+      test: ["CMD", "cscli", "capi", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # CrowdSec Manager - Web UI and API
+  crowdsec-manager:
+    image: crowdsec-manager/crowdsec-manager:2.0.0-standalone
+    container_name: crowdsec-manager
+    restart: unless-stopped
+    ports:
+      - "${MANAGER_PORT:-8080}:8080"
+    environment:
+      # Core Configuration
+      - PORT=8080
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - LOG_FILE=/app/logs/crowdsec-manager.log
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - COMPOSE_FILE=/app/docker-compose.yml
+      - CONFIG_DIR=/app/config
+      - DATABASE_PATH=/app/data/settings.db
+
+      # Proxy Configuration (Standalone Mode)
+      - PROXY_TYPE=standalone
+      - PROXY_ENABLED=false
+      - COMPOSE_MODE=${COMPOSE_MODE:-single}
+
+      # CrowdSec Configuration
+      - CROWDSEC_ACQUIS_FILE=/etc/crowdsec/acquis.yaml
+
+      # Backup Configuration
+      - BACKUP_DIR=/app/backups
+      - RETENTION_DAYS=${RETENTION_DAYS:-60}
+      - INCLUDE_CROWDSEC=${INCLUDE_CROWDSEC:-true}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./config:/app/config
+      - ./docker-compose.yml:/app/docker-compose.yml
+      - ./backups:/app/backups
+      - ./logs:/app/logs
+      - ./data:/app/data
+      - ./logs:/var/log:ro
+    networks:
+      - crowdsec-network
+    depends_on:
+      crowdsec:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  crowdsec-network:
+    driver: bridge
+    name: ${NETWORK_NAME:-crowdsec-network}
+
+volumes:
+  crowdsec-db:
+    name: ${CROWDSEC_DB_VOLUME:-crowdsec-db}
+  crowdsec-config:
+    name: ${CROWDSEC_CONFIG_VOLUME:-crowdsec-config}

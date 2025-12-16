@@ -1,0 +1,32 @@
+version: "3.8"
+
+# CrowdSec Manager - HAProxy Services (Separate Deployment Mode)
+# This file contains HAProxy load balancer service
+# Usage: docker-compose -f docker-compose.haproxy.yml up
+
+services:
+  # HAProxy Load Balancer
+  haproxy:
+    image: haproxy:${HAPROXY_VERSION:-latest}
+    container_name: ${HAPROXY_CONTAINER_NAME:-haproxy}
+    restart: unless-stopped
+    ports:
+      - "${HAPROXY_HTTP_PORT:-80}:80"
+      - "${HAPROXY_HTTPS_PORT:-443}:443"
+      - "${HAPROXY_STATS_PORT:-8404}:8404"
+    volumes:
+      - ./config/haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      - ./config/haproxy/certs:/etc/ssl/certs:ro
+      - ./logs/haproxy:/var/log/haproxy
+    networks:
+      - crowdsec-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8404/stats"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  crowdsec-network:
+    name: ${NETWORK_NAME:-crowdsec-network}
+    external: true

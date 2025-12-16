@@ -6,6 +6,7 @@ import (
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
 	"crowdsec-manager/internal/models"
+	"crowdsec-manager/internal/proxy"
 	"fmt"
 	"net/http"
 	"os"
@@ -80,8 +81,8 @@ const captchaHTMLTemplate = `<!DOCTYPE html>
 </body>
 </html>`
 
-// SetupCaptcha sets up Cloudflare Turnstile captcha
-func SetupCaptcha(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
+// SetupCaptcha sets up captcha using the proxy adapter
+func SetupCaptcha(dockerClient *docker.Client, cfg *config.Config, proxyAdapter proxy.ProxyAdapter) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req models.CaptchaSetupRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -223,7 +224,7 @@ func SetupCaptcha(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFu
 }
 
 // GetCaptchaStatus retrieves the current captcha configuration status
-func GetCaptchaStatus(dockerClient *docker.Client, db *database.Database, cfg *config.Config) gin.HandlerFunc {
+func GetCaptchaStatus(dockerClient *docker.Client, db *database.Database, cfg *config.Config, proxyAdapter proxy.ProxyAdapter) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		logger.Info("Getting captcha status")
 

@@ -3,21 +3,24 @@ package api
 import (
 	"crowdsec-manager/internal/api/handlers"
 	"crowdsec-manager/internal/backup"
+	"crowdsec-manager/internal/compose"
 	"crowdsec-manager/internal/config"
 	"crowdsec-manager/internal/cron"
 	"crowdsec-manager/internal/database"
 	"crowdsec-manager/internal/docker"
+	"crowdsec-manager/internal/proxy"
 
 	"github.com/gin-gonic/gin"
 )
 
 // RegisterHealthRoutes configures endpoints for system and CrowdSec health monitoring
-func RegisterHealthRoutes(router *gin.RouterGroup, dockerClient *docker.Client, db *database.Database, cfg *config.Config) {
+func RegisterHealthRoutes(router *gin.RouterGroup, dockerClient *docker.Client, db *database.Database, cfg *config.Config, proxyAdapter proxy.ProxyAdapter) {
 	health := router.Group("/health")
 	{
 		health.GET("/stack", handlers.CheckStackHealth(dockerClient, cfg))
 		health.GET("/crowdsec", handlers.CheckCrowdSecHealth(dockerClient, cfg))
-		health.GET("/complete", handlers.RunCompleteDiagnostics(dockerClient, db, cfg))
+		health.GET("/complete", handlers.RunCompleteDiagnostics(dockerClient, db, cfg, proxyAdapter))
+		health.GET("/proxy", handlers.CheckProxyHealth(proxyAdapter))
 	}
 }
 
@@ -33,17 +36,18 @@ func RegisterIPRoutes(router *gin.RouterGroup, dockerClient *docker.Client, cfg 
 	}
 }
 
-// RegisterWhitelistRoutes configures endpoints for adding IPs to CrowdSec and Traefik whitelists
-func RegisterWhitelistRoutes(router *gin.RouterGroup, dockerClient *docker.Client, cfg *config.Config) {
+// RegisterWhitelistRoutes configures endpoints for adding IPs to CrowdSec and proxy whitelists
+func RegisterWhitelistRoutes(router *gin.RouterGroup, dockerClient *docker.Client, cfg *config.Config, proxyAdapter proxy.ProxyAdapter) {
 	whitelist := router.Group("/whitelist")
 	{
-		whitelist.GET("/view", handlers.ViewWhitelist(dockerClient, cfg))
-		whitelist.POST("/current", handlers.WhitelistCurrentIP(dockerClient, cfg))
-		whitelist.POST("/manual", handlers.WhitelistManualIP(dockerClient, cfg))
-		whitelist.POST("/cidr", handlers.WhitelistCIDR(dockerClient, cfg))
+		whitelist.GET("/view", handlers.ViewWhitelist(dockerClient, cfg, proxyAdapter))
+		whitelist.POST("/current", handlers.WhitelistCurrentIP(dockerClient, cfg, proxyAdapter))
+		whitelist.POST("/manual", handlers.WhitelistManualIP(dockerClient, cfg, proxyAdapter))
+		whitelist.POST("/cidr", handlers.WhitelistCIDR(dockerClient, cfg, proxyAdapter))
 		whitelist.POST("/crowdsec", handlers.AddToCrowdSecWhitelist(dockerClient, cfg))
-		whitelist.POST("/traefik", handlers.AddToTraefikWhitelist(dockerClient, cfg))
-		whitelist.POST("/comprehensive", handlers.SetupComprehensiveWhitelist(dockerClient, cfg))
+		whitelist.POST("/traefik", handlers.AddToTraefikWhitelist(dockerClient, cfg)) // Legacy endpoint
+		whitelist.POST("/proxy", handlers.AddToProxyWhitelist(proxyAdapter)) // New generic endpoint
+		whitelist.POST("/comprehensive", handlers.SetupComprehensiveWhitelist(dockerClient, cfg, proxyAdapter))
 	}
 }
 
@@ -71,22 +75,24 @@ func RegisterScenarioRoutes(router *gin.RouterGroup, dockerClient *docker.Client
 	}
 }
 
-// RegisterCaptchaRoutes configures endpoints for CrowdSec captcha (AppSec) setup and status
-func RegisterCaptchaRoutes(router *gin.RouterGroup, dockerClient *docker.Client, db *database.Database, cfg *config.Config) {
+// RegisterCaptchaRoutes configures endpoints for proxy captcha setup and status
+func RegisterCaptchaRoutes(router *gin.RouterGroup, dockerClient *docker.Client, db *database.Database, cfg *config.Config, proxyAdapter proxy.ProxyAdapter) {
 	captcha := router.Group("/captcha")
 	{
-		captcha.POST("/setup", handlers.SetupCaptcha(dockerClient, cfg))
-		captcha.GET("/status", handlers.GetCaptchaStatus(dockerClient, db, cfg))
+		captcha.POST("/setup", handlers.SetupCaptcha(dockerClient, cfg, proxyAdapter))
+		captcha.GET("/status", handlers.GetCaptchaStatus(dockerClient, db, cfg, proxyAdapter))
 	}
 }
 
-// RegisterLogRoutes configures endpoints for viewing container logs and analyzing Traefik access logs
-func RegisterLogRoutes(router *gin.RouterGroup, dockerClient *docker.Client, db *database.Database, cfg *config.Config) {
+// RegisterLogRoutes configures endpoints for viewing container logs and analyzing proxy access logs
+func RegisterLogRoutes(router *gin.RouterGroup, dockerClient *docker.Client, db *database.Database, cfg *config.Config, proxyAdapter proxy.ProxyAdapter) {
 	logs := router.Group("/logs")
 	{
 		logs.GET("/crowdsec", handlers.GetCrowdSecLogs(dockerClient, cfg))
-		logs.GET("/traefik", handlers.GetTraefikLogs(dockerClient, db, cfg))
-		logs.GET("/traefik/advanced", handlers.AnalyzeTraefikLogsAdvanced(dockerClient, cfg))
+		logs.GET("/traefik", handlers.GetTraefikLogs(dockerClient, db, cfg)) // Legacy endpoint
+		logs.GET("/traefik/advanced", handlers.AnalyzeTraefikLogsAdvanced(dockerClient, cfg)) // Legacy endpoint
+		logs.GET("/proxy", handlers.GetProxyLogs(proxyAdapter)) // New generic endpoint
+		logs.GET("/proxy/analyze", handlers.AnalyzeProxyLogs(proxyAdapter)) // New generic endpoint
 		logs.GET("/:service", handlers.GetServiceLogs(dockerClient))
 		logs.GET("/stream/:service", handlers.StreamLogs(dockerClient))
 	}
@@ -115,8 +121,8 @@ func RegisterUpdateRoutes(router *gin.RouterGroup, dockerClient *docker.Client, 
 	}
 }
 
-// RegisterServicesRoutes configures endpoints for Docker service management, CrowdSec operations, and Traefik config
-func RegisterServicesRoutes(router *gin.RouterGroup, dockerClient *docker.Client, db *database.Database, cfg *config.Config) {
+// RegisterServicesRoutes configures endpoints for Docker service management, CrowdSec operations, and proxy config
+func RegisterServicesRoutes(router *gin.RouterGroup, dockerClient *docker.Client, db *database.Database, cfg *config.Config, proxyAdapter proxy.ProxyAdapter) {
 	services := router.Group("/services")
 	{
 		services.GET("/verify", handlers.VerifyServices(dockerClient, cfg))
@@ -191,5 +197,33 @@ func RegisterProfileRoutes(router *gin.RouterGroup, db *database.Database, cfg *
 	{
 		profiles.GET("", handlers.GetProfiles(cfg, dockerClient))
 		profiles.POST("", handlers.UpdateProfiles(db, cfg, dockerClient))
+	}
+}
+
+// RegisterProxyRoutes configures endpoints for proxy management and information
+func RegisterProxyRoutes(router *gin.RouterGroup, proxyManager *proxy.ProxyManager, proxyAdapter proxy.ProxyAdapter) {
+	proxyRoutes := router.Group("/proxy")
+	{
+		proxyRoutes.GET("/types", handlers.GetProxyTypes())
+		proxyRoutes.GET("/current", handlers.GetCurrentProxy(proxyAdapter))
+		proxyRoutes.GET("/features", handlers.GetProxyFeatures(proxyAdapter))
+		proxyRoutes.POST("/configure", handlers.ConfigureProxy(proxyManager))
+		proxyRoutes.GET("/health", handlers.CheckProxyHealth(proxyAdapter))
+		
+		// Bouncer integration endpoints
+		proxyRoutes.GET("/bouncer/status", handlers.GetBouncerStatus(proxyAdapter))
+		proxyRoutes.POST("/bouncer/validate", handlers.ValidateBouncerConfiguration(proxyAdapter))
+	}
+}
+
+// RegisterAddonRoutes configures endpoints for Traefik add-on management (Pangolin/Gerbil)
+func RegisterAddonRoutes(router *gin.RouterGroup, composeManager *compose.ComposeManager, dockerClient *docker.Client, cfg *config.Config, proxyAdapter proxy.ProxyAdapter) {
+	addons := router.Group("/addons")
+	{
+		addons.GET("", handlers.GetAvailableAddons(proxyAdapter, cfg))
+		addons.GET("/:addon/status", handlers.GetAddonStatus(dockerClient, cfg))
+		addons.GET("/:addon/config", handlers.GetAddonConfiguration(cfg))
+		addons.POST("/:addon/enable", handlers.EnableAddon(composeManager, cfg))
+		addons.POST("/:addon/disable", handlers.DisableAddon(composeManager, cfg))
 	}
 }
