@@ -1,4 +1,4 @@
-import { AdaptiveLogManager } from '@/components/logs/AdaptiveLogManager'
+import { AdaptiveLogManager } from '@/components/logs'
 
 export default function Logs() {
   return <AdaptiveLogManager />
