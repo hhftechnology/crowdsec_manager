@@ -9,8 +9,8 @@
 # =====================================================
 # Node.js
 # =====================================================
-# Logs
-logs
+# Logs (only root-level logs directory)
+/logs
 *.log
 npm-debug.log*
 yarn-debug.log*
