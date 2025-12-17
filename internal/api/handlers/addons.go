@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"net/http"
 
 	"crowdsec-manager/internal/compose"
@@ -96,8 +95,7 @@ func GetAddonStatus(dockerClient *docker.Client, cfg *config.Config) gin.Handler
 		if status.Enabled {
 			containerName := getAddonContainerName(addonName, cfg)
 			if containerName != "" {
-				ctx := context.Background()
-				running, err := dockerClient.IsContainerRunning(ctx, containerName)
+				running, err := dockerClient.IsContainerRunning(containerName)
 				if err != nil {
 					logger.Warn("Failed to check addon container status", "addon", addonName, "error", err)
 				} else {
