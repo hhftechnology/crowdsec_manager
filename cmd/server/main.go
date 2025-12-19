@@ -22,7 +22,12 @@ import (
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
 	"crowdsec-manager/internal/proxy"
-	"crowdsec-manager/internal/proxy/adapters/standalone"
+	_ "crowdsec-manager/internal/proxy/adapters/caddy"
+	_ "crowdsec-manager/internal/proxy/adapters/haproxy"
+	_ "crowdsec-manager/internal/proxy/adapters/nginx"
+	_ "crowdsec-manager/internal/proxy/adapters/standalone"
+	_ "crowdsec-manager/internal/proxy/adapters/traefik"
+	_ "crowdsec-manager/internal/proxy/adapters/zoraxy"
 )
 
 // Main entry point for the CrowdSec Manager server
@@ -53,11 +58,7 @@ func main() {
 	}
 	defer dockerClient.Close()
 
-	// Register proxy adapters to avoid import cycles
-	if err := proxy.RegisterAdapter(proxy.ProxyTypeStandalone, standalone.NewStandaloneAdapter); err != nil {
-		logger.Fatal("Failed to register standalone adapter", "error", err)
-	}
-	
+
 	// Initialize proxy manager with adapter registry
 	proxy.MustInitializeAdapters()
 	proxyManager := proxy.NewProxyManager(nil) // Use global registry
