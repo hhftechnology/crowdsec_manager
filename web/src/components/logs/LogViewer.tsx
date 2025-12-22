@@ -250,7 +250,7 @@ export function LogViewer({
         }
       } else if (proxyType === 'haproxy') {
         // HAProxy syslog format: timestamp process[pid]: client_ip:port [timestamp] frontend backend/server timers status bytes
-        const haproxyMatch = line.match(/^(\S+\s+\d+\s+\d{2}:\d{2}:\d{2})\s+(\S+)\[\d+\]:\s+(\S+:\d+)\s+\[([^\]]+)\]\s+(\S+)\s+(\S+\/\S+)\s+([0-9\/\-+]+)\s+(\d+)\s+(\d+)/)
+        const haproxyMatch = line.match(/^(\S+\s+\d+\s+\d{2}:\d{2}:\d{2})\s+(\S+)\[\d+\]:\s+(\S+:\d+)\s+\[([^\]]+)\]\s+(\S+)\s+(\S+\/\S+)\s+([0-9/\-+]+)\s+(\d+)\s+(\d+)/)
         if (haproxyMatch) {
           const [, syslogTime, process, clientAddr, reqTime, frontend, backend, timers, status, bytes] = haproxyMatch
           return {

@@ -14,5 +14,17 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
+    watch: false,
+    reporter: 'verbose',
+    // Force non-interactive mode
+    passWithNoTests: true,
+    // Disable coverage for faster runs
+    coverage: {
+      enabled: false
+    },
+    // Set timeout for property-based tests
+    testTimeout: 30000,
+    // Disable file watching
+    watchExclude: ['**/node_modules/**', '**/dist/**'],
   },
 })

@@ -1,5 +1,11 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
 import { useKeyboardNavigation } from '@/hooks/useKeyboardNavigation'
+import { 
+  ScreenReaderAnnouncer, 
+  HighContrastManager, 
+  ReducedMotionManager,
+  initializeAccessibility 
+} from '@/lib/accessibility'
 
 interface AccessibilitySettings {
   highContrast: boolean
@@ -35,6 +41,11 @@ export function AccessibilityProvider({ children }: AccessibilityProviderProps) 
     disabled: !settings.keyboardNavigation
   })
 
+  // Initialize accessibility features
+  useEffect(() => {
+    initializeAccessibility()
+  }, [])
+
   // Load settings from localStorage
   useEffect(() => {
     const savedSettings = localStorage.getItem('accessibility-settings')
@@ -48,8 +59,8 @@ export function AccessibilityProvider({ children }: AccessibilityProviderProps) 
     }
 
     // Detect system preferences
-    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    const prefersHighContrast = window.matchMedia('(prefers-contrast: high)').matches
+    const prefersReducedMotion = ReducedMotionManager.isSystemReducedMotion()
+    const prefersHighContrast = HighContrastManager.isSystemHighContrast()
     
     setSettings(prev => ({
       ...prev,
@@ -99,19 +110,7 @@ export function AccessibilityProvider({ children }: AccessibilityProviderProps) 
   }
 
   const announceToScreenReader = (message: string, priority: 'polite' | 'assertive' = 'polite') => {
-    const announcement = document.createElement('div')
-    announcement.setAttribute('aria-live', priority)
-    announcement.setAttribute('aria-atomic', 'true')
-    announcement.className = 'sr-only'
-    announcement.textContent = message
-    
-    document.body.appendChild(announcement)
-    
-    setTimeout(() => {
-      if (document.body.contains(announcement)) {
-        document.body.removeChild(announcement)
-      }
-    }, 1000)
+    ScreenReaderAnnouncer.announce(message, priority.toUpperCase() as 'POLITE' | 'ASSERTIVE')
   }
 
   return (

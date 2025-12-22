@@ -3,8 +3,15 @@ import api from '@/lib/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { AlertCircle, CheckCircle2, Container, Shield, Users } from 'lucide-react'
+import { StatusCard, CounterStatusCard } from '@/components/common/StatusCard'
+import { StatusCard, CounterStatusCard } from '@/components/common/StatusCard'
+import { ResponsiveGrid } from '@/components/ui/responsive-grid'
+import { useBreakpoints } from '@/hooks/useMediaQuery'
+import { cn } from '@/lib/utils'
 
 export default function Dashboard() {
+  const { isMobile, needsTouchOptimization } = useBreakpoints()
+  
   const { data: healthData, isLoading: healthLoading } = useQuery({
     queryKey: ['health'],
     queryFn: async () => {
@@ -60,16 +67,27 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Dashboard</h1>
+        <h1 className={cn(
+          "font-bold",
+          isMobile ? "text-2xl" : "text-3xl"
+        )}>
+          Dashboard
+        </h1>
         <p className="text-muted-foreground mt-2">
           System overview and health status
         </p>
       </div>
 
       {/* System Health Status */}
-      <Card>
+      <Card className={cn(
+        "transition-all duration-200",
+        needsTouchOptimization && "active:scale-[0.98]"
+      )}>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+          <CardTitle className={cn(
+            "flex items-center gap-2",
+            isMobile ? "text-lg" : "text-xl"
+          )}>
             {healthLoading ? (
               <AlertCircle className="h-5 w-5 animate-pulse" />
             ) : healthData?.allRunning ? (
@@ -90,19 +108,32 @@ export default function Dashboard() {
             {healthData?.containers.map((container: any) => (
               <div
                 key={container.id}
-                className="flex items-center justify-between p-3 rounded-lg border"
+                className={cn(
+                  "flex items-center justify-between rounded-lg border transition-colors",
+                  isMobile ? "p-3" : "p-3",
+                  needsTouchOptimization && "min-h-[44px] active:bg-accent/50"
+                )}
               >
-                <div className="flex items-center gap-3">
-                  <Container className="h-4 w-4 text-muted-foreground" />
-                  <div>
-                    <p className="font-medium">{container.name}</p>
-                    <p className="text-sm text-muted-foreground">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <Container className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <p className={cn(
+                      "font-medium truncate",
+                      isMobile ? "text-sm" : "text-base"
+                    )}>
+                      {container.name}
+                    </p>
+                    <p className={cn(
+                      "text-muted-foreground truncate",
+                      isMobile ? "text-xs" : "text-sm"
+                    )}>
                       {container.id.substring(0, 12)}
                     </p>
                   </div>
                 </div>
                 <Badge
                   variant={container.running ? 'default' : 'destructive'}
+                  className={isMobile ? "text-xs" : ""}
                 >
                   {container.status}
                 </Badge>
@@ -113,82 +144,47 @@ export default function Dashboard() {
       </Card>
 
       {/* Statistics Grid */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <ResponsiveGrid
+        cols={{ mobile: 1, tablet: 2, desktop: 3 }}
+        gap={isMobile ? "sm" : "md"}
+      >
         {/* Active Decisions */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Active Decisions
-            </CardTitle>
-            <Shield className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {decisionsLoading ? (
-                <div className="h-8 w-16 animate-pulse bg-muted rounded" />
-              ) : (
-                decisionsCount
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              IPs currently blocked
-            </p>
-          </CardContent>
-        </Card>
+        <CounterStatusCard
+          title="Active Decisions"
+          count={decisionsLoading ? 0 : decisionsCount}
+          icon={Shield}
+          description="IPs currently blocked"
+          loading={decisionsLoading}
+          threshold={{ warning: 50, error: 100 }}
+        />
 
         {/* Active Bouncers */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Active Bouncers
-            </CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {bouncersLoading ? (
-                <div className="h-8 w-16 animate-pulse bg-muted rounded" />
-              ) : (
-                bouncersCount
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Connected enforcement agents
-            </p>
-          </CardContent>
-        </Card>
+        <CounterStatusCard
+          title="Active Bouncers"
+          count={bouncersLoading ? 0 : bouncersCount}
+          icon={Users}
+          description="Connected enforcement agents"
+          loading={bouncersLoading}
+          threshold={{ warning: 1, error: 0 }}
+        />
 
         {/* Containers Status */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Containers
-            </CardTitle>
-            <Container className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {healthLoading ? (
-                <div className="h-8 w-16 animate-pulse bg-muted rounded" />
-              ) : (
-                <>
-                  {healthData?.containers.filter((c: any) => c.running).length || 0}
-                  <span className="text-muted-foreground text-base">
-                    /{healthData?.containers.length || 0}
-                  </span>
-                </>
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Running containers
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+        <StatusCard
+          title="Containers"
+          value={healthLoading ? "Loading..." : `${healthData?.containers.filter((c: any) => c.running).length || 0}/${healthData?.containers.length || 0}`}
+          icon={Container}
+          status={healthLoading ? 'neutral' : healthData?.allRunning ? 'success' : 'error'}
+          description="Running containers"
+          loading={healthLoading}
+        />
+      </ResponsiveGrid>
 
       {/* Timestamp */}
       {healthData?.timestamp && (
-        <p className="text-sm text-muted-foreground text-center">
+        <p className={cn(
+          "text-muted-foreground text-center",
+          isMobile ? "text-xs" : "text-sm"
+        )}>
           Last updated: {new Date(healthData.timestamp).toLocaleString()}
         </p>
       )}

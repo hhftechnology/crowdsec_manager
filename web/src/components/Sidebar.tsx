@@ -1,3 +1,8 @@
+/**
+ * @deprecated This component is deprecated. Use AppSidebar from './layout/AppSidebar' instead.
+ * This file will be removed in a future version.
+ */
+
 import { Link, useLocation } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import {
@@ -41,8 +46,6 @@ interface SidebarProps {
   isMobile?: boolean
   isMobileMenuOpen?: boolean
 }
-
-
 
 const navigation = [
   {
@@ -91,11 +94,14 @@ const navigation = [
   }
 ]
 
+/**
+ * @deprecated Use AppSidebar from './layout/AppSidebar' instead
+ */
 export default function Sidebar({ 
   isCollapsed, 
   setIsCollapsed, 
   isMobile = false, 
-  isMobileMenuOpen = false 
+  // isMobileMenuOpen = false // Unused prop in deprecated component
 }: SidebarProps) {
   const location = useLocation()
   const { theme, setTheme } = useTheme()
@@ -143,6 +149,7 @@ export default function Sidebar({
             size="icon"
             onClick={() => setIsCollapsed(!isCollapsed)}
             className={cn("h-8 w-8", effectiveCollapsed && "w-full")}
+            aria-label={effectiveCollapsed ? "Expand navigation" : "Collapse navigation"}
           >
             {effectiveCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
           </Button>

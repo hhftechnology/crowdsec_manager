@@ -1,10 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
 import api from '@/lib/api'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { CheckCircle2, XCircle, Activity, Shield, Globe } from 'lucide-react'
+import { CheckCircle2, XCircle, Activity, Shield } from 'lucide-react'
+import { StatusCard, CounterStatusCard } from '@/components/common/StatusCard'
 
 export default function Health() {
   const { data: diagnostics, isLoading } = useQuery({
@@ -18,86 +17,61 @@ export default function Health() {
 
   const bouncers = diagnostics?.bouncers ?? []
   const allRunning = diagnostics?.health?.allRunning || false
+  const runningContainers = diagnostics?.health?.containers?.filter(c => c.running).length || 0
+  const totalContainers = diagnostics?.health?.containers?.length || 0
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Health & Diagnostics</h1>
-        <p className="text-muted-foreground mt-2">
-          Complete system diagnostics and health monitoring
-        </p>
-      </div>
-
-      {/* System Status Overview */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            {isLoading ? (
-              <Activity className="h-5 w-5 animate-pulse" />
-            ) : allRunning ? (
-              <CheckCircle2 className="h-5 w-5 text-green-500" />
-            ) : (
-              <XCircle className="h-5 w-5 text-red-500" />
-            )}
-            System Status
-          </CardTitle>
-          <CardDescription>
-            Overall health status: {allRunning ? 'Healthy' : 'Issues Detected'}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="space-y-2">
-              <div className="h-12 bg-muted animate-pulse rounded" />
-              <div className="h-12 bg-muted animate-pulse rounded" />
-            </div>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="flex items-center justify-between p-4 border rounded-lg">
-                <div>
-                  <p className="text-sm font-medium">Containers</p>
-                  <p className="text-2xl font-bold">
-                    {diagnostics?.health?.containers?.filter(c => c.running).length || 0}
-                    <span className="text-muted-foreground text-base">
-                      /{diagnostics?.health?.containers?.length || 0}
-                    </span>
-                  </p>
+    <DashboardGrid
+      title="Health & Diagnostics"
+      description="Complete system diagnostics and health monitoring"
+      loading={isLoading}
+      lastUpdated={diagnostics?.timestamp ? new Date(diagnostics.timestamp) : undefined}
+      alert={!isLoading && !allRunning ? {
+        variant: 'destructive',
+        title: 'System Issues Detected',
+        description: 'Some containers are not running properly. Check the containers tab for details.'
+      } : undefined}
+      tabs={[
+        {
+          id: 'overview',
+          label: 'Overview',
+          layout: '2-col',
+          sections: [
+            {
+              id: 'system-health',
+              content: (
+                <div className="grid gap-4 md:grid-cols-2">
+                  <StatusCard
+                    title="Containers"
+                    value={`${runningContainers}/${totalContainers}`}
+                    icon={Activity}
+                    status={allRunning ? 'success' : 'error'}
+                    description="Running containers"
+                    loading={isLoading}
+                  />
+                  <CounterStatusCard
+                    title="Active Bouncers"
+                    count={bouncers.length}
+                    icon={Shield}
+                    description="Connected enforcement agents"
+                    loading={isLoading}
+                    threshold={{ warning: 1, error: 0 }}
+                  />
                 </div>
-                <Badge variant={allRunning ? 'default' : 'destructive'}>
-                  {allRunning ? 'Running' : 'Issues'}
-                </Badge>
-              </div>
-              <div className="flex items-center justify-between p-4 border rounded-lg">
-                <div>
-                  <p className="text-sm font-medium">Active Bouncers</p>
-                  <p className="text-2xl font-bold">{bouncers.length}</p>
-                </div>
-                <Shield className="h-8 w-8 text-muted-foreground" />
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Detailed Diagnostics */}
-      <Tabs defaultValue="containers" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="containers">Containers</TabsTrigger>
-          <TabsTrigger value="bouncers">Bouncers</TabsTrigger>
-          <TabsTrigger value="traefik">Traefik Integration</TabsTrigger>
-        </TabsList>
-
-        {/* Containers Tab */}
-        <TabsContent value="containers">
-          <Card>
-            <CardHeader>
-              <CardTitle>Container Status</CardTitle>
-              <CardDescription>
-                Status of all Docker containers in the stack
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {isLoading ? (
+              )
+            }
+          ]
+        },
+        {
+          id: 'containers',
+          label: 'Containers',
+          layout: '1-col',
+          sections: [
+            {
+              id: 'container-status',
+              title: 'Container Status',
+              description: 'Status of all Docker containers in the stack',
+              content: isLoading ? (
                 <div className="space-y-2">
                   <div className="h-16 bg-muted animate-pulse rounded" />
                   <div className="h-16 bg-muted animate-pulse rounded" />
@@ -137,22 +111,20 @@ export default function Health() {
                     ))}
                   </TableBody>
                 </Table>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Bouncers Tab */}
-        <TabsContent value="bouncers">
-          <Card>
-            <CardHeader>
-              <CardTitle>Connected Bouncers</CardTitle>
-              <CardDescription>
-                Active enforcement agents connected to CrowdSec
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {isLoading ? (
+              )
+            }
+          ]
+        },
+        {
+          id: 'bouncers',
+          label: 'Bouncers',
+          layout: '1-col',
+          sections: [
+            {
+              id: 'bouncer-status',
+              title: 'Connected Bouncers',
+              description: 'Active enforcement agents connected to CrowdSec',
+              content: isLoading ? (
                 <div className="space-y-2">
                   <div className="h-16 bg-muted animate-pulse rounded" />
                   <div className="h-16 bg-muted animate-pulse rounded" />
@@ -182,28 +154,23 @@ export default function Health() {
                 <p className="text-muted-foreground text-center py-8">
                   No bouncers connected
                 </p>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Traefik Integration Tab */}
-        <TabsContent value="traefik">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Globe className="h-5 w-5" />
-                Traefik Integration
-              </CardTitle>
-              <CardDescription>
-                Traefik middleware and configuration status
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {isLoading ? (
+              )
+            }
+          ]
+        },
+        {
+          id: 'traefik',
+          label: 'Traefik Integration',
+          layout: '1-col',
+          sections: [
+            {
+              id: 'traefik-integration',
+              title: 'Traefik Integration',
+              description: 'Traefik middleware and configuration status',
+              content: isLoading ? (
                 <div className="space-y-2">
                   <div className="h-12 bg-muted animate-pulse rounded" />
-                  <div className="h-12 bg-mute animate-pulse rounded" />
+                  <div className="h-12 bg-muted animate-pulse rounded" />
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -262,18 +229,11 @@ export default function Health() {
                     </div>
                   )}
                 </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
-
-      {/* Timestamp */}
-      {diagnostics?.timestamp && (
-        <p className="text-sm text-muted-foreground text-center">
-          Last updated: {new Date(diagnostics.timestamp).toLocaleString()}
-        </p>
-      )}
-    </div>
+              )
+            }
+          ]
+        }
+      ]}
+    />
   )
 }

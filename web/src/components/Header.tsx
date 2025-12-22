@@ -1,3 +1,8 @@
+/**
+ * @deprecated This component is deprecated. Use AppHeader from './layout/AppHeader' instead.
+ * This file will be removed in a future version.
+ */
+
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -29,10 +34,13 @@ interface HeaderProps {
   isMobileMenuOpen?: boolean
 }
 
+/**
+ * @deprecated Use AppHeader from './layout/AppHeader' instead
+ */
 export default function Header({ 
   onMobileMenuToggle, 
   isMobile = false, 
-  isMobileMenuOpen = false 
+  // isMobileMenuOpen = false // Unused prop in deprecated component
 }: HeaderProps) {
   const location = useLocation()
   

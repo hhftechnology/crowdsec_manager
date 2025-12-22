@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { StatusCard } from '@/components/common/StatusCard'
 import { 
   Activity, 
   CheckCircle2, 
@@ -22,75 +23,6 @@ import ProxyHealthIndicator from './ProxyHealthIndicator'
 
 interface StatusDashboardProps {
   className?: string
-}
-
-interface StatusCardProps {
-  title: string
-  value: string | number
-  icon: React.ComponentType<{ className?: string }>
-  variant: 'success' | 'error' | 'warning' | 'info'
-  description?: string
-  loading?: boolean
-}
-
-const StatusCard: React.FC<StatusCardProps> = ({ 
-  title, 
-  value, 
-  icon: Icon, 
-  variant, 
-  description,
-  loading 
-}) => {
-  const getVariantStyles = (variant: string) => {
-    switch (variant) {
-      case 'success':
-        return 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950'
-      case 'error':
-        return 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950'
-      case 'warning':
-        return 'border-yellow-200 bg-yellow-50 dark:border-yellow-800 dark:bg-yellow-950'
-      case 'info':
-        return 'border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950'
-      default:
-        return 'border-muted'
-    }
-  }
-
-  const getIconColor = (variant: string) => {
-    switch (variant) {
-      case 'success':
-        return 'text-green-600 dark:text-green-400'
-      case 'error':
-        return 'text-red-600 dark:text-red-400'
-      case 'warning':
-        return 'text-yellow-600 dark:text-yellow-400'
-      case 'info':
-        return 'text-blue-600 dark:text-blue-400'
-      default:
-        return 'text-muted-foreground'
-    }
-  }
-
-  return (
-    <Card className={getVariantStyles(variant)}>
-      <CardContent className="p-6">
-        <div className="flex items-center justify-between">
-          <div className="space-y-1">
-            <p className="text-sm font-medium text-muted-foreground">{title}</p>
-            {loading ? (
-              <div className="h-8 w-16 animate-pulse bg-muted rounded" />
-            ) : (
-              <p className="text-2xl font-bold">{value}</p>
-            )}
-            {description && (
-              <p className="text-xs text-muted-foreground">{description}</p>
-            )}
-          </div>
-          <Icon className={`h-8 w-8 ${getIconColor(variant)}`} />
-        </div>
-      </CardContent>
-    </Card>
-  )
 }
 
 export const StatusDashboard: React.FC<StatusDashboardProps> = ({ className }) => {
@@ -181,7 +113,7 @@ export const StatusDashboard: React.FC<StatusDashboardProps> = ({ className }) =
             title="System Health"
             value={overallHealth === 'success' ? 'Healthy' : overallHealth === 'error' ? 'Critical' : 'Warning'}
             icon={overallHealth === 'success' ? CheckCircle2 : overallHealth === 'error' ? XCircle : AlertTriangle}
-            variant={overallHealth === 'unknown' ? 'info' : overallHealth}
+            status={overallHealth === 'unknown' ? 'info' : overallHealth}
             description="Overall system status"
             loading={isLoading}
           />
@@ -190,7 +122,7 @@ export const StatusDashboard: React.FC<StatusDashboardProps> = ({ className }) =
             title="Containers"
             value={`${runningContainers}/${totalContainers}`}
             icon={Network}
-            variant={allRunning ? 'success' : runningContainers > 0 ? 'warning' : 'error'}
+            status={allRunning ? 'success' : runningContainers > 0 ? 'warning' : 'error'}
             description="Running containers"
             loading={healthLoading}
           />
@@ -199,7 +131,7 @@ export const StatusDashboard: React.FC<StatusDashboardProps> = ({ className }) =
             title="Active Bouncers"
             value={activeBouncer}
             icon={Shield}
-            variant={activeBouncer > 0 ? 'success' : 'warning'}
+            status={activeBouncer > 0 ? 'success' : 'warning'}
             description="Connected security agents"
             loading={diagnosticsLoading}
           />
@@ -208,7 +140,7 @@ export const StatusDashboard: React.FC<StatusDashboardProps> = ({ className }) =
             title="Security Decisions"
             value={totalDecisions}
             icon={BarChart3}
-            variant="info"
+            status="info"
             description="Active security decisions"
             loading={diagnosticsLoading}
           />

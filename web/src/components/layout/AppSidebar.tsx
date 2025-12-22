@@ -1,0 +1,365 @@
+import { Link, useLocation } from 'react-router-dom'
+import { cn } from '@/lib/utils'
+import {
+  LayoutDashboard,
+  Shield,
+  Network,
+  ListFilter,
+  ListChecks,
+  ScanFace,
+  FileText,
+  Database,
+  RefreshCw,
+  Clock,
+  Settings,
+  Activity,
+  Sliders,
+  AlertTriangle,
+  Target,
+  Bell,
+  HeartPulse,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Moon,
+  Sun,
+} from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { Badge } from '@/components/ui/badge'
+import { useTheme } from '@/components/ThemeProvider'
+import { useBreakpoints } from '@/hooks/useMediaQuery'
+import { ProxyType, Feature } from '@/lib/proxy-types'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+
+interface AppSidebarProps {
+  isCollapsed?: boolean
+  onCollapsedChange?: (collapsed: boolean) => void
+  className?: string
+  proxyType?: ProxyType
+  supportedFeatures?: Feature[]
+}
+
+interface NavigationItem {
+  name: string
+  href: string
+  icon: React.ComponentType<{ className?: string }>
+  badge?: string | number
+  available?: boolean
+  tooltip?: string
+}
+
+interface NavigationSection {
+  title: string
+  items: NavigationItem[]
+}
+
+const baseNavigation: NavigationSection[] = [
+  {
+    title: "Getting started",
+    items: [
+      { name: 'Dashboard', href: '/', icon: LayoutDashboard, available: true },
+      { name: 'Engines', href: '/bouncers', icon: Shield, available: true },
+      { name: 'Health', href: '/health', icon: HeartPulse, available: true },
+    ]
+  },
+  {
+    title: "Activity",
+    items: [
+      { name: 'Alerts', href: '/alerts', icon: AlertTriangle, available: true },
+      { name: 'Decisions', href: '/decisions', icon: Target, available: true },
+      { name: 'Remediation Metrics', href: '/crowdsec-health', icon: Activity, available: true },
+    ]
+  },
+  {
+    title: "Hub",
+    items: [
+      { name: 'Scenarios', href: '/scenarios', icon: FileText, available: true },
+      { name: 'Captcha', href: '/captcha', icon: ScanFace, available: true },
+    ]
+  },
+  {
+    title: "Configuration",
+    items: [
+      { name: 'Service API', href: '/services', icon: Settings, available: true },
+      { name: 'Notification settings', href: '/notifications', icon: Bell, available: true },
+      { name: 'Allowlists', href: '/allowlist', icon: ListChecks, available: true },
+      { name: 'Whitelists', href: '/whitelist', icon: ListFilter, available: true },
+      { name: 'Profiles', href: '/profiles', icon: FileText, available: true },
+      { name: 'IP Management', href: '/ip-management', icon: Network, available: true },
+    ]
+  },
+  {
+    title: "System",
+    items: [
+      { name: 'Backups', href: '/backup', icon: Database, available: true },
+      { name: 'Cron Jobs', href: '/cron', icon: Clock, available: true },
+      { name: 'Logs', href: '/logs', icon: FileText, available: true },
+      { name: 'Updates', href: '/update', icon: RefreshCw, available: true },
+      { name: 'Settings', href: '/configuration', icon: Sliders, available: true },
+    ]
+  }
+]
+
+// Feature availability mapping for different proxy types
+const getFeatureAvailability = (proxyType?: ProxyType, supportedFeatures?: Feature[]): Record<string, boolean> => {
+  if (!proxyType || !supportedFeatures) {
+    return {} // All features available by default
+  }
+
+  const availability: Record<string, boolean> = {}
+  
+  // Map features to navigation items
+  const featureMap: Record<string, Feature> = {
+    '/captcha': 'captcha',
+    '/whitelist': 'whitelist',
+    '/allowlist': 'allowlist',
+    '/ip-management': 'ip-management',
+  }
+
+  Object.entries(featureMap).forEach(([path, feature]) => {
+    availability[path] = supportedFeatures.includes(feature)
+  })
+
+  return availability
+}
+
+/**
+ * AppSidebar - Enhanced collapsible navigation sidebar component
+ * Provides hierarchical navigation with responsive behavior, proxy-aware features,
+ * and touch-friendly interactions following the shadcn-admin template architecture
+ */
+export function AppSidebar({ 
+  isCollapsed = false, 
+  onCollapsedChange,
+  className,
+  proxyType,
+  supportedFeatures
+}: AppSidebarProps) {
+  const location = useLocation()
+  const { theme, setTheme } = useTheme()
+  const { isMobile, needsTouchOptimization } = useBreakpoints()
+
+  const featureAvailability = getFeatureAvailability(proxyType, supportedFeatures)
+
+  const toggleTheme = () => {
+    setTheme(theme === "dark" ? "light" : "dark")
+  }
+
+  const handleToggleCollapsed = () => {
+    onCollapsedChange?.(!isCollapsed)
+  }
+
+  // Handle keyboard navigation
+  const handleKeyDown = (event: React.KeyboardEvent, href: string) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      window.location.href = href
+    }
+  }
+
+  // Get navigation with feature availability
+  const navigation = baseNavigation.map(section => ({
+    ...section,
+    items: section.items.map(item => ({
+      ...item,
+      available: featureAvailability[item.href] !== false
+    }))
+  }))
+
+  return (
+    <nav
+      className={cn(
+        "flex flex-col h-full bg-card text-card-foreground border-r transition-all duration-300",
+        isCollapsed ? "w-16" : "w-64",
+        // Enhanced shadow for mobile overlay
+        isMobile && "shadow-xl",
+        className
+      )}
+      role="navigation"
+      aria-label="Main navigation"
+    >
+      {/* Header with Logo and Toggle */}
+      <div className={cn(
+        "flex items-center border-b", 
+        isCollapsed ? "justify-center p-3" : "justify-between p-4",
+        // Touch-friendly padding on mobile
+        needsTouchOptimization && !isCollapsed && "p-5"
+      )}>
+        {!isCollapsed && (
+          <div className="flex items-center gap-2 font-semibold text-lg">
+            <Shield className="h-6 w-6 text-primary" aria-hidden="true" />
+            <div className="flex flex-col">
+              <span>CrowdSec Manager</span>
+              <div className="flex gap-1 mt-1">
+                <Badge variant="secondary" className="text-[10px] px-1 py-0 h-5 w-fit whitespace-nowrap">
+                  Beta-v0.0.6
+                </Badge>
+                {proxyType && (
+                  <Badge variant="outline" className="text-[10px] px-1 py-0 h-5 w-fit whitespace-nowrap">
+                    {proxyType.charAt(0).toUpperCase() + proxyType.slice(1)}
+                  </Badge>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+        
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={handleToggleCollapsed}
+          className={cn(
+            "h-8 w-8", 
+            isCollapsed && "w-full",
+            // Touch-friendly sizing on mobile
+            needsTouchOptimization && "h-10 w-10"
+          )}
+          aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          {isCollapsed ? (
+            <PanelLeftOpen className="h-4 w-4" />
+          ) : (
+            <PanelLeftClose className="h-4 w-4" />
+          )}
+        </Button>
+      </div>
+
+      {/* Navigation */}
+      <ScrollArea className="flex-1 px-2 py-4">
+        <div className="space-y-6">
+          {navigation.map((group) => (
+            <div key={group.title}>
+              {!isCollapsed && (
+                <h4 className="mb-2 px-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  {group.title}
+                </h4>
+              )}
+              <div className="space-y-1">
+                {group.items.map((item) => {
+                  const isActive = location.pathname === item.href
+                  const Icon = item.icon
+                  const isAvailable = item.available !== false
+                  
+                  if (isCollapsed) {
+                    return (
+                      <TooltipProvider key={item.name}>
+                        <Tooltip delayDuration={0}>
+                          <TooltipTrigger asChild>
+                            <Link
+                              to={item.href}
+                              className={cn(
+                                "flex items-center justify-center rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+                                // Touch-friendly sizing
+                                needsTouchOptimization ? "p-3" : "p-2",
+                                isActive
+                                  ? "bg-primary text-primary-foreground"
+                                  : isAvailable
+                                  ? "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                                  : "text-muted-foreground/50 cursor-not-allowed opacity-50"
+                              )}
+                              aria-label={item.name}
+                              onKeyDown={(e) => handleKeyDown(e, item.href)}
+                              onClick={(e) => !isAvailable && e.preventDefault()}
+                            >
+                              <Icon className={cn(needsTouchOptimization ? "h-6 w-6" : "h-5 w-5")} />
+                              {item.badge && (
+                                <span className="sr-only">{item.badge} notifications</span>
+                              )}
+                            </Link>
+                          </TooltipTrigger>
+                          <TooltipContent side="right">
+                            <div className="flex flex-col gap-1">
+                              <div className="flex items-center gap-2">
+                                {item.name}
+                                {item.badge && (
+                                  <Badge variant="secondary" className="text-xs">
+                                    {item.badge}
+                                  </Badge>
+                                )}
+                              </div>
+                              {!isAvailable && item.tooltip && (
+                                <span className="text-xs text-muted-foreground">{item.tooltip}</span>
+                              )}
+                              {!isAvailable && !item.tooltip && (
+                                <span className="text-xs text-muted-foreground">
+                                  Not available for {proxyType} proxy
+                                </span>
+                              )}
+                            </div>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )
+                  }
+
+                  return (
+                    <Link
+                      key={item.name}
+                      to={item.href}
+                      className={cn(
+                        "flex items-center gap-3 rounded-md text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+                        // Touch-friendly sizing
+                        needsTouchOptimization ? "px-4 py-3" : "px-3 py-2",
+                        isActive
+                          ? "bg-primary text-primary-foreground"
+                          : isAvailable
+                          ? "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                          : "text-muted-foreground/50 cursor-not-allowed opacity-50"
+                      )}
+                      onKeyDown={(e) => handleKeyDown(e, item.href)}
+                      onClick={(e) => !isAvailable && e.preventDefault()}
+                    >
+                      <Icon className={cn(needsTouchOptimization ? "h-5 w-5" : "h-4 w-4")} />
+                      <span className="flex-1">{item.name}</span>
+                      {item.badge && (
+                        <Badge variant="secondary" className="text-xs">
+                          {item.badge}
+                        </Badge>
+                      )}
+                      {!isAvailable && (
+                        <Badge variant="secondary" className="text-xs">
+                          N/A
+                        </Badge>
+                      )}
+                    </Link>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      </ScrollArea>
+
+      {/* Footer with Theme Toggle */}
+      <div className={cn(
+        "border-t",
+        needsTouchOptimization ? "p-5" : "p-4"
+      )}>
+        <Button
+          variant="ghost"
+          size={isCollapsed ? "icon" : "default"}
+          onClick={toggleTheme}
+          className={cn(
+            "w-full justify-start transition-all focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+            isCollapsed && "justify-center",
+            // Touch-friendly sizing on mobile
+            needsTouchOptimization && "py-3 h-auto"
+          )}
+          aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
+        >
+          {theme === "dark" ? (
+            <Sun className={cn(needsTouchOptimization ? "h-5 w-5" : "h-4 w-4")} />
+          ) : (
+            <Moon className={cn(needsTouchOptimization ? "h-5 w-5" : "h-4 w-4")} />
+          )}
+          {!isCollapsed && <span className="ml-2">Toggle Theme</span>}
+        </Button>
+      </div>
+    </nav>
+  )
+}

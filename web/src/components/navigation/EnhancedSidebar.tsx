@@ -1,3 +1,9 @@
+/**
+ * @deprecated This component is deprecated. Enhanced features have been merged into AppSidebar.
+ * Use AppSidebar from '../layout/AppSidebar' instead with proxyType and supportedFeatures props.
+ * This file will be removed in a future version.
+ */
+
 import { Link, useLocation } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
@@ -102,6 +108,9 @@ function NavigationItem({ item, isActive, isCollapsed }: NavigationItemProps) {
   )
 }
 
+/**
+ * @deprecated Use AppSidebar from '../layout/AppSidebar' instead with proxyType and supportedFeatures props
+ */
 export function EnhancedSidebar({ 
   proxyType, 
   supportedFeatures, 
@@ -119,7 +128,9 @@ export function EnhancedSidebar({
   }
 
   return (
-    <div
+    <nav
+      role="navigation"
+      aria-label="Main navigation"
       className={cn(
         "flex flex-col h-full bg-card text-card-foreground border-r transition-all duration-300",
         isCollapsed ? "w-16" : "w-64"
@@ -146,6 +157,7 @@ export function EnhancedSidebar({
           size="icon"
           onClick={() => setIsCollapsed(!isCollapsed)}
           className={cn("h-8 w-8", isCollapsed && "w-full")}
+          aria-label={isCollapsed ? "Expand navigation" : "Collapse navigation"}
         >
           {isCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
         </Button>
@@ -207,6 +219,6 @@ export function EnhancedSidebar({
           {!isCollapsed && <span className="ml-2">Toggle Theme</span>}
         </Button>
       </div>
-    </div>
+    </nav>
   )
 }

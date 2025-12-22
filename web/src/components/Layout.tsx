@@ -1,35 +1,49 @@
+/**
+ * @deprecated This component is deprecated. Use ResponsiveLayout from './layout/ResponsiveLayout' instead.
+ * This file will be removed in a future version.
+ */
+
 import { ReactNode, useState, useEffect } from 'react'
 import Sidebar from './Sidebar'
 import Header from './Header'
 import { cn } from '@/lib/utils'
-import { useMediaQuery } from '@/hooks/useMediaQuery'
+import { useBreakpoints } from '@/hooks/useMediaQuery'
 
 interface LayoutProps {
   children: ReactNode
 }
 
+/**
+ * @deprecated Use ResponsiveLayout from './layout/ResponsiveLayout' instead
+ */
 export default function Layout({ children }: LayoutProps) {
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   
-  // Responsive breakpoints
-  const isMobile = useMediaQuery('(max-width: 768px)')
-  const isTablet = useMediaQuery('(min-width: 769px) and (max-width: 1024px)')
-  const isDesktop = useMediaQuery('(min-width: 1025px)')
+  // Enhanced responsive breakpoints
+  const { 
+    isMobile, 
+    isTablet, 
+    isDesktop, 
+    // needsTouchOptimization, // Unused in deprecated component
+    // isLandscape, // Unused in deprecated component
+    isPortrait 
+  } = useBreakpoints()
 
-  // Auto-collapse sidebar on mobile
+  // Auto-collapse sidebar based on screen size and orientation
   useEffect(() => {
     if (isMobile) {
       setIsCollapsed(true)
       setIsMobileMenuOpen(false)
     } else if (isTablet) {
-      setIsCollapsed(true)
+      // On tablet, consider orientation
+      setIsCollapsed(isPortrait ? true : false)
     } else if (isDesktop) {
       setIsCollapsed(false)
     }
-  }, [isMobile, isTablet, isDesktop])
+  }, [isMobile, isTablet, isDesktop, isPortrait])
 
-  // Close mobile menu when clicking outside
+  // Close mobile menu when clicking outside or on route change
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (isMobile && isMobileMenuOpen) {
@@ -40,8 +54,31 @@ export default function Layout({ children }: LayoutProps) {
       }
     }
 
+    const handleRouteChange = () => {
+      if (isMobile && isMobileMenuOpen) {
+        setIsMobileMenuOpen(false)
+      }
+    }
+
     document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
+    window.addEventListener('popstate', handleRouteChange)
+    
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      window.removeEventListener('popstate', handleRouteChange)
+    }
+  }, [isMobile, isMobileMenuOpen])
+
+  // Handle keyboard navigation for mobile menu
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (isMobile && event.key === 'Escape' && isMobileMenuOpen) {
+        setIsMobileMenuOpen(false)
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
   }, [isMobile, isMobileMenuOpen])
 
   const handleSidebarToggle = () => {
@@ -53,12 +90,17 @@ export default function Layout({ children }: LayoutProps) {
   }
 
   return (
-    <div className="flex h-full bg-background overflow-hidden">
+    <div className={cn(
+      "flex h-full bg-background overflow-hidden",
+      // Add safe area padding for mobile devices
+      isMobile && "min-h-screen-safe"
+    )}>
       {/* Mobile Overlay */}
       {isMobile && isMobileMenuOpen && (
         <div 
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden backdrop-blur-sm"
           onClick={() => setIsMobileMenuOpen(false)}
+          aria-hidden="true"
         />
       )}
 
@@ -94,30 +136,37 @@ export default function Layout({ children }: LayoutProps) {
         
         <main className={cn(
           "flex-1 overflow-y-auto bg-background transition-all duration-300",
-          // Responsive padding
-          "p-3 sm:p-4 md:p-6",
-          // Touch-friendly spacing on mobile
-          isMobile && "pb-safe-area-inset-bottom"
+          // Responsive padding with touch-friendly spacing
+          isMobile ? "p-3 pb-safe-bottom" : isTablet ? "p-4" : "p-6",
+          // Ensure proper scrolling on mobile
+          isMobile && "overscroll-behavior-y-contain"
         )}>
           <div className={cn(
-            "mx-auto",
+            "mx-auto w-full",
             // Responsive max-width
-            "max-w-full",
-            isTablet && "max-w-6xl",
-            isDesktop && "max-w-7xl"
+            isMobile ? "max-w-full" : isTablet ? "max-w-6xl" : "max-w-7xl"
           )}>
             {children}
           </div>
         </main>
         
-        {/* Footer - hidden on mobile to save space */}
+        {/* Footer - adaptive visibility */}
         <footer className={cn(
           "border-t text-center text-xs text-muted-foreground bg-background transition-all",
-          isMobile ? "hidden" : "p-4"
+          // Hide on mobile portrait, show on landscape and larger screens
+          isMobile && isPortrait ? "hidden" : "p-4",
+          // Add safe area padding on mobile
+          isMobile && "pb-safe-bottom"
         )}>
-          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
+          <div className={cn(
+            "flex gap-2",
+            isMobile ? "flex-col items-center" : "flex-row justify-between items-center"
+          )}>
             <p>&copy; {new Date().getFullYear()} HHF Technology</p>
-            <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
+            <div className={cn(
+              "flex gap-2",
+              isMobile ? "flex-col items-center" : "flex-row gap-4"
+            )}>
               <p>Powered by CrowdSec (Only for Pangolin Users)</p>
               <p>CrowdSec Manager - Beta-version - v0.0.1</p>
             </div>

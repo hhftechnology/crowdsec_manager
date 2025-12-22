@@ -16,7 +16,36 @@ export default {
         "2xl": "1400px",
       },
     },
+    screens: {
+      'xs': '475px',
+      'sm': '640px',
+      'md': '768px',
+      'lg': '1024px',
+      'xl': '1280px',
+      '2xl': '1400px',
+      // Touch device queries
+      'touch': { 'raw': '(hover: none) and (pointer: coarse)' },
+      'no-touch': { 'raw': '(hover: hover) and (pointer: fine)' },
+      // Orientation queries
+      'portrait': { 'raw': '(orientation: portrait)' },
+      'landscape': { 'raw': '(orientation: landscape)' },
+    },
     extend: {
+      spacing: {
+        'safe-top': 'env(safe-area-inset-top)',
+        'safe-bottom': 'env(safe-area-inset-bottom)',
+        'safe-left': 'env(safe-area-inset-left)',
+        'safe-right': 'env(safe-area-inset-right)',
+      },
+      minHeight: {
+        'touch-target': '44px',
+        'screen-safe': 'calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom))',
+      },
+      maxWidth: {
+        'mobile': '100vw',
+        'tablet': '768px',
+        'desktop': '1024px',
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
@@ -51,6 +80,33 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        // Netflix-inspired brand colors
+        netflix: {
+          red: "hsl(var(--netflix-red))",
+          "dark-red": "hsl(var(--netflix-dark-red))",
+          black: "hsl(var(--netflix-black))",
+          "dark-gray": "hsl(var(--netflix-dark-gray))",
+          gray: "hsl(var(--netflix-gray))",
+          "light-gray": "hsl(var(--netflix-light-gray))",
+          white: "hsl(var(--netflix-white))",
+        },
+      },
+      boxShadow: {
+        sm: "var(--shadow-sm)",
+        DEFAULT: "var(--shadow)",
+        md: "var(--shadow-md)",
+        lg: "var(--shadow-lg)",
+        xl: "var(--shadow-xl)",
+      },
+      fontFamily: {
+        sans: [
+          "Netflix Sans",
+          "Helvetica Neue",
+          "Segoe UI",
+          "Roboto",
+          "Ubuntu",
+          "sans-serif",
+        ],
       },
       borderRadius: {
         lg: "var(--radius)",
