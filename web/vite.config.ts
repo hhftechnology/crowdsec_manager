@@ -35,37 +35,41 @@ export default defineConfig({
     chunkSizeWarningLimit: 1000,
     rollupOptions: {
       output: {
-        // Optimized manual chunking strategy
+        // Simplified chunking strategy to avoid dependency loading issues
         manualChunks: (id) => {
-          // Vendor chunk for core React libraries
-          if (id.includes('react') || id.includes('react-dom') || id.includes('react-router-dom')) {
-            return 'vendor'
-          }
-          
-          // UI chunk for Radix UI components
-          if (id.includes('@radix-ui/')) {
-            return 'ui-radix'
-          }
-          
-          // Icons and styling chunk
-          if (id.includes('lucide-react') || id.includes('class-variance-authority') || 
-              id.includes('clsx') || id.includes('tailwind-merge') || id.includes('sonner')) {
-            return 'ui-utils'
-          }
-          
-          // Query and data management
-          if (id.includes('@tanstack/react-query') || id.includes('axios')) {
-            return 'data'
-          }
-          
-          // Forms and validation
-          if (id.includes('react-hook-form') || id.includes('date-fns')) {
-            return 'forms'
-          }
-          
-          // Node modules that aren't specifically chunked above
           if (id.includes('node_modules')) {
-            return 'vendor-misc'
+            // Put React and all React-dependent libraries in one vendor chunk
+            // This prevents the "Cannot read properties of undefined (reading 'useState')" error
+            // that occurs when chunks load out of order
+            if (
+              id.includes('react') ||
+              id.includes('react-dom') ||
+              id.includes('react-router-dom') ||
+              id.includes('@radix-ui/') ||
+              id.includes('@tanstack/react-query') ||
+              id.includes('react-hook-form')
+            ) {
+              return 'vendor'
+            }
+
+            // Icons and styling
+            if (id.includes('lucide-react') || id.includes('class-variance-authority') ||
+                id.includes('clsx') || id.includes('tailwind-merge') || id.includes('sonner')) {
+              return 'ui-utils'
+            }
+
+            // Data fetching
+            if (id.includes('axios')) {
+              return 'data'
+            }
+
+            // Other utilities
+            if (id.includes('date-fns') || id.includes('cmdk')) {
+              return 'utils'
+            }
+
+            // All other node_modules
+            return 'libs'
           }
         },
         // Optimize asset naming for better caching
