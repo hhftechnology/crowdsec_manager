@@ -26,6 +26,12 @@
     --ring: 0 100% 50%;
     --radius: 0.5rem;
     
+    /* Layout dimensions for consistent alignment */
+    --sidebar-width-expanded: 16rem; /* 256px */
+    --sidebar-width-collapsed: 4rem; /* 64px */
+    --header-height: 4rem; /* 64px */
+    --header-height-mobile: 3.5rem; /* 56px */
+    
     /* Netflix-inspired design tokens */
     --netflix-red: 0 100% 50%;
     --netflix-dark-red: 0 100% 45%;
@@ -72,6 +78,18 @@
     --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.4), 0 4px 6px -4px rgb(0 0 0 / 0.4);
     --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.4), 0 8px 10px -6px rgb(0 0 0 / 0.4);
   }
+  
+  /* Smooth theme transitions to prevent white flashes */
+  * {
+    transition-property: background-color, border-color, color, fill, stroke;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transition-duration: 150ms;
+  }
+  
+  /* Prevent transition on page load */
+  .no-transition * {
+    transition: none !important;
+  }
 }
 
 @layer base {
@@ -85,9 +103,82 @@
   body {
     @apply bg-background text-foreground;
   }
+  
+  /* Fix white border issues */
+  *,
+  *::before,
+  *::after {
+    border-color: hsl(var(--border));
+  }
+  
+  /* Ensure proper border color inheritance */
+  button,
+  input,
+  select,
+  textarea {
+    border-color: hsl(var(--border));
+  }
+  
+  /* Fix focus states to prevent white borders */
+  *:focus,
+  *:focus-visible {
+    outline-color: hsl(var(--ring));
+    border-color: hsl(var(--ring));
+  }
 }
 
 @layer utilities {
+  /* Layout utilities for consistent dimensions */
+  .sidebar-width-expanded {
+    width: var(--sidebar-width-expanded);
+  }
+  
+  .sidebar-width-collapsed {
+    width: var(--sidebar-width-collapsed);
+  }
+  
+  .header-height {
+    height: var(--header-height);
+  }
+  
+  .header-height-mobile {
+    height: var(--header-height-mobile);
+  }
+  
+  /* Scrolling utilities */
+  .scroll-smooth-enhanced {
+    scroll-behavior: smooth;
+    scroll-padding-top: 1rem;
+    scroll-padding-bottom: 1rem;
+  }
+  
+  /* Border fix utilities */
+  .border-theme {
+    border-color: hsl(var(--border));
+  }
+  
+  .border-theme-focus {
+    border-color: hsl(var(--ring));
+  }
+  
+  /* Tab-specific utilities */
+  .tab-container {
+    overflow: visible;
+    position: relative;
+  }
+  
+  .tab-trigger {
+    min-width: fit-content;
+    overflow: visible;
+    position: relative;
+    z-index: 10;
+  }
+  
+  .tab-trigger-active {
+    z-index: 20;
+    position: relative;
+  }
+  
   /* Safe area utilities for mobile devices */
   .pb-safe-area-inset-bottom {
     padding-bottom: env(safe-area-inset-bottom);
@@ -207,6 +298,114 @@
   --border: 0 0% 50%;
   --input: 0 0% 20%;
   --ring: 0 0% 100%;
+}
+
+/* Cross-browser compatibility fixes */
+/* CSS Grid fallbacks for older browsers */
+@supports not (display: grid) {
+  .grid {
+    display: flex;
+  }
+  
+  .grid-cols-\[auto_1fr\] {
+    flex-direction: row;
+  }
+  
+  .grid-rows-\[auto_1fr\] {
+    flex-direction: column;
+  }
+}
+
+/* CSS Custom Properties fallbacks */
+@supports not (color: hsl(var(--primary))) {
+  :root {
+    --primary-fallback: #e50914;
+    --background-fallback: #fafafa;
+    --foreground-fallback: #171717;
+    --border-fallback: #e5e5e5;
+  }
+  
+  .dark {
+    --primary-fallback: #e50914;
+    --background-fallback: #171717;
+    --foreground-fallback: #fafafa;
+    --border-fallback: #333333;
+  }
+  
+  body {
+    background-color: var(--background-fallback);
+    color: var(--foreground-fallback);
+  }
+  
+  .border {
+    border-color: var(--border-fallback);
+  }
+}
+
+/* Flexbox fallbacks for CSS Grid */
+.app-layout-fallback {
+  display: flex;
+  height: 100vh;
+}
+
+.app-layout-fallback .sidebar {
+  flex-shrink: 0;
+}
+
+.app-layout-fallback .main-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.app-layout-fallback .header {
+  flex-shrink: 0;
+}
+
+.app-layout-fallback .content {
+  flex: 1;
+  overflow-y: auto;
+}
+
+/* Safari-specific fixes */
+@supports (-webkit-appearance: none) {
+  .scroll-smooth-enhanced {
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  /* Fix for Safari's scrollbar behavior */
+  .overflow-y-auto::-webkit-scrollbar {
+    width: 8px;
+  }
+  
+  .overflow-y-auto::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  .overflow-y-auto::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 4px;
+  }
+  
+  .overflow-y-auto::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground));
+  }
+}
+
+/* Firefox-specific fixes */
+@-moz-document url-prefix() {
+  .overflow-y-auto {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+}
+
+/* Edge-specific fixes */
+@supports (-ms-ime-align: auto) {
+  .grid {
+    display: -ms-grid;
+  }
 }
 
 /* Reduced motion */

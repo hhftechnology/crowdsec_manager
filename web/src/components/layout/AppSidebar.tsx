@@ -174,7 +174,9 @@ export function AppSidebar({
   return (
     <nav
       className={cn(
-        "flex flex-col h-full bg-card text-card-foreground border-r transition-all duration-300",
+        "flex flex-col bg-card text-card-foreground border-r transition-all duration-300",
+        // Fixed height to enable scrolling
+        "h-screen",
         isCollapsed ? "w-16" : "w-64",
         // Enhanced shadow for mobile overlay
         isMobile && "shadow-xl",
@@ -185,7 +187,7 @@ export function AppSidebar({
     >
       {/* Header with Logo and Toggle */}
       <div className={cn(
-        "flex items-center border-b", 
+        "flex items-center border-b flex-shrink-0", 
         isCollapsed ? "justify-center p-3" : "justify-between p-4",
         // Touch-friendly padding on mobile
         needsTouchOptimization && !isCollapsed && "p-5"
@@ -229,8 +231,8 @@ export function AppSidebar({
         </Button>
       </div>
 
-      {/* Navigation */}
-      <ScrollArea className="flex-1 px-2 py-4">
+      {/* Navigation - Fixed scrolling container */}
+      <div className="flex-1 overflow-y-auto overflow-x-hidden px-2 py-4 scroll-smooth">
         <div className="space-y-6">
           {navigation.map((group) => (
             <div key={group.title}>
@@ -333,11 +335,11 @@ export function AppSidebar({
             </div>
           ))}
         </div>
-      </ScrollArea>
+      </div>
 
       {/* Footer with Theme Toggle */}
       <div className={cn(
-        "border-t",
+        "border-t flex-shrink-0",
         needsTouchOptimization ? "p-5" : "p-4"
       )}>
         <Button

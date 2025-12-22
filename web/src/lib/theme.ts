@@ -59,12 +59,15 @@ export function resolveTheme(mode: ThemeMode, systemPreference?: 'light' | 'dark
 }
 
 /**
- * Apply theme to document
+ * Apply theme to document with smooth transitions
  */
 export function applyTheme(theme: 'light' | 'dark', accessibility?: AccessibilityPreferences) {
   if (typeof document === 'undefined') return
   
   const root = document.documentElement
+  
+  // Temporarily disable transitions to prevent white flashes
+  root.classList.add('no-transition')
   
   // Remove existing theme classes
   root.classList.remove('light', 'dark')
@@ -79,6 +82,13 @@ export function applyTheme(theme: 'light' | 'dark', accessibility?: Accessibilit
     root.classList.toggle('large-text', accessibility.largeText)
     root.classList.toggle('screen-reader-optimized', accessibility.screenReaderOptimized)
   }
+  
+  // Re-enable transitions after a brief delay
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      root.classList.remove('no-transition')
+    })
+  })
 }
 
 /**

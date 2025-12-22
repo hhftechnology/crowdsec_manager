@@ -119,7 +119,9 @@ export default function Sidebar({
       role="navigation"
       aria-label="Main navigation"
       className={cn(
-        "flex flex-col h-full bg-card text-card-foreground border-r transition-all duration-300",
+        "flex flex-col bg-card text-card-foreground border-r transition-all duration-300",
+        // Fixed height to enable scrolling
+        "h-screen",
         // Mobile: full width overlay
         isMobile ? "w-64 shadow-lg" : 
         // Desktop/Tablet: responsive width
@@ -128,7 +130,7 @@ export default function Sidebar({
     >
       {/* Header with Toggle */}
       <div className={cn(
-        "flex items-center p-4 border-b", 
+        "flex items-center p-4 border-b flex-shrink-0", 
         effectiveCollapsed ? "justify-center" : "justify-between"
       )}>
         {!effectiveCollapsed && (
@@ -157,7 +159,7 @@ export default function Sidebar({
       </div>
 
       {/* Navigation */}
-      <ScrollArea className="flex-1 px-2 py-4">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden px-2 py-4 scroll-smooth">
         <div className="space-y-6">
           {navigation.map((group) => (
             <div key={group.title}>
@@ -220,10 +222,10 @@ export default function Sidebar({
             </div>
           ))}
         </div>
-      </ScrollArea>
+      </div>
 
       {/* Footer with Theme Toggle */}
-      <div className="p-4 border-t">
+      <div className="p-4 border-t flex-shrink-0">
         <Button
           variant="ghost"
           size={effectiveCollapsed ? "icon" : "default"}

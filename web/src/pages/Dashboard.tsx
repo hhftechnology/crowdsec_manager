@@ -3,8 +3,7 @@ import api from '@/lib/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { AlertCircle, CheckCircle2, Container, Shield, Users } from 'lucide-react'
-import { StatusCard, CounterStatusCard } from '@/components/common/StatusCard'
-import { StatusCard, CounterStatusCard } from '@/components/common/StatusCard'
+import { StandardizedStatusCard as StatusCard, CounterStatusCard } from '@/components/common/StandardizedStatusCard'
 import { ResponsiveGrid } from '@/components/ui/responsive-grid'
 import { useBreakpoints } from '@/hooks/useMediaQuery'
 import { cn } from '@/lib/utils'
@@ -12,32 +11,38 @@ import { cn } from '@/lib/utils'
 export default function Dashboard() {
   const { isMobile, needsTouchOptimization } = useBreakpoints()
   
-  const { data: healthData, isLoading: healthLoading } = useQuery({
+  const { data: healthData, isLoading: healthLoading, error: healthError } = useQuery({
     queryKey: ['health'],
     queryFn: async () => {
       const response = await api.health.checkStack()
       return response.data.data
     },
     refetchInterval: 5000, // Refresh every 5 seconds
+    retry: 1, // Only retry once
   })
 
-  const { data: decisionsData, isLoading: decisionsLoading } = useQuery({
+  const { data: decisionsData, isLoading: decisionsLoading, error: decisionsError } = useQuery({
     queryKey: ['decisions'],
     queryFn: async () => {
       const response = await api.crowdsec.getDecisions()
       return response.data.data
     },
     refetchInterval: 10000, // Refresh every 10 seconds
+    retry: 1, // Only retry once
   })
 
-  const { data: bouncersData, isLoading: bouncersLoading } = useQuery({
+  const { data: bouncersData, isLoading: bouncersLoading, error: bouncersError } = useQuery({
     queryKey: ['bouncers'],
     queryFn: async () => {
       const response = await api.crowdsec.getBouncers()
       return response.data.data
     },
     refetchInterval: 30000, // Refresh every 30 seconds
+    retry: 1, // Only retry once
   })
+
+  // Check if we have connection errors
+  const hasConnectionError = healthError || decisionsError || bouncersError
 
   const parseDecisionsCount = (data: any): number => {
     if (!data) return 0
@@ -77,6 +82,26 @@ export default function Dashboard() {
           System overview and health status
         </p>
       </div>
+
+      {/* Connection Error Banner */}
+      {hasConnectionError && (
+        <Card className="border-destructive bg-destructive/5">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-destructive">
+              <AlertCircle className="h-5 w-5" />
+              Backend Connection Error
+            </CardTitle>
+            <CardDescription>
+              Unable to connect to the CrowdSec Manager backend server. Please ensure:
+              <ul className="list-disc list-inside mt-2 space-y-1">
+                <li>The backend server is running on port 8080</li>
+                <li>Docker containers are properly configured</li>
+                <li>Network connectivity is available</li>
+              </ul>
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      )}
 
       {/* System Health Status */}
       <Card className={cn(

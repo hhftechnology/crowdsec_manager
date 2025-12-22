@@ -6,7 +6,24 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  timeout: 10000, // 10 second timeout
 })
+
+// Add response interceptor for better error handling
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    // Log the error for debugging
+    console.error('API Error:', error.message)
+    
+    // If it's a network error (backend not available), provide a user-friendly message
+    if (error.code === 'ECONNREFUSED' || error.code === 'ERR_NETWORK' || !error.response) {
+      error.message = 'Backend server is not available. Please ensure the CrowdSec Manager backend is running on port 8080.'
+    }
+    
+    return Promise.reject(error)
+  }
+)
 
 // TypeScript Interfaces matching backend models
 export interface ApiResponse<T = any> {

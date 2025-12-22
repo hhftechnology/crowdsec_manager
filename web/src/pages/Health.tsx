@@ -3,7 +3,7 @@ import api from '@/lib/api'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { CheckCircle2, XCircle, Activity, Shield } from 'lucide-react'
-import { StatusCard, CounterStatusCard } from '@/components/common/StatusCard'
+import { StandardizedStatusCard as StatusCard, CounterStatusCard } from '@/components/common/StandardizedStatusCard'
 
 export default function Health() {
   const { data: diagnostics, isLoading } = useQuery({

@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils'
 import { ProxyType, ProxyHealthData } from '@/lib/proxy-types'
-import { StatusCard } from '@/components/common/StatusCard'
+import { StandardizedStatusCard as StatusCard } from '@/components/common/StandardizedStatusCard'
 import {
   Network,
   Shield,

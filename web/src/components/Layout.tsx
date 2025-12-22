@@ -91,88 +91,95 @@ export default function Layout({ children }: LayoutProps) {
 
   return (
     <div className={cn(
-      "flex h-full bg-background overflow-hidden",
+      "grid h-screen bg-background overflow-hidden",
+      // CSS Grid layout for proper alignment
+      "grid-cols-[auto_1fr] grid-rows-[auto_1fr]",
       // Add safe area padding for mobile devices
       isMobile && "min-h-screen-safe"
-    )}>
-      {/* Mobile Overlay */}
-      {isMobile && isMobileMenuOpen && (
-        <div 
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden backdrop-blur-sm"
-          onClick={() => setIsMobileMenuOpen(false)}
-          aria-hidden="true"
-        />
+    )}
+    style={{
+      gridTemplateAreas: '"sidebar header" "sidebar main"'
+    }}
+  >
+    {/* Mobile Overlay */}
+    {isMobile && isMobileMenuOpen && (
+      <div 
+        className="fixed inset-0 bg-black/50 z-40 lg:hidden backdrop-blur-sm"
+        onClick={() => setIsMobileMenuOpen(false)}
+        aria-hidden="true"
+      />
+    )}
+
+    {/* Sidebar */}
+    <div
+      data-sidebar
+      className={cn(
+        "transition-all duration-300 ease-in-out z-50",
+        // Mobile: slide in from left as overlay
+        isMobile && [
+          "fixed inset-y-0 left-0",
+          isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
+        ],
+        // Tablet/Desktop: normal sidebar behavior
+        !isMobile && "relative"
       )}
+      style={{ gridArea: 'sidebar' }}
+    >
+      <Sidebar 
+        isCollapsed={!isMobile && isCollapsed} 
+        setIsCollapsed={handleSidebarToggle}
+        isMobile={isMobile}
+        isMobileMenuOpen={isMobileMenuOpen}
+      />
+    </div>
 
-      {/* Sidebar */}
-      <div
-        data-sidebar
-        className={cn(
-          "transition-all duration-300 ease-in-out z-50",
-          // Mobile: slide in from left as overlay
-          isMobile && [
-            "fixed inset-y-0 left-0",
-            isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
-          ],
-          // Tablet/Desktop: normal sidebar behavior
-          !isMobile && "relative"
-        )}
-      >
-        <Sidebar 
-          isCollapsed={!isMobile && isCollapsed} 
-          setIsCollapsed={handleSidebarToggle}
-          isMobile={isMobile}
-          isMobileMenuOpen={isMobileMenuOpen}
-        />
-      </div>
-
-      {/* Main Content */}
-      <div className="flex flex-col flex-1 overflow-hidden min-w-0">
-        <Header 
-          onMobileMenuToggle={handleSidebarToggle}
-          isMobile={isMobile}
-          isMobileMenuOpen={isMobileMenuOpen}
-        />
-        
-        <main className={cn(
-          "flex-1 overflow-y-auto bg-background transition-all duration-300",
-          // Responsive padding with touch-friendly spacing
-          isMobile ? "p-3 pb-safe-bottom" : isTablet ? "p-4" : "p-6",
-          // Ensure proper scrolling on mobile
-          isMobile && "overscroll-behavior-y-contain"
+    {/* Main Content */}
+    <div className="flex flex-col overflow-hidden min-w-0" style={{ gridArea: 'main' }}>
+      <Header 
+        onMobileMenuToggle={handleSidebarToggle}
+        isMobile={isMobile}
+        isMobileMenuOpen={isMobileMenuOpen}
+      />
+      
+      <main className={cn(
+        "flex-1 overflow-y-auto bg-background transition-all duration-300",
+        // Responsive padding with touch-friendly spacing
+        isMobile ? "p-3 pb-safe-bottom" : isTablet ? "p-4" : "p-6",
+        // Ensure proper scrolling on mobile
+        isMobile && "overscroll-behavior-y-contain"
+      )}>
+        <div className={cn(
+          "mx-auto w-full",
+          // Responsive max-width
+          isMobile ? "max-w-full" : isTablet ? "max-w-6xl" : "max-w-7xl"
         )}>
-          <div className={cn(
-            "mx-auto w-full",
-            // Responsive max-width
-            isMobile ? "max-w-full" : isTablet ? "max-w-6xl" : "max-w-7xl"
-          )}>
-            {children}
-          </div>
-        </main>
-        
-        {/* Footer - adaptive visibility */}
-        <footer className={cn(
-          "border-t text-center text-xs text-muted-foreground bg-background transition-all",
-          // Hide on mobile portrait, show on landscape and larger screens
-          isMobile && isPortrait ? "hidden" : "p-4",
-          // Add safe area padding on mobile
-          isMobile && "pb-safe-bottom"
+          {children}
+        </div>
+      </main>
+      
+      {/* Footer - adaptive visibility */}
+      <footer className={cn(
+        "border-t text-center text-xs text-muted-foreground bg-background transition-all",
+        // Hide on mobile portrait, show on landscape and larger screens
+        isMobile && isPortrait ? "hidden" : "p-4",
+        // Add safe area padding on mobile
+        isMobile && "pb-safe-bottom"
+      )}>
+        <div className={cn(
+          "flex gap-2",
+          isMobile ? "flex-col items-center" : "flex-row justify-between items-center"
         )}>
+          <p>&copy; {new Date().getFullYear()} HHF Technology</p>
           <div className={cn(
             "flex gap-2",
-            isMobile ? "flex-col items-center" : "flex-row justify-between items-center"
+            isMobile ? "flex-col items-center" : "flex-row gap-4"
           )}>
-            <p>&copy; {new Date().getFullYear()} HHF Technology</p>
-            <div className={cn(
-              "flex gap-2",
-              isMobile ? "flex-col items-center" : "flex-row gap-4"
-            )}>
-              <p>Powered by CrowdSec (Only for Pangolin Users)</p>
-              <p>CrowdSec Manager - Beta-version - v0.0.1</p>
-            </div>
+            <p>Powered by CrowdSec (Only for Pangolin Users)</p>
+            <p>CrowdSec Manager - Beta-version - v0.0.1</p>
           </div>
-        </footer>
-      </div>
+        </div>
+      </footer>
     </div>
+  </div>
   )
 }
