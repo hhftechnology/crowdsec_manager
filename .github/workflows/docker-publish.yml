@@ -8,7 +8,7 @@ on:
       - dev-go
       - dev-discord
       - traefik
-      - traefik-dev-dashboard
+      - traefik-dev-Dashboard
     tags:
       - 'v*'
   pull_request:
