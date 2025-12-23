@@ -640,6 +640,69 @@ export const allowlistAPI = {
     api.delete<ApiResponse>(`/allowlist/${name}`),
 }
 
+// ============================================================================
+// VALIDATION API - Environment variable and path validation endpoints
+// ============================================================================
+
+import type {
+  ValidationResult,
+  ValidationApiResponse,
+  EnvVarValidation,
+  LayerValidation,
+  ProxyRequirements,
+  Suggestion,
+} from './validation-types'
+
+const validationAPI = {
+  // Complete validation
+  validateComplete: () =>
+    api.get<ValidationApiResponse<ValidationResult>>('/config/validate/complete'),
+
+  // Quick summary
+  getSummary: () =>
+    api.get<ValidationApiResponse<any>>('/config/summary'),
+
+  // Suggestions
+  getSuggestions: () =>
+    api.get<ValidationApiResponse<{ suggestions: Suggestion[]; summary: any }>>('/config/suggestions'),
+
+  // Environment variables
+  getEnvVars: () =>
+    api.get<ValidationApiResponse<Record<string, string>>>('/config/env'),
+
+  validateEnvVars: () =>
+    api.post<ValidationApiResponse<EnvVarValidation>>('/config/env/validate'),
+
+  getRequiredEnvVars: (proxyType?: string) =>
+    api.get<ValidationApiResponse<any>>(
+      proxyType ? `/config/env/required/${proxyType}` : '/config/env/required'
+    ),
+
+  // Path validation
+  validateHostPaths: () =>
+    api.get<ValidationApiResponse<LayerValidation>>('/config/paths/validate/host'),
+
+  validateContainerPaths: () =>
+    api.get<ValidationApiResponse<LayerValidation>>('/config/paths/validate/container'),
+
+  testPath: (path: string, type: 'host' | 'container') =>
+    api.post<ValidationApiResponse<any>>('/config/paths/test', { path, type }),
+
+  // Volume validation
+  validateVolumes: () =>
+    api.get<ValidationApiResponse<LayerValidation>>('/config/volumes/validate'),
+
+  // Requirements
+  getRequirements: (proxyType?: string) =>
+    api.get<ValidationApiResponse<ProxyRequirements | Record<string, ProxyRequirements>>>(
+      proxyType ? `/config/requirements/${proxyType}` : '/config/requirements'
+    ),
+
+  // Export
+  exportEnvFile: () =>
+    api.get('/config/export/env', { responseType: 'blob' }),
+}
+
 // Export default API object with all endpoints organized
 export default {
   health: healthAPI,
@@ -656,8 +719,9 @@ export default {
   traefik: traefikAPI,
   allowlist: allowlistAPI,
   proxy: proxyAPI,
+  validation: validationAPI,
 }
 
-// Total: 51 endpoints
+// Total: 64 endpoints (+13 validation endpoints)
 // Health: 2, IP: 4, Whitelist: 7, Scenarios: 2, Captcha: 2, Logs: 5,
-// Backup: 6, Update: 3, Cron: 3, Services: 3, CrowdSec: 6, Traefik: 4, Allowlist: 6
+// Backup: 6, Update: 3, Cron: 3, Services: 3, CrowdSec: 6, Traefik: 4, Allowlist: 6, Validation: 13

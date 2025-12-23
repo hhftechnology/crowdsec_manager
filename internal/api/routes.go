@@ -227,3 +227,30 @@ func RegisterAddonRoutes(router *gin.RouterGroup, composeManager *compose.Compos
 		addons.POST("/:addon/disable", handlers.DisableAddon(composeManager, cfg))
 	}
 }
+
+// RegisterValidationRoutes configures endpoints for environment variable and path validation
+func RegisterValidationRoutes(router *gin.RouterGroup, dockerClient *docker.Client, cfg *config.Config) {
+	// Complete validation
+	router.GET("/config/validate/complete", handlers.ValidateComplete(cfg, dockerClient))
+	router.GET("/config/summary", handlers.GetValidationSummary(cfg, dockerClient))
+	router.GET("/config/suggestions", handlers.GetSuggestions(cfg, dockerClient))
+
+	// Environment variables
+	router.GET("/config/env", handlers.GetEnvVars(cfg))
+	router.POST("/config/env/validate", handlers.ValidateEnv(cfg, dockerClient))
+	router.GET("/config/env/required", handlers.GetRequiredEnvVars(cfg))
+	router.GET("/config/env/required/:proxyType", handlers.GetRequiredEnvVars(cfg))
+
+	// Path validation
+	router.GET("/config/paths/validate/host", handlers.ValidateHostPaths(cfg, dockerClient))
+	router.GET("/config/paths/validate/container", handlers.ValidateContainerPaths(cfg, dockerClient))
+	router.POST("/config/paths/test", handlers.TestPath())
+
+	// Volume validation
+	router.GET("/config/volumes/validate", handlers.ValidateVolumeMappings(cfg, dockerClient))
+
+	// Requirements and export
+	router.GET("/config/requirements", handlers.GetProxyRequirements())
+	router.GET("/config/requirements/:proxyType", handlers.GetProxyRequirements())
+	router.GET("/config/export/env", handlers.ExportEnvFile(cfg, dockerClient))
+}
