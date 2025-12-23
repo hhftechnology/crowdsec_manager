@@ -49,6 +49,9 @@ func GetBouncers(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFun
 
 		// Compute status for each bouncer
 		for i := range bouncers {
+			// Ensure Valid is set correctly based on Revoked status from cscli
+			bouncers[i].Valid = !bouncers[i].Revoked
+
 			// Primary indicator: if last pull was recent (within 5 minutes), bouncer is connected
 			if time.Since(bouncers[i].LastPull) <= 5*time.Minute {
 				bouncers[i].Status = "connected"

@@ -84,6 +84,7 @@ export interface Bouncer {
   name: string
   ip_address: string
   valid: boolean
+  revoked?: boolean
   last_pull: string
   type: string
   version: string
