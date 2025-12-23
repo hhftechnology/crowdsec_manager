@@ -304,6 +304,12 @@ func analyzeLogs(logs string) models.LogStats {
 	}
 
 	ipMap := make(map[string]int)
+	
+	// Regex for Common Log Format (CLF) / Combined Log Format
+	// 127.0.0.1 - - [10/Oct/2000:13:55:36 -0700] "GET /apache_pb.gif HTTP/1.0" 200 2326
+	clfRegex := regexp.MustCompile(`^(\S+) \S+ \S+ \[([^\]]+)\] "([A-Z]+) [^"]+" (\d{3})`)
+	
+	// Fallback loose regexes
 	ipRegex := regexp.MustCompile(`\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b`)
 	statusRegex := regexp.MustCompile(`\s(2\d{2}|3\d{2}|4\d{2}|5\d{2})\s`)
 	methodRegex := regexp.MustCompile(`"(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)`)
@@ -313,26 +319,47 @@ func analyzeLogs(logs string) models.LogStats {
 			continue
 		}
 
-		// Extract IPs
-		if ips := ipRegex.FindAllString(line, -1); len(ips) > 0 {
-			for _, ip := range ips {
-				ipMap[ip]++
+		var ip, method, status string
+		
+		// Try CLF parsing first
+		if matches := clfRegex.FindStringSubmatch(line); len(matches) == 5 {
+			ip = matches[1]
+			method = matches[3]
+			status = matches[4]
+		} else {
+			// Fallback to loose parsing
+			if ips := ipRegex.FindAllString(line, -1); len(ips) > 0 {
+				ip = ips[0] // Take first IP
+			}
+			if matches := methodRegex.FindStringSubmatch(line); len(matches) > 1 {
+				method = matches[1]
+			}
+			if matches := statusRegex.FindStringSubmatch(line); len(matches) > 1 {
+				status = matches[1]
 			}
 		}
 
-		// Extract status codes
-		if matches := statusRegex.FindStringSubmatch(line); len(matches) > 1 {
-			stats.StatusCodes[matches[1]]++
+		// Update stats
+		if ip != "" {
+			ipMap[ip]++
 		}
-
-		// Extract HTTP methods
-		if matches := methodRegex.FindStringSubmatch(line); len(matches) > 1 {
-			stats.HTTPMethods[matches[1]]++
+		if method != "" {
+			stats.HTTPMethods[method]++
 		}
-
-		// Collect error entries
-		if strings.Contains(strings.ToLower(line), "error") ||
-			strings.Contains(line, "5") && statusRegex.MatchString(line) {
+		if status != "" {
+			stats.StatusCodes[status]++
+			
+			// Check for errors (4xx, 5xx)
+			if strings.HasPrefix(status, "4") || strings.HasPrefix(status, "5") {
+				stats.ErrorEntries = append(stats.ErrorEntries, models.LogEntry{
+					Timestamp: time.Now(), // Ideally parse timestamp from log
+					Level:     "error",
+					Service:   "traefik",
+					Message:   line,
+				})
+			}
+		} else if strings.Contains(strings.ToLower(line), "error") {
+			// Catch other error lines that might not have a status code (e.g. stack traces)
 			stats.ErrorEntries = append(stats.ErrorEntries, models.LogEntry{
 				Timestamp: time.Now(),
 				Level:     "error",

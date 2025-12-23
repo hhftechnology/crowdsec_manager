@@ -3,6 +3,7 @@ package database
 import (
 	"crowdsec-manager/internal/models"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -340,24 +341,36 @@ func (d *Database) GetProxySettings() (*models.ProxySettings, error) {
 		return nil, err
 	}
 
-	// Parse JSON fields (simplified parsing for now)
-	settings.ConfigPaths = make(map[string]string)
-	settings.CustomSettings = make(map[string]string)
-	settings.EnabledFeatures = []string{}
+	// Parse JSON fields
+	if err := json.Unmarshal([]byte(configPathsJSON), &settings.ConfigPaths); err != nil {
+		settings.ConfigPaths = make(map[string]string)
+	}
+	if err := json.Unmarshal([]byte(customSettingsJSON), &settings.CustomSettings); err != nil {
+		settings.CustomSettings = make(map[string]string)
+	}
+	if err := json.Unmarshal([]byte(enabledFeaturesJSON), &settings.EnabledFeatures); err != nil {
+		settings.EnabledFeatures = []string{}
+	}
 
-	// TODO: Implement proper JSON parsing
-	// For now, return basic structure
 	return settings, nil
 }
 
 // UpdateProxySettings updates proxy settings in database
 func (d *Database) UpdateProxySettings(settings *models.ProxySettings) error {
-	// TODO: Implement JSON marshaling for map fields
-	configPathsJSON := "{}"
-	customSettingsJSON := "{}"
-	enabledFeaturesJSON := "[]"
+	configPathsBytes, err := json.Marshal(settings.ConfigPaths)
+	if err != nil {
+		return fmt.Errorf("failed to marshal config paths: %w", err)
+	}
+	customSettingsBytes, err := json.Marshal(settings.CustomSettings)
+	if err != nil {
+		return fmt.Errorf("failed to marshal custom settings: %w", err)
+	}
+	enabledFeaturesBytes, err := json.Marshal(settings.EnabledFeatures)
+	if err != nil {
+		return fmt.Errorf("failed to marshal enabled features: %w", err)
+	}
 
-	_, err := d.db.Exec(`
+	_, err = d.db.Exec(`
 		UPDATE proxy_settings
 		SET proxy_type = ?,
 		    container_name = ?,
@@ -367,7 +380,7 @@ func (d *Database) UpdateProxySettings(settings *models.ProxySettings) error {
 		    updated_at = CURRENT_TIMESTAMP
 		WHERE id = 1
 	`, settings.ProxyType, settings.ContainerName,
-		configPathsJSON, customSettingsJSON, enabledFeaturesJSON)
+		string(configPathsBytes), string(customSettingsBytes), string(enabledFeaturesBytes))
 	
 	return err
 }

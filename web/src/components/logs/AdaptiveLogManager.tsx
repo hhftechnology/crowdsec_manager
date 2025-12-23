@@ -43,9 +43,16 @@ export function AdaptiveLogManager({
   
   // Use props if provided, otherwise use context
   const proxyType = propProxyType || contextProxyType
-  const [selectedLogType, setSelectedLogType] = useState<'crowdsec' | 'proxy'>('crowdsec')
-  const [tailLines, setTailLines] = useState('100')
-  const [autoRefresh, setAutoRefresh] = useState(false)
+  // Initialize state from localStorage or defaults
+  const [selectedLogType, setSelectedLogType] = useState<'crowdsec' | 'proxy'>(() => {
+    return localStorage.getItem('logManager_selectedLogType') as 'crowdsec' | 'proxy' || 'crowdsec'
+  })
+  const [tailLines, setTailLines] = useState(() => {
+    return localStorage.getItem('logManager_tailLines') || '100'
+  })
+  const [autoRefresh, setAutoRefresh] = useState(() => {
+    return localStorage.getItem('logManager_autoRefresh') === 'true'
+  })
   const [logFilters, setLogFilters] = useState<LogFilter>({
     searchTerm: '',
     logLevel: [],
@@ -55,6 +62,19 @@ export function AdaptiveLogManager({
     httpMethod: [],
     source: []
   })
+
+  // Persist settings to localStorage
+  useEffect(() => {
+    localStorage.setItem('logManager_selectedLogType', selectedLogType)
+  }, [selectedLogType])
+
+  useEffect(() => {
+    localStorage.setItem('logManager_tailLines', tailLines)
+  }, [tailLines])
+
+  useEffect(() => {
+    localStorage.setItem('logManager_autoRefresh', String(autoRefresh))
+  }, [autoRefresh])
 
   // supportsLogs and proxyName are now from useProxyCapabilities hook
 
@@ -145,6 +165,62 @@ export function AdaptiveLogManager({
     }
     
     return types
+  }
+
+  // Export functionality
+  const handleExportLogs = () => {
+    if (!filteredLogs.logs) return
+    const blob = new Blob([filteredLogs.logs], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${selectedLogType}-logs-${new Date().toISOString()}.txt`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
+  const handleExportStats = () => {
+    if (!logStats) return
+    const statsJson = JSON.stringify(logStats, null, 2)
+    const blob = new Blob([statsJson], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${proxyType}-stats-${new Date().toISOString()}.json`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
+  const handleGenerateReport = () => {
+    if (!logStats) return
+    
+    const report = `Log Analysis Report
+Generated: ${new Date().toLocaleString()}
+Proxy: ${proxyName}
+Total Lines Processed: ${logStats.total_lines}
+
+Top 5 IPs:
+${logStats.top_ips.slice(0, 5).map(ip => `- ${ip.ip}: ${ip.count} requests`).join('\n')}
+
+Status Code Distribution:
+${Object.entries(logStats.status_codes).map(([code, count]) => `- ${code}: ${count}`).join('\n')}
+
+Top 5 HTTP Methods:
+${Object.entries(logStats.http_methods).sort((a,b) => b[1] - a[1]).slice(0, 5).map(([method, count]) => `- ${method}: ${count}`).join('\n')}
+`
+    const blob = new Blob([report], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `log-report-${new Date().toISOString()}.txt`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
   }
 
   const availableLogTypes = getAvailableLogTypes()
@@ -589,13 +665,13 @@ export function AdaptiveLogManager({
               <div className="space-y-3">
                 <h4 className="font-medium">Export Options</h4>
                 <div className="flex gap-2">
-                  <Button variant="outline" size="sm">
+                  <Button variant="outline" size="sm" onClick={handleExportLogs} disabled={!filteredLogs.logs}>
                     Export Filtered Logs
                   </Button>
-                  <Button variant="outline" size="sm">
+                  <Button variant="outline" size="sm" onClick={handleExportStats} disabled={!logStats}>
                     Export Statistics
                   </Button>
-                  <Button variant="outline" size="sm">
+                  <Button variant="outline" size="sm" onClick={handleGenerateReport} disabled={!logStats}>
                     Generate Report
                   </Button>
                 </div>
