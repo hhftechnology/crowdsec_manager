@@ -31,20 +31,100 @@ CrowdSec Manager is configured primarily through environment variables passed to
 |----------|---------|-------------|
 | `DATABASE_PATH` | `/app/data/settings.db` | Path to the SQLite database file. Ensure this path is persistent. |
 
-## Traefik Integration
+## Path Configuration (v2.0+)
+
+<Callout type="info">
+**New in v2.0**: All container-internal paths are now fully configurable through environment variables, fixing [Issue #28](https://github.com/hhftechnology/crowdsec_manager/issues/28). Environment variables are now **actually used** instead of being ignored.
+</Callout>
+
+**Configuration Priority**: Database Settings > Environment Variables > Defaults
+
+### Traefik Paths (Container-Internal)
+
+These paths refer to files **inside the Traefik container**, not on the host system.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `TRAEFIK_DYNAMIC_CONFIG` | `/dynamic_config.yml` | Path to Traefik's dynamic configuration file. |
-| `TRAEFIK_STATIC_CONFIG` | `/etc/traefik/traefik_config.yml` | Path to Traefik's static configuration file. |
-| `TRAEFIK_ACCESS_LOG` | `/var/log/traefik/access.log` | Path to read Traefik access logs from. |
-| `TRAEFIK_ERROR_LOG` | `/var/log/traefik/traefik.log` | Path to read Traefik error logs from. |
+| `TRAEFIK_DYNAMIC_CONFIG` | `/etc/traefik/dynamic_config.yml` | Traefik dynamic configuration file path. Used for whitelist operations, bouncer config, etc. |
+| `TRAEFIK_STATIC_CONFIG` | `/etc/traefik/traefik.yml` | Traefik static configuration file path. |
+| `TRAEFIK_ACCESS_LOG` | `/var/log/traefik/access.log` | Traefik access log file path for log parsing. |
+| `TRAEFIK_ERROR_LOG` | `/var/log/traefik/traefik.log` | Traefik error log file path for diagnostics. |
+| `TRAEFIK_CAPTCHA_HTML` | `/etc/traefik/assets/captcha.html` | Captcha HTML template file path. |
+| `TRAEFIK_ASSETS_DIR` | `/etc/traefik/assets` | Assets directory for static files. |
+| `TRAEFIK_RULES_DIR` | `/etc/traefik/rules` | Rules directory for dynamic configurations. |
+| `TRAEFIK_CONF_DIR` | `/etc/traefik/conf` | Configuration directory for additional configs. |
+
+**Example Custom Configuration:**
+
+If your Traefik container uses a custom folder structure like:
+```
+/etc/traefik/
+  ├── rules/
+  │   └── dynamic_config.yml
+  └── conf/
+      └── captcha.html
+```
+
+Set these environment variables:
+```env
+TRAEFIK_DYNAMIC_CONFIG=/etc/traefik/rules/dynamic_config.yml
+TRAEFIK_CAPTCHA_HTML=/etc/traefik/conf/captcha.html
+```
+
+### CrowdSec Paths (Container-Internal)
+
+These paths refer to files **inside the CrowdSec container**, not on the host system.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CROWDSEC_ACQUIS_FILE` | `/etc/crowdsec/acquis.yaml` | CrowdSec acquisition configuration file. |
+| `CROWDSEC_ACQUIS_DIR` | `/etc/crowdsec/acquis.d` | Acquisition directory for multiple acquisition files. |
+| `CROWDSEC_CONFIG_DIR` | `/etc/crowdsec` | CrowdSec configuration directory. |
+| `CROWDSEC_DATA_DIR` | `/var/lib/crowdsec/data` | CrowdSec data directory for databases and state. |
+
+### Manager Paths (Container-Internal)
+
+These paths refer to files **inside the Manager container**, not on the host system.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MANAGER_CONFIG_DIR` | `/app/config` | Manager configuration directory. |
+| `MANAGER_DATA_DIR` | `/app/data` | Manager data directory for database and state. |
+| `MANAGER_BACKUP_DIR` | `/app/backups` | Backup storage directory. |
+| `MANAGER_LOG_DIR` | `/app/logs` | Log directory for Manager application logs. |
+
+### Multi-Proxy Paths (Container-Internal)
+
+Paths for other supported reverse proxy types.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `NGINX_CONFIG_PATH` | `/data/nginx` | Nginx Proxy Manager configuration path. |
+| `NGINX_LOG_PATH` | `/data/logs` | Nginx Proxy Manager logs path. |
+| `CADDY_CONFIG_PATH` | `/etc/caddy` | Caddy configuration path. |
+| `CADDY_LOG_PATH` | `/var/log/caddy` | Caddy log path. |
+| `HAPROXY_CONFIG_PATH` | `/usr/local/etc/haproxy` | HAProxy configuration path. |
+| `HAPROXY_SOCKET_PATH` | `/var/run/haproxy.sock` | HAProxy runtime API socket path. |
+| `ZORAXY_CONFIG_PATH` | `/opt/zoraxy` | Zoraxy configuration path (experimental). |
+
+<Callout type="warning">
+**Important**: These are **container-internal paths**, not host paths. They refer to paths inside the respective containers. Use volume mounts in your `docker-compose.yml` to map host directories to these container paths.
+</Callout>
+
+### Migration from v1.x
+
+<Callout type="success">
+If you use default paths, **no changes are required**. The system automatically uses the defaults.
+
+If you set custom paths via environment variables in v1.x and they were ignored, they will now be **respected** in v2.0.
+</Callout>
+
+See [PATH_CONFIGURATION_MIGRATION_GUIDE.md](https://github.com/hhftechnology/crowdsec_manager/blob/main/PATH_CONFIGURATION_MIGRATION_GUIDE.md) for detailed migration instructions.
 
 ## CrowdSec Integration
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `CROWDSEC_ACQUIS_FILE` | `/etc/crowdsec/acquis.yaml` | Path to CrowdSec acquisition configuration. |
 | `INCLUDE_CROWDSEC` | `false` | Whether to manage CrowdSec container updates/restarts. |
 
 ## Backup Configuration

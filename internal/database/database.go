@@ -106,6 +106,26 @@ func (d *Database) initSchema() error {
 		"ALTER TABLE settings ADD COLUMN discord_webhook_token TEXT NOT NULL DEFAULT ''",
 		"ALTER TABLE settings ADD COLUMN geoapify_key TEXT NOT NULL DEFAULT ''",
 		"ALTER TABLE settings ADD COLUMN cti_key TEXT NOT NULL DEFAULT ''",
+		// Path configuration migrations (v2.0)
+		"ALTER TABLE settings ADD COLUMN traefik_assets_dir TEXT NOT NULL DEFAULT '/etc/traefik/assets'",
+		"ALTER TABLE settings ADD COLUMN traefik_captcha_html TEXT NOT NULL DEFAULT '/etc/traefik/assets/captcha.html'",
+		"ALTER TABLE settings ADD COLUMN traefik_rules_dir TEXT NOT NULL DEFAULT '/etc/traefik/rules'",
+		"ALTER TABLE settings ADD COLUMN traefik_conf_dir TEXT NOT NULL DEFAULT '/etc/traefik/conf'",
+		"ALTER TABLE settings ADD COLUMN crowdsec_acquis_dir TEXT NOT NULL DEFAULT '/etc/crowdsec/acquis.d'",
+		"ALTER TABLE settings ADD COLUMN crowdsec_config_dir TEXT NOT NULL DEFAULT '/etc/crowdsec'",
+		"ALTER TABLE settings ADD COLUMN crowdsec_data_dir TEXT NOT NULL DEFAULT '/var/lib/crowdsec/data'",
+		"ALTER TABLE settings ADD COLUMN manager_config_dir TEXT NOT NULL DEFAULT '/app/config'",
+		"ALTER TABLE settings ADD COLUMN manager_data_dir TEXT NOT NULL DEFAULT '/app/data'",
+		"ALTER TABLE settings ADD COLUMN manager_backup_dir TEXT NOT NULL DEFAULT '/app/backups'",
+		"ALTER TABLE settings ADD COLUMN manager_log_dir TEXT NOT NULL DEFAULT '/app/logs'",
+		// Multi-proxy path support
+		"ALTER TABLE settings ADD COLUMN nginx_config_path TEXT NOT NULL DEFAULT '/data/nginx'",
+		"ALTER TABLE settings ADD COLUMN nginx_log_path TEXT NOT NULL DEFAULT '/data/logs'",
+		"ALTER TABLE settings ADD COLUMN caddy_config_path TEXT NOT NULL DEFAULT '/etc/caddy'",
+		"ALTER TABLE settings ADD COLUMN caddy_log_path TEXT NOT NULL DEFAULT '/var/log/caddy'",
+		"ALTER TABLE settings ADD COLUMN haproxy_config_path TEXT NOT NULL DEFAULT '/usr/local/etc/haproxy'",
+		"ALTER TABLE settings ADD COLUMN haproxy_socket_path TEXT NOT NULL DEFAULT '/var/run/haproxy.sock'",
+		"ALTER TABLE settings ADD COLUMN zoraxy_config_path TEXT NOT NULL DEFAULT '/opt/zoraxy'",
 	}
 
 	for _, query := range migrations {

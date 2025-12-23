@@ -29,26 +29,22 @@ func NewTraefikLogManager(dockerClient *docker.Client, cfg *config.Config) *Trae
 
 // GetAccessLogs retrieves Traefik access logs
 func (t *TraefikLogManager) GetAccessLogs(ctx context.Context, tail int) (string, error) {
-	logger.Info("Getting Traefik access logs", "tail", tail)
-	
-	// Try to read from access log file first
-	accessLogPath := "/var/log/traefik/access.log"
-	if t.cfg.TraefikAccessLog != "" {
-		accessLogPath = t.cfg.TraefikAccessLog
-	}
-	
+	accessLogPath := t.cfg.Paths.TraefikAccessLog
+	logger.Info("Getting Traefik access logs", "tail", tail, "path", accessLogPath)
+
 	logs, err := t.dockerClient.ExecCommand(t.cfg.TraefikContainerName, []string{
 		"tail", "-n", fmt.Sprintf("%d", tail), accessLogPath,
 	})
 	if err != nil {
 		// Fallback to container logs if file reading fails
-		logger.Warn("Failed to read access log file, falling back to container logs", "error", err)
+		logger.Warn("Failed to read access log file, falling back to container logs",
+			"path", accessLogPath, "error", err)
 		logs, err = t.dockerClient.GetContainerLogs(t.cfg.TraefikContainerName, fmt.Sprintf("%d", tail))
 		if err != nil {
-			return "", fmt.Errorf("failed to get Traefik logs: %w", err)
+			return "", fmt.Errorf("failed to get Traefik logs from %s: %w", accessLogPath, err)
 		}
 	}
-	
+
 	return logs, nil
 }
 
@@ -68,10 +64,7 @@ func (t *TraefikLogManager) AnalyzeLogs(ctx context.Context, tail int) (*models.
 
 // GetLogPath returns the path to the Traefik access log file
 func (t *TraefikLogManager) GetLogPath() string {
-	if t.cfg.TraefikAccessLog != "" {
-		return t.cfg.TraefikAccessLog
-	}
-	return "/var/log/traefik/access.log"
+	return t.cfg.Paths.TraefikAccessLog
 }
 
 // analyzeLogs performs log analysis and returns statistics

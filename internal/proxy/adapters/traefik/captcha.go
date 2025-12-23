@@ -169,11 +169,13 @@ func (t *TraefikCaptchaManager) GetCaptchaStatus(ctx context.Context) (*proxy.Ca
 	logger.Info("Getting Traefik captcha status")
 
 	// Check dynamic_config.yml for captcha configuration
+	dynamicConfigPath := t.cfg.Paths.TraefikDynamicConfig
+	logger.Info("Reading Traefik dynamic config", "path", dynamicConfigPath)
 	configContent, err := t.dockerClient.ExecCommand(t.cfg.TraefikContainerName, []string{
-		"cat", "/etc/traefik/dynamic_config.yml",
+		"cat", dynamicConfigPath,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to read dynamic config: %w", err)
+		return nil, fmt.Errorf("failed to read dynamic config from %s: %w", dynamicConfigPath, err)
 	}
 
 	configured := false
@@ -186,8 +188,10 @@ func (t *TraefikCaptchaManager) GetCaptchaStatus(ctx context.Context) (*proxy.Ca
 	}
 
 	// Check if captcha.html exists in Traefik container
+	captchaHTMLPath := t.cfg.Paths.TraefikCaptchaHTML
+	logger.Info("Checking captcha HTML file", "path", captchaHTMLPath)
 	captchaHTMLExists := false
-	exists, err := t.dockerClient.FileExists(t.cfg.TraefikContainerName, "/etc/traefik/conf/captcha.html")
+	exists, err := t.dockerClient.FileExists(t.cfg.TraefikContainerName, captchaHTMLPath)
 	if err == nil && exists {
 		captchaHTMLExists = true
 	}
@@ -202,13 +206,15 @@ func (t *TraefikCaptchaManager) GetCaptchaStatus(ctx context.Context) (*proxy.Ca
 // DisableCaptcha disables captcha configuration
 func (t *TraefikCaptchaManager) DisableCaptcha(ctx context.Context) error {
 	logger.Info("Disabling Traefik captcha")
-	
+
 	// Remove captcha.html file
+	captchaHTMLPath := t.cfg.Paths.TraefikCaptchaHTML
+	logger.Info("Removing captcha HTML file", "path", captchaHTMLPath)
 	_, err := t.dockerClient.ExecCommand(t.cfg.TraefikContainerName, []string{
-		"rm", "-f", "/etc/traefik/conf/captcha.html",
+		"rm", "-f", captchaHTMLPath,
 	})
 	if err != nil {
-		logger.Warn("Failed to remove captcha.html", "error", err)
+		logger.Warn("Failed to remove captcha.html", "path", captchaHTMLPath, "error", err)
 	}
 	
 	// TODO: Remove captcha configuration from dynamic_config.yml
@@ -389,10 +395,13 @@ func (t *TraefikCaptchaManager) updateTraefikCaptchaConfig(req *models.CaptchaSe
 		provider = req.Provider
 	}
 	
+	captchaHTMLPath := t.cfg.Paths.TraefikCaptchaHTML
+	logger.Info("Setting captcha configuration", "provider", provider, "captchaHTMLPath", captchaHTMLPath)
+
 	setScalar(crowdsecPluginNode, "captchaProvider", provider, "")
 	setScalar(crowdsecPluginNode, "captchaSiteKey", req.SiteKey, "")
 	setScalar(crowdsecPluginNode, "captchaSecretKey", req.SecretKey, "")
-	setScalar(crowdsecPluginNode, "captchaHTMLFilePath", "/etc/traefik/conf/captcha.html", "")
+	setScalar(crowdsecPluginNode, "captchaHTMLFilePath", captchaHTMLPath, "")
 	setScalar(crowdsecPluginNode, "captchaGracePeriodSeconds", "1800", "!!int")
 
 	// Create backup before modifying

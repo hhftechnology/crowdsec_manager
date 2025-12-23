@@ -26,79 +26,83 @@ func NewTraefikWhitelistManager(dockerClient *docker.Client, cfg *config.Config)
 
 // ViewWhitelist returns all whitelisted IPs from Traefik dynamic configuration
 func (t *TraefikWhitelistManager) ViewWhitelist(ctx context.Context) ([]string, error) {
-	logger.Info("Viewing Traefik whitelist")
-	
-	// Get Traefik whitelist from dynamic config
+	logger.Info("Viewing Traefik whitelist", "config_path", t.cfg.Paths.TraefikDynamicConfig)
+
+	// Get Traefik whitelist from dynamic config using configured path
 	traefikWL, err := t.dockerClient.ExecCommand(t.cfg.TraefikContainerName, []string{
-		"cat", "/etc/traefik/dynamic_config.yml",
+		"cat", t.cfg.Paths.TraefikDynamicConfig,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to read Traefik dynamic config: %w", err)
+		return nil, fmt.Errorf("failed to read Traefik dynamic config at %s: %w", t.cfg.Paths.TraefikDynamicConfig, err)
 	}
-	
+
 	return t.parseTraefikWhitelist(traefikWL), nil
 }
 
 // AddIP adds an IP address to the Traefik whitelist
 func (t *TraefikWhitelistManager) AddIP(ctx context.Context, ip string) error {
-	logger.Info("Adding IP to Traefik whitelist", "ip", ip)
-	
+	logger.Info("Adding IP to Traefik whitelist", "ip", ip, "config_path", t.cfg.Paths.TraefikDynamicConfig)
+
 	// Update Traefik dynamic config using sed to add IP to sourceRange
+	// Uses configured path instead of hardcoded path
 	_, err := t.dockerClient.ExecCommand(t.cfg.TraefikContainerName, []string{
-		"sh", "-c", fmt.Sprintf(`sed -i '/sourceRange:/a\        - %s' /etc/traefik/dynamic_config.yml`, ip),
+		"sh", "-c", fmt.Sprintf(`sed -i '/sourceRange:/a\        - %s' %s`, ip, t.cfg.Paths.TraefikDynamicConfig),
 	})
 	if err != nil {
-		return fmt.Errorf("failed to add IP to Traefik whitelist: %w", err)
+		return fmt.Errorf("failed to add IP to Traefik whitelist at %s: %w", t.cfg.Paths.TraefikDynamicConfig, err)
 	}
-	
+
 	logger.Info("IP added to Traefik whitelist successfully", "ip", ip)
 	return nil
 }
 
 // RemoveIP removes an IP address from the Traefik whitelist
 func (t *TraefikWhitelistManager) RemoveIP(ctx context.Context, ip string) error {
-	logger.Info("Removing IP from Traefik whitelist", "ip", ip)
-	
+	logger.Info("Removing IP from Traefik whitelist", "ip", ip, "config_path", t.cfg.Paths.TraefikDynamicConfig)
+
 	// Use sed to remove the specific IP from the dynamic config
+	// Uses configured path instead of hardcoded path
 	_, err := t.dockerClient.ExecCommand(t.cfg.TraefikContainerName, []string{
-		"sh", "-c", fmt.Sprintf(`sed -i '/^\s*-\s*%s\s*$/d' /etc/traefik/dynamic_config.yml`, regexp.QuoteMeta(ip)),
+		"sh", "-c", fmt.Sprintf(`sed -i '/^\s*-\s*%s\s*$/d' %s`, regexp.QuoteMeta(ip), t.cfg.Paths.TraefikDynamicConfig),
 	})
 	if err != nil {
-		return fmt.Errorf("failed to remove IP from Traefik whitelist: %w", err)
+		return fmt.Errorf("failed to remove IP from Traefik whitelist at %s: %w", t.cfg.Paths.TraefikDynamicConfig, err)
 	}
-	
+
 	logger.Info("IP removed from Traefik whitelist successfully", "ip", ip)
 	return nil
 }
 
 // AddCIDR adds a CIDR range to the Traefik whitelist
 func (t *TraefikWhitelistManager) AddCIDR(ctx context.Context, cidr string) error {
-	logger.Info("Adding CIDR to Traefik whitelist", "cidr", cidr)
-	
+	logger.Info("Adding CIDR to Traefik whitelist", "cidr", cidr, "config_path", t.cfg.Paths.TraefikDynamicConfig)
+
 	// Update Traefik dynamic config using sed to add CIDR to sourceRange
+	// Uses configured path instead of hardcoded path
 	_, err := t.dockerClient.ExecCommand(t.cfg.TraefikContainerName, []string{
-		"sh", "-c", fmt.Sprintf(`sed -i '/sourceRange:/a\        - %s' /etc/traefik/dynamic_config.yml`, cidr),
+		"sh", "-c", fmt.Sprintf(`sed -i '/sourceRange:/a\        - %s' %s`, cidr, t.cfg.Paths.TraefikDynamicConfig),
 	})
 	if err != nil {
-		return fmt.Errorf("failed to add CIDR to Traefik whitelist: %w", err)
+		return fmt.Errorf("failed to add CIDR to Traefik whitelist at %s: %w", t.cfg.Paths.TraefikDynamicConfig, err)
 	}
-	
+
 	logger.Info("CIDR added to Traefik whitelist successfully", "cidr", cidr)
 	return nil
 }
 
 // RemoveCIDR removes a CIDR range from the Traefik whitelist
 func (t *TraefikWhitelistManager) RemoveCIDR(ctx context.Context, cidr string) error {
-	logger.Info("Removing CIDR from Traefik whitelist", "cidr", cidr)
-	
+	logger.Info("Removing CIDR from Traefik whitelist", "cidr", cidr, "config_path", t.cfg.Paths.TraefikDynamicConfig)
+
 	// Use sed to remove the specific CIDR from the dynamic config
+	// Uses configured path instead of hardcoded path
 	_, err := t.dockerClient.ExecCommand(t.cfg.TraefikContainerName, []string{
-		"sh", "-c", fmt.Sprintf(`sed -i '/^\s*-\s*%s\s*$/d' /etc/traefik/dynamic_config.yml`, regexp.QuoteMeta(cidr)),
+		"sh", "-c", fmt.Sprintf(`sed -i '/^\s*-\s*%s\s*$/d' %s`, regexp.QuoteMeta(cidr), t.cfg.Paths.TraefikDynamicConfig),
 	})
 	if err != nil {
-		return fmt.Errorf("failed to remove CIDR from Traefik whitelist: %w", err)
+		return fmt.Errorf("failed to remove CIDR from Traefik whitelist at %s: %w", t.cfg.Paths.TraefikDynamicConfig, err)
 	}
-	
+
 	logger.Info("CIDR removed from Traefik whitelist successfully", "cidr", cidr)
 	return nil
 }

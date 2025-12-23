@@ -168,13 +168,13 @@ whitelist:
 		}
 
 		if req.AddToTraefik {
-			// Update Traefik dynamic config
+			// Update Traefik dynamic config using configured path
 			_, err := dockerClient.ExecCommand(cfg.TraefikContainerName, []string{
-				"sh", "-c", fmt.Sprintf(`sed -i '/sourceRange:/a\        - %s' /etc/traefik/dynamic_config.yml`, req.IP),
+				"sh", "-c", fmt.Sprintf(`sed -i '/sourceRange:/a\        - %s' %s`, req.IP, cfg.Paths.TraefikDynamicConfig),
 			})
 			if err != nil {
-				errMsg := fmt.Sprintf("Failed to add IP to Traefik whitelist: %v", err)
-				logger.Error(errMsg, "error", err)
+				errMsg := fmt.Sprintf("Failed to add IP to Traefik whitelist at %s: %v", cfg.Paths.TraefikDynamicConfig, err)
+				logger.Error(errMsg, "error", err, "config_path", cfg.Paths.TraefikDynamicConfig)
 				errors = append(errors, errMsg)
 			} else {
 				successMessages = append(successMessages, "Added to Traefik whitelist")
@@ -303,10 +303,10 @@ func AddToTraefikWhitelist(dockerClient *docker.Client, cfg *config.Config) gin.
 			return
 		}
 
-		logger.Info("Adding to Traefik whitelist", "ip", req.IP)
+		logger.Info("Adding to Traefik whitelist", "ip", req.IP, "config_path", cfg.Paths.TraefikDynamicConfig)
 
 		_, err := dockerClient.ExecCommand(cfg.TraefikContainerName, []string{
-			"sh", "-c", fmt.Sprintf(`sed -i '/sourceRange:/a\        - %s' /etc/traefik/dynamic_config.yml`, req.IP),
+			"sh", "-c", fmt.Sprintf(`sed -i '/sourceRange:/a\        - %s' %s`, req.IP, cfg.Paths.TraefikDynamicConfig),
 		})
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, models.Response{
@@ -371,9 +371,9 @@ whitelist:
 			results["crowdsec"] = true
 		}
 
-		// Add to Traefik
+		// Add to Traefik using configured path
 		_, err = dockerClient.ExecCommand(cfg.TraefikContainerName, []string{
-			"sh", "-c", fmt.Sprintf(`sed -i '/sourceRange:/a\        - %s' /etc/traefik/dynamic_config.yml`, ip),
+			"sh", "-c", fmt.Sprintf(`sed -i '/sourceRange:/a\        - %s' %s`, ip, cfg.Paths.TraefikDynamicConfig),
 		})
 		if err == nil {
 			results["traefik"] = true

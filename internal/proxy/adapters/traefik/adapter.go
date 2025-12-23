@@ -62,22 +62,33 @@ func (t *TraefikAdapter) Initialize(ctx context.Context, cfg *proxy.ProxyConfig)
 	
 	// Create a config.Config from proxy config for compatibility
 	t.cfg = &config.Config{
-		TraefikContainerName: cfg.ContainerName,
+		TraefikContainerName:  cfg.ContainerName,
 		CrowdsecContainerName: "crowdsec", // Default, should be configurable
+		Paths:                 config.NewPathConfig(), // Initialize with defaults
 	}
-	
-	// Set config paths if provided
+
+	// Set config paths if provided (override defaults)
 	if dynamicPath, exists := cfg.ConfigPaths["dynamic"]; exists {
-		t.cfg.TraefikDynamicConfig = dynamicPath
+		t.cfg.Paths.TraefikDynamicConfig = dynamicPath
+		t.cfg.TraefikDynamicConfig = dynamicPath // Backward compatibility
 	}
 	if staticPath, exists := cfg.ConfigPaths["static"]; exists {
-		t.cfg.TraefikStaticConfig = staticPath
+		t.cfg.Paths.TraefikStaticConfig = staticPath
+		t.cfg.TraefikStaticConfig = staticPath // Backward compatibility
 	}
 	if accessLogPath, exists := cfg.ConfigPaths["access_log"]; exists {
-		t.cfg.TraefikAccessLog = accessLogPath
+		t.cfg.Paths.TraefikAccessLog = accessLogPath
+		t.cfg.TraefikAccessLog = accessLogPath // Backward compatibility
 	}
 	if errorLogPath, exists := cfg.ConfigPaths["error_log"]; exists {
-		t.cfg.TraefikErrorLog = errorLogPath
+		t.cfg.Paths.TraefikErrorLog = errorLogPath
+		t.cfg.TraefikErrorLog = errorLogPath // Backward compatibility
+	}
+	if captchaPath, exists := cfg.ConfigPaths["captcha_html"]; exists {
+		t.cfg.Paths.TraefikCaptchaHTML = captchaPath
+	}
+	if confDir, exists := cfg.ConfigPaths["conf_dir"]; exists {
+		t.cfg.Paths.TraefikConfDir = confDir
 	}
 	
 	// Initialize feature managers
@@ -118,14 +129,15 @@ func (t *TraefikAdapter) HealthCheck(ctx context.Context) (*models.HealthCheckIt
 	}
 	
 	// Check if dynamic config file exists and is readable
+	dynamicConfigPath := t.cfg.Paths.TraefikDynamicConfig
 	_, err = t.dockerClient.ExecCommand(t.cfg.TraefikContainerName, []string{
-		"cat", "/etc/traefik/dynamic_config.yml",
+		"cat", dynamicConfigPath,
 	})
 	if err != nil {
 		return &models.HealthCheckItem{
 			Status:  "degraded",
 			Message: "Traefik container running but configuration may be inaccessible",
-			Details: "Dynamic configuration file could not be read",
+			Details: fmt.Sprintf("Dynamic configuration file could not be read: %s", dynamicConfigPath),
 			Error:   fmt.Sprintf("Config read error: %v", err),
 		}, nil
 	}

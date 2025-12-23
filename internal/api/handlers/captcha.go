@@ -112,40 +112,46 @@ func SetupCaptcha(dockerClient *docker.Client, cfg *config.Config, proxyAdapter 
 
 		// Use local path for Traefik config directory (mapped via /app/config)
 		traefikConfigDir := filepath.Join(cfg.ConfigDir, "traefik")
-		
+
 		// Verify the directory exists
 		if _, err := os.Stat(traefikConfigDir); err != nil {
 			logger.Error("Traefik config directory not found", "path", traefikConfigDir, "error", err)
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
-				Error:   "Traefik configuration directory not found",
+				Error:   fmt.Sprintf("Traefik configuration directory not found at %s", traefikConfigDir),
 			})
 			return
 		}
 
-		// Create conf directory if it doesn't exist
-		confDir := filepath.Join(traefikConfigDir, "conf")
-		if err := os.MkdirAll(confDir, 0755); err != nil {
-			logger.Error("Failed to create conf directory", "error", err, "path", confDir)
+		// Determine the subdirectory based on configured container path
+		// Container path format: /etc/traefik/<subdir>/captcha.html
+		// We need to extract <subdir> and create it on the host
+		containerCaptchaPath := cfg.Paths.TraefikCaptchaHTML
+		subDir := filepath.Dir(strings.TrimPrefix(containerCaptchaPath, "/etc/traefik/"))
+
+		// Create subdirectory if it doesn't exist
+		captchaDir := filepath.Join(traefikConfigDir, subDir)
+		if err := os.MkdirAll(captchaDir, 0755); err != nil {
+			logger.Error("Failed to create captcha directory", "error", err, "path", captchaDir, "container_path", containerCaptchaPath)
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
-				Error:   fmt.Sprintf("Failed to create conf directory: %v", err),
+				Error:   fmt.Sprintf("Failed to create captcha directory %s: %v", captchaDir, err),
 			})
 			return
 		}
-		logger.Info("Ensured conf directory exists", "path", confDir)
+		logger.Info("Ensured captcha directory exists", "host_path", captchaDir, "container_path", containerCaptchaPath)
 
-		// Write captcha.html to conf directory
-		captchaHTMLPath := filepath.Join(confDir, "captcha.html")
+		// Write captcha.html to the configured directory
+		captchaHTMLPath := filepath.Join(captchaDir, "captcha.html")
 		if err := os.WriteFile(captchaHTMLPath, []byte(captchaHTML), 0644); err != nil {
-			logger.Error("Failed to write captcha.html", "error", err, "path", captchaHTMLPath)
+			logger.Error("Failed to write captcha.html", "error", err, "host_path", captchaHTMLPath, "container_path", containerCaptchaPath)
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
-				Error:   fmt.Sprintf("Failed to create captcha.html: %v", err),
+				Error:   fmt.Sprintf("Failed to create captcha.html at %s: %v", captchaHTMLPath, err),
 			})
 			return
 		}
-		logger.Info("Captcha HTML file created", "path", captchaHTMLPath)
+		logger.Info("Captcha HTML file created", "host_path", captchaHTMLPath, "container_path", containerCaptchaPath)
 
 		// STEP 2: Update Traefik dynamic_config.yml
 		logger.Info("Updating Traefik dynamic configuration")
@@ -229,8 +235,10 @@ func GetCaptchaStatus(dockerClient *docker.Client, db *database.Database, cfg *c
 		logger.Info("Getting captcha status")
 
 		// Check if captcha.env exists (saved configuration)
+		captchaEnvPath := "/etc/traefik/captcha.env" // This is a Traefik container path
+		logger.Info("Checking captcha environment file", "path", captchaEnvPath)
 		output, err := dockerClient.ExecCommand(cfg.TraefikContainerName, []string{
-			"cat", "/etc/traefik/captcha.env",
+			"cat", captchaEnvPath,
 		})
 
 		configSaved := false
@@ -247,13 +255,14 @@ func GetCaptchaStatus(dockerClient *docker.Client, db *database.Database, cfg *c
 			}
 		}
 
-		// Get dynamic config path from database
-		dynamicConfigPath := "/etc/traefik/dynamic_config.yml"
+		// Get dynamic config path from PathConfig (with database fallback for backward compatibility)
+		dynamicConfigPath := cfg.Paths.TraefikDynamicConfig
 		if db != nil {
-			if path, err := db.GetTraefikDynamicConfigPath(); err == nil {
+			if path, err := db.GetTraefikDynamicConfigPath(); err == nil && path != "" {
 				dynamicConfigPath = path
 			}
 		}
+		logger.Info("Checking Traefik dynamic configuration", "path", dynamicConfigPath)
 
 		// Check dynamic_config.yml for actual captcha configuration
 		configContent, err := dockerClient.ExecCommand(cfg.TraefikContainerName, []string{
@@ -276,20 +285,30 @@ func GetCaptchaStatus(dockerClient *docker.Client, db *database.Database, cfg *c
 		// Check if captcha.html exists on local filesystem (via /app/config mount)
 		captchaHTMLExistsOnHost := false
 		hostHTMLPath := ""
-		
-		// Use local path: /app/config/traefik/conf/captcha.html
-		localConfPath := filepath.Join(cfg.ConfigDir, "traefik", "conf")
+
+		// Determine host path based on configured container path
+		// Container path format: /etc/traefik/<subdir>/captcha.html
+		containerCaptchaPath := cfg.Paths.TraefikCaptchaHTML
+		subDir := filepath.Dir(strings.TrimPrefix(containerCaptchaPath, "/etc/traefik/"))
+		traefikConfigDir := filepath.Join(cfg.ConfigDir, "traefik")
+		localConfPath := filepath.Join(traefikConfigDir, subDir)
 		hostHTMLPath = filepath.Join(localConfPath, "captcha.html")
-		
+
+		logger.Info("Checking captcha HTML file on host", "path", hostHTMLPath, "container_path", containerCaptchaPath)
 		if _, err := os.Stat(hostHTMLPath); err == nil {
 			captchaHTMLExistsOnHost = true
+		} else {
+			logger.Debug("Captcha HTML file not found on host", "path", hostHTMLPath, "error", err)
 		}
 
 		// Check if captcha.html exists in Traefik container (verifies mount is working)
 		captchaHTMLExistsInContainer := false
-		exists, err := dockerClient.FileExists(cfg.TraefikContainerName, "/etc/traefik/conf/captcha.html")
+		logger.Info("Checking captcha HTML file in container", "path", containerCaptchaPath)
+		exists, err := dockerClient.FileExists(cfg.TraefikContainerName, containerCaptchaPath)
 		if err == nil && exists {
 			captchaHTMLExistsInContainer = true
+		} else if err != nil {
+			logger.Warn("Failed to check captcha HTML file in container", "path", containerCaptchaPath, "error", err)
 		}
 
 		// For backwards compatibility, captchaHTMLExists is true if it exists in container
@@ -555,10 +574,14 @@ func updateTraefikCaptchaConfig(dockerClient *docker.Client, cfg *config.Config,
 		provider = req.Provider
 	}
 	
+	// Use configured captcha HTML path from PathConfig
+	captchaHTMLPath := cfg.Paths.TraefikCaptchaHTML
+	logger.Info("Setting captcha HTML file path in config", "path", captchaHTMLPath)
+
 	setScalar(crowdsecPluginNode, "captchaProvider", provider, "")
 	setScalar(crowdsecPluginNode, "captchaSiteKey", req.SiteKey, "")
 	setScalar(crowdsecPluginNode, "captchaSecretKey", req.SecretKey, "")
-	setScalar(crowdsecPluginNode, "captchaHTMLFilePath", "/etc/traefik/conf/captcha.html", "")
+	setScalar(crowdsecPluginNode, "captchaHTMLFilePath", captchaHTMLPath, "")
 	setScalar(crowdsecPluginNode, "captchaGracePeriodSeconds", "1800", "!!int")
 
 	// Remove old nested "captcha" key if it exists
@@ -598,11 +621,13 @@ func updateTraefikCaptchaConfig(dockerClient *docker.Client, cfg *config.Config,
 // updateCrowdSecProfiles updates CrowdSec profiles.yaml to include captcha remediation
 func updateCrowdSecProfiles(dockerClient *docker.Client, cfg *config.Config) error {
 	// Read current profiles.yaml
+	profilesPath := "/etc/crowdsec/profiles.yaml" // Standard CrowdSec path
+	logger.Info("Reading CrowdSec profiles configuration", "path", profilesPath)
 	output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
-		"cat", "/etc/crowdsec/profiles.yaml",
+		"cat", profilesPath,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to read profiles.yaml: %v", err)
+		return fmt.Errorf("failed to read profiles.yaml from %s: %v", profilesPath, err)
 	}
 
 	// Helper to find key in mapping
@@ -747,8 +772,10 @@ func updateCrowdSecProfiles(dockerClient *docker.Client, cfg *config.Config) err
 	newProfileBytes = strings.TrimPrefix(newProfileBytes, "---\n")
 
 	// Backup existing profiles.yaml
+	backupPath := profilesPath + ".bak"
+	logger.Info("Creating backup of profiles.yaml", "backup_path", backupPath)
 	_, _ = dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
-		"cp", "/etc/crowdsec/profiles.yaml", "/etc/crowdsec/profiles.yaml.bak",
+		"cp", profilesPath, backupPath,
 	})
 
 	// Write new profiles.yaml
@@ -756,16 +783,18 @@ func updateCrowdSecProfiles(dockerClient *docker.Client, cfg *config.Config) err
 	// Using a temporary file approach or writing via stdin would be safer if possible,
 	// but ExecCommand doesn't easily support stdin.
 	// We'll escape single quotes.
+	logger.Info("Writing updated profiles configuration", "path", profilesPath)
 	escapedContent := strings.ReplaceAll(string(newProfileBytes), "'", "'\\''")
 	_, err = dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
-		"sh", "-c", fmt.Sprintf("echo '%s' > /etc/crowdsec/profiles.yaml", escapedContent),
+		"sh", "-c", fmt.Sprintf("echo '%s' > %s", escapedContent, profilesPath),
 	})
 	if err != nil {
 		// Restore backup if failed
+		logger.Error("Failed to write profiles.yaml, restoring backup", "path", profilesPath, "error", err)
 		_, _ = dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
-			"mv", "/etc/crowdsec/profiles.yaml.bak", "/etc/crowdsec/profiles.yaml",
+			"mv", backupPath, profilesPath,
 		})
-		return fmt.Errorf("failed to write profiles.yaml: %v", err)
+		return fmt.Errorf("failed to write profiles.yaml to %s: %v", profilesPath, err)
 	}
 
 	// Reload profiles
@@ -779,20 +808,24 @@ func updateCrowdSecProfiles(dockerClient *docker.Client, cfg *config.Config) err
 
 // verifyCaptchaSetup verifies that captcha is properly configured
 func verifyCaptchaSetup(dockerClient *docker.Client, cfg *config.Config) bool {
-	// Check 1: Captcha HTML exists in Traefik container at /etc/traefik/conf/captcha.html
-	exists, err := dockerClient.FileExists(cfg.TraefikContainerName, "/etc/traefik/conf/captcha.html")
+	// Check 1: Captcha HTML exists in Traefik container
+	captchaHTMLPath := cfg.Paths.TraefikCaptchaHTML
+	logger.Info("Verifying captcha HTML file in container", "path", captchaHTMLPath)
+	exists, err := dockerClient.FileExists(cfg.TraefikContainerName, captchaHTMLPath)
 	if err != nil || !exists {
-		logger.Warn("Captcha HTML verification failed", "path", "/etc/traefik/conf/captcha.html", "exists", exists, "error", err)
+		logger.Warn("Captcha HTML verification failed", "path", captchaHTMLPath, "exists", exists, "error", err)
 		return false
 	}
-	logger.Info("Captcha HTML file verified", "path", "/etc/traefik/conf/captcha.html")
+	logger.Info("Captcha HTML file verified", "path", captchaHTMLPath)
 
 	// Check 2: Dynamic config contains captcha settings
+	dynamicConfigPath := cfg.Paths.TraefikDynamicConfig
+	logger.Info("Verifying captcha settings in dynamic config", "path", dynamicConfigPath)
 	configContent, err := dockerClient.ExecCommand(cfg.TraefikContainerName, []string{
-		"cat", "/etc/traefik/dynamic_config.yml",
+		"cat", dynamicConfigPath,
 	})
 	if err != nil {
-		logger.Warn("Failed to read dynamic config for verification", "error", err)
+		logger.Warn("Failed to read dynamic config for verification", "path", dynamicConfigPath, "error", err)
 		return false
 	}
 
@@ -803,18 +836,20 @@ func verifyCaptchaSetup(dockerClient *docker.Client, cfg *config.Config) bool {
 	logger.Info("Dynamic config contains captcha settings")
 
 	// Check 3: Dynamic config references correct captcha.html path
-	if !strings.Contains(configContent, "/etc/traefik/conf/captcha.html") {
-		logger.Warn("Dynamic config does not reference correct captcha.html path")
+	if !strings.Contains(configContent, captchaHTMLPath) {
+		logger.Warn("Dynamic config does not reference correct captcha.html path", "expected_path", captchaHTMLPath)
 		return false
 	}
-	logger.Info("Dynamic config references correct captcha.html path")
+	logger.Info("Dynamic config references correct captcha.html path", "path", captchaHTMLPath)
 
 	// Check 4: CrowdSec profiles contain captcha decision
+	profilesPath := "/etc/crowdsec/profiles.yaml" // Standard CrowdSec path
+	logger.Info("Verifying captcha decision in CrowdSec profiles", "path", profilesPath)
 	profilesContent, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
-		"cat", "/etc/crowdsec/profiles.yaml",
+		"cat", profilesPath,
 	})
 	if err != nil {
-		logger.Warn("Failed to read profiles for verification", "error", err)
+		logger.Warn("Failed to read profiles for verification", "path", profilesPath, "error", err)
 		return false
 	}
 

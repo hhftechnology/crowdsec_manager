@@ -177,7 +177,7 @@ func CheckTraefikIntegration(dockerClient *docker.Client, db *database.Database,
 
 		// Check multiple possible config files
 		configPaths := []string{
-			"/etc/traefik/dynamic_config.yml",
+			cfg.Paths.TraefikDynamicConfig,
 			"/etc/traefik/traefik_config.yml",
 		}
 
@@ -237,7 +237,7 @@ func CheckTraefikIntegration(dockerClient *docker.Client, db *database.Database,
 		integration.CaptchaProvider = captchaProvider
 
 		// Check if captcha.html exists in Traefik container
-		captchaExists, captchaErr := dockerClient.FileExists(cfg.TraefikContainerName, "/etc/traefik/conf/captcha.html")
+		captchaExists, captchaErr := dockerClient.FileExists(cfg.TraefikContainerName, cfg.Paths.TraefikCaptchaHTML)
 		if captchaErr == nil && captchaExists {
 			integration.CaptchaHTMLExists = true
 		}

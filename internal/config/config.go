@@ -31,7 +31,11 @@ type Config struct {
 	ProxyContainerName string
 	ComposeMode       string
 
-	// File paths (from environment or database)
+	// Path configuration - NEW centralized path management
+	Paths *PathConfig
+
+	// Legacy path fields (DEPRECATED - use Paths instead)
+	// Kept for backward compatibility during migration
 	TraefikDynamicConfig string
 	TraefikStaticConfig  string
 	TraefikAccessLog     string
@@ -74,6 +78,10 @@ type Config struct {
 // Load loads and validates application configuration from environment variables
 // It also creates required directories and dynamically builds service lists from compose file
 func Load() (*Config, error) {
+	// Initialize PathConfig first
+	paths := NewPathConfig()
+	paths.LoadFromEnv()
+
 	cfg := &Config{
 		Port:                  getEnvAsInt("PORT", 8080),
 		Environment:           getEnv("ENVIRONMENT", "development"),
@@ -84,18 +92,23 @@ func Load() (*Config, error) {
 		PangolinDir:           getEnv("PANGOLIN_DIR", "."),
 		ConfigDir:             getEnv("CONFIG_DIR", "./config"),
 		DatabasePath:          getEnv("DATABASE_PATH", "./data/settings.db"),
-		
+
 		// Proxy configuration with backward compatibility
 		ProxyType:             getEnv("PROXY_TYPE", ""),
 		ProxyEnabled:          getEnvAsBool("PROXY_ENABLED", true),
 		ProxyContainerName:    getEnv("PROXY_CONTAINER_NAME", ""),
 		ComposeMode:           getEnv("COMPOSE_MODE", "single"),
-		
-		TraefikDynamicConfig:  getEnv("TRAEFIK_DYNAMIC_CONFIG", "/etc/traefik/dynamic_config.yml"),
-		TraefikStaticConfig:   getEnv("TRAEFIK_STATIC_CONFIG", "/etc/traefik/traefik_config.yml"),
-		TraefikAccessLog:      getEnv("TRAEFIK_ACCESS_LOG", "/var/log/traefik/access.log"),
-		TraefikErrorLog:       getEnv("TRAEFIK_ERROR_LOG", "/var/log/traefik/traefik.log"),
-		CrowdSecAcquisFile:    getEnv("CROWDSEC_ACQUIS_FILE", "/etc/crowdsec/acquis.yaml"),
+
+		// NEW: Centralized path configuration
+		Paths:                 paths,
+
+		// Legacy fields (populated from Paths for backward compatibility)
+		TraefikDynamicConfig:  paths.TraefikDynamicConfig,
+		TraefikStaticConfig:   paths.TraefikStaticConfig,
+		TraefikAccessLog:      paths.TraefikAccessLog,
+		TraefikErrorLog:       paths.TraefikErrorLog,
+		CrowdSecAcquisFile:    paths.CrowdSecAcquisFile,
+
 		BackupDir:             getEnv("BACKUP_DIR", "./backups"),
 		RetentionDays:         getEnvAsInt("RETENTION_DAYS", 60),
 		BackupItems:           []string{"docker-compose.yml", "config"},
@@ -109,13 +122,18 @@ func Load() (*Config, error) {
 		IncludeCrowdsec:       getEnvAsBool("INCLUDE_CROWDSEC", true),
 		IncludePangolin:       getEnvAsBool("INCLUDE_PANGOLIN", true),
 		IncludeGerbil:         getEnvAsBool("INCLUDE_GERBIL", true),
-		
+
 		// Add-on configuration
 		PangolinEnabled:       getEnvAsBool("PANGOLIN_ENABLED", false),
 		GerbilEnabled:         getEnvAsBool("GERBIL_ENABLED", false),
 		ShutdownTimeout:       time.Duration(getEnvAsInt("SHUTDOWN_TIMEOUT", 30)) * time.Second,
 		ReadTimeout:           time.Duration(getEnvAsInt("READ_TIMEOUT", 15)) * time.Second,
 		WriteTimeout:          time.Duration(getEnvAsInt("WRITE_TIMEOUT", 15)) * time.Second,
+	}
+
+	// Validate paths for current proxy type
+	if err := cfg.Paths.ValidateRequired(cfg.ProxyType); err != nil {
+		return nil, fmt.Errorf("path configuration validation failed: %w", err)
 	}
 
 	// Build services list based on proxy type and enabled add-ons
@@ -288,29 +306,9 @@ func (c *Config) validateAndSetProxyConfig() error {
 }
 
 // GetProxyConfig returns proxy configuration for adapter initialization
+// Now uses centralized PathConfig instead of hardcoded values
 func (c *Config) GetProxyConfig() map[string]string {
-	config := make(map[string]string)
-	
-	switch c.ProxyType {
-	case "traefik":
-		config["dynamic"] = c.TraefikDynamicConfig
-		config["static"] = c.TraefikStaticConfig
-		config["access_log"] = c.TraefikAccessLog
-		config["error_log"] = c.TraefikErrorLog
-	case "nginx":
-		config["log_path"] = getEnv("NGINX_LOG_PATH", "/data/logs")
-		config["config_path"] = getEnv("NGINX_CONFIG_PATH", "/data/nginx")
-	case "caddy":
-		config["config_path"] = getEnv("CADDY_CONFIG_PATH", "/etc/caddy")
-		config["log_path"] = getEnv("CADDY_LOG_PATH", "/var/log/caddy")
-	case "haproxy":
-		config["config_path"] = getEnv("HAPROXY_CONFIG_PATH", "/usr/local/etc/haproxy")
-		config["socket_path"] = getEnv("HAPROXY_SOCKET_PATH", "/var/run/haproxy.sock")
-	case "zoraxy":
-		config["config_path"] = getEnv("ZORAXY_CONFIG_PATH", "/opt/zoraxy")
-	}
-	
-	return config
+	return c.Paths.GetProxyPaths(c.ProxyType)
 }
 
 // IsLegacyTraefikInstallation checks if this is a legacy Traefik installation
