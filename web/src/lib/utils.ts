@@ -109,7 +109,7 @@ export function transition(properties: string[] = ['all'], duration: 'fast' | 'd
  * Create Netflix-inspired gradient classes
  */
 export function netflixGradient(direction: 'to-r' | 'to-l' | 'to-t' | 'to-b' = 'to-r') {
-  return `bg-gradient-${directio n } from-netflix-red to-netflix-dark-red`
+  return `bg-gradient-${direction} from-netflix-red to-netflix-dark-red`
 }
 
 /**
