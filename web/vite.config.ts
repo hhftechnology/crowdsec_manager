@@ -30,7 +30,7 @@ export default defineConfig({
     // Optimize build performance
     target: 'esnext',
     minify: 'esbuild',
-    sourcemap: false,
+    sourcemap: true, // Enabled for debugging production issues
     // Increase chunk size warning limit for better chunking
     chunkSizeWarningLimit: 1000,
     rollupOptions: {
@@ -38,40 +38,29 @@ export default defineConfig({
         // Simplified chunking strategy to avoid dependency loading issues
         manualChunks: (id) => {
           if (id.includes('node_modules')) {
-            // Put React and all React-dependent libraries in one vendor chunk
-            // This prevents the "Cannot read properties of undefined (reading 'useState')" error
-            // that occurs when chunks load out of order
-            if (
-              id.includes('react') ||
-              id.includes('react-dom') ||
-              id.includes('react-router-dom') ||
-              id.includes('@radix-ui/') ||
-              id.includes('@tanstack/react-query') ||
-              id.includes('react-hook-form') ||
-              id.includes('sonner') ||  // Toast library uses React hooks
-              id.includes('cmdk')       // Command menu uses React hooks
-            ) {
-              return 'vendor'
-            }
-
-            // Icons and styling
-            if (id.includes('lucide-react') || id.includes('class-variance-authority') ||
-                id.includes('clsx') || id.includes('tailwind-merge')) {
+            // Core UI utilities that are safe to split
+            if (id.includes('lucide-react') || 
+                id.includes('class-variance-authority') ||
+                id.includes('clsx') || 
+                id.includes('tailwind-merge')) {
               return 'ui-utils'
             }
 
-            // Data fetching
+            // Data fetching (standalone)
             if (id.includes('axios')) {
               return 'data'
             }
 
-            // Other utilities
-            if (id.includes('date-fns') || id.includes('cmdk')) {
+            // General utilities (standalone)
+            if (id.includes('date-fns')) {
               return 'utils'
             }
 
-            // All other node_modules
-            return 'libs'
+            // EVERYTHING else from node_modules goes into a single vendor chunk.
+            // This ensures React, ReactDOM, and all libraries that depend on them
+            // (like Radix UI, TanStack Query, Hook Form, Sonner, etc.)
+            // are loaded together, preventing initialization race conditions.
+            return 'vendor'
           }
         },
         // Optimize asset naming for better caching
