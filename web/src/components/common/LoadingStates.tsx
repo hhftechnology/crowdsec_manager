@@ -1,4 +1,4 @@
-import * as React from "react"
+import { ReactNode, memo, useCallback, useMemo } from "react"
 import { Loader2, RefreshCw, AlertCircle, Wifi, WifiOff } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
@@ -11,10 +11,10 @@ export interface LoadingSpinnerProps {
   className?: string
 }
 
-export const LoadingSpinner = React.memo(function LoadingSpinner({ size = 'md', className }: LoadingSpinnerProps) {
-  const sizeClasses = React.useMemo(() => ({
-    sm: 'h-4 w-4',
-    md: 'h-6 w-6',
+export const LoadingSpinner = memo(function LoadingSpinner({ size = 'md', className }: LoadingSpinnerProps) {
+  const sizeClasses = useMemo(() => ({
+    sm: 'h-4 w-4', 
+    md: 'h-6 w-6', 
     lg: 'h-8 w-8'
   }), [])
 
@@ -27,7 +27,7 @@ export interface SkeletonProps {
   className?: string
 }
 
-export const Skeleton = React.memo(function Skeleton({ className }: SkeletonProps) {
+export const Skeleton = memo(function Skeleton({ className }: SkeletonProps) {
   return (
     <div className={cn("animate-pulse rounded-md bg-muted", className)} />
   )
@@ -39,8 +39,8 @@ export interface TableSkeletonProps {
   className?: string
 }
 
-export const TableSkeleton = React.memo(function TableSkeleton({ rows = 5, columns = 4, className }: TableSkeletonProps) {
-  const headerCells = React.useMemo(() => 
+export const TableSkeleton = memo(function TableSkeleton({ rows = 5, columns = 4, className }: TableSkeletonProps) {
+  const headerCells = useMemo(() => 
     Array.from({ length: columns }, (_, i) => (
       <div key={i} className="flex-1 px-2">
         <Skeleton className="h-4 w-20" />
@@ -48,7 +48,7 @@ export const TableSkeleton = React.memo(function TableSkeleton({ rows = 5, colum
     )), [columns]
   )
 
-  const tableRows = React.useMemo(() => 
+  const tableRows = useMemo(() => 
     Array.from({ length: rows }, (_, rowIndex) => (
       <div key={rowIndex} className="flex items-center h-16 px-4 border-b last:border-b-0">
         {Array.from({ length: columns }, (_, colIndex) => (
@@ -86,7 +86,7 @@ export interface CardSkeletonProps {
   className?: string
 }
 
-export const CardSkeleton = React.memo(function CardSkeleton({ className }: CardSkeletonProps) {
+export const CardSkeleton = memo(function CardSkeleton({ className }: CardSkeletonProps) {
   return (
     <Card className={cn("animate-pulse", className)}>
       <CardHeader className="space-y-2">
@@ -106,16 +106,16 @@ export interface GridSkeletonProps {
   className?: string
 }
 
-export const GridSkeleton = React.memo(function GridSkeleton({ items = 6, columns = 3, className }: GridSkeletonProps) {
-  const gridClasses = React.useMemo(() => cn(
-    "grid gap-4",
-    columns === 2 && "grid-cols-1 md:grid-cols-2",
-    columns === 3 && "grid-cols-1 md:grid-cols-2 lg:grid-cols-3",
-    columns === 4 && "grid-cols-1 md:grid-cols-2 lg:grid-cols-4",
+export const GridSkeleton = memo(function GridSkeleton({ items = 6, columns = 3, className }: GridSkeletonProps) {
+  const gridClasses = useMemo(() => cn(
+    "grid gap-4", 
+    columns === 2 && "grid-cols-1 md:grid-cols-2", 
+    columns === 3 && "grid-cols-1 md:grid-cols-2 lg:grid-cols-3", 
+    columns === 4 && "grid-cols-1 md:grid-cols-2 lg:grid-cols-4", 
     className
   ), [columns, className])
 
-  const skeletonItems = React.useMemo(() => 
+  const skeletonItems = useMemo(() => 
     Array.from({ length: items }, (_, i) => (
       <CardSkeleton key={i} />
     )), [items]
@@ -132,33 +132,33 @@ export interface LoadingStateProps {
   loading: boolean
   error?: string | Error | null
   onRetry?: () => void
-  children: React.ReactNode
-  skeleton?: React.ReactNode
+  children: ReactNode
+  skeleton?: ReactNode
   className?: string
   loadingText?: string
   retryText?: string
   showErrorDetails?: boolean
 }
 
-export const LoadingState = React.memo(function LoadingState({
-  loading,
-  error,
-  onRetry,
-  children,
-  skeleton,
-  className,
-  loadingText = "Loading...",
-  retryText = "Try Again",
+export const LoadingState = memo(function LoadingState({
+  loading, 
+  error, 
+  onRetry, 
+  children, 
+  skeleton, 
+  className, 
+  loadingText = "Loading...", 
+  retryText = "Try Again", 
   showErrorDetails = false
 }: LoadingStateProps) {
-  const errorMessage = React.useMemo(() => {
+  const errorMessage = useMemo(() => {
     if (!error) return null
     if (typeof error === 'string') return error
     if (error instanceof Error) return error.message
     return 'An unexpected error occurred'
   }, [error])
 
-  const handleRetry = React.useCallback(() => {
+  const handleRetry = useCallback(() => {
     onRetry?.()
   }, [onRetry])
 
@@ -212,11 +212,11 @@ export const LoadingState = React.memo(function LoadingState({
 
 export interface InlineLoadingProps {
   loading: boolean
-  children: React.ReactNode
+  children: ReactNode
   className?: string
 }
 
-export const InlineLoading = React.memo(function InlineLoading({ loading, children, className }: InlineLoadingProps) {
+export const InlineLoading = memo(function InlineLoading({ loading, children, className }: InlineLoadingProps) {
   return (
     <div className={cn("flex items-center gap-2", className)}>
       {loading && <LoadingSpinner size="sm" />}
@@ -227,12 +227,12 @@ export const InlineLoading = React.memo(function InlineLoading({ loading, childr
 
 export interface ButtonLoadingProps {
   loading: boolean
-  children: React.ReactNode
+  children: ReactNode
   loadingText?: string
   disabled?: boolean
 }
 
-export const ButtonLoading = React.memo(function ButtonLoading({ loading, children, loadingText }: ButtonLoadingProps) {
+export const ButtonLoading = memo(function ButtonLoading({ loading, children, loadingText }: ButtonLoadingProps) {
   if (loading) {
     return (
       <>
@@ -254,14 +254,14 @@ export interface ConnectionStatusProps {
   showLabel?: boolean
 }
 
-export const ConnectionStatus = React.memo(function ConnectionStatus({
-  isConnected,
-  isConnecting,
-  onReconnect,
-  className,
+export const ConnectionStatus = memo(function ConnectionStatus({
+  isConnected, 
+  isConnecting, 
+  onReconnect, 
+  className, 
   showLabel = true
 }: ConnectionStatusProps) {
-  const handleReconnect = React.useCallback(() => {
+  const handleReconnect = useCallback(() => {
     onReconnect?.()
   }, [onReconnect])
 
@@ -311,8 +311,8 @@ export interface ProgressiveLoadingProps {
   className?: string
 }
 
-export const ProgressiveLoading = React.memo(function ProgressiveLoading({ steps, className }: ProgressiveLoadingProps) {
-  const stepElements = React.useMemo(() => 
+export const ProgressiveLoading = memo(function ProgressiveLoading({ steps, className }: ProgressiveLoadingProps) {
+  const stepElements = useMemo(() => 
     steps.map((step, index) => (
       <div key={index} className="flex items-center gap-3">
         <div className="flex-shrink-0">
@@ -331,10 +331,10 @@ export const ProgressiveLoading = React.memo(function ProgressiveLoading({ steps
         </div>
         <div className="flex-1">
           <p className={cn(
-            "text-sm",
-            step.status === 'completed' && "text-green-600 dark:text-green-400",
-            step.status === 'error' && "text-destructive",
-            step.status === 'loading' && "text-foreground font-medium",
+            "text-sm", 
+            step.status === 'completed' && "text-green-600 dark:text-green-400", 
+            step.status === 'error' && "text-destructive", 
+            step.status === 'loading' && "text-foreground font-medium", 
             step.status === 'pending' && "text-muted-foreground"
           )}>
             {step.label}
@@ -360,7 +360,7 @@ export interface SuspenseFallbackProps {
   className?: string
 }
 
-export const SuspenseFallback = React.memo(function SuspenseFallback({ message = "Loading...", className }: SuspenseFallbackProps) {
+export const SuspenseFallback = memo(function SuspenseFallback({ message = "Loading...", className }: SuspenseFallbackProps) {
   return (
     <div 
       className={cn("flex items-center justify-center h-full w-full min-h-[200px]", className)}
@@ -377,15 +377,15 @@ export const SuspenseFallback = React.memo(function SuspenseFallback({ message =
 
 // Preset loading components for common patterns
 export const LoadingStates = {
-  Spinner: LoadingSpinner,
-  Skeleton,
-  TableSkeleton,
-  CardSkeleton,
-  GridSkeleton,
-  LoadingState,
-  InlineLoading,
-  ButtonLoading,
-  ConnectionStatus,
-  ProgressiveLoading,
+  Spinner: LoadingSpinner, 
+  Skeleton, 
+  TableSkeleton, 
+  CardSkeleton, 
+  GridSkeleton, 
+  LoadingState, 
+  InlineLoading, 
+  ButtonLoading, 
+  ConnectionStatus, 
+  ProgressiveLoading, 
   SuspenseFallback
 }

@@ -421,7 +421,7 @@ export default function DecisionAnalysis() {
             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
             <AlertDialogDescription>
               This action cannot be undone. This will permanently delete the decision
-              #{deleteId} from CrowdSec.
+              #{deleteI d } from CrowdSec.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

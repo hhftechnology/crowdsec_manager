@@ -3,7 +3,6 @@
  * Consolidates functionality from multiple StatusCard implementations
  */
 
-import * as React from "react"
 import { TrendingUp, TrendingDown, Minus, CheckCircle2, XCircle, AlertTriangle, Info } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {

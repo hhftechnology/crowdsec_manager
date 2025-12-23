@@ -1,4 +1,4 @@
-import * as React from "react"
+import { ReactNode, useState } from "react"
 import { UseFormReturn, FieldPath, FieldValues } from "react-hook-form"
 import { AlertCircle, Check, Eye, EyeOff } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -8,20 +8,20 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Switch } from "@/components/ui/switch"
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue, 
 } from "@/components/ui/select"
 import {
-  FormField,
-  FormItem,
-  FormLabel,
-  FormControl,
-  FormDescription,
-  FormMessage,
-  Form,
+  FormField, 
+  FormItem, 
+  FormLabel, 
+  FormControl, 
+  FormDescription, 
+  FormMessage, 
+  Form, 
 } from "@/components/ui/form"
 
 export interface FormFieldProps<T extends FieldValues> {
@@ -40,17 +40,17 @@ export interface TextFieldProps<T extends FieldValues> extends FormFieldProps<T>
 }
 
 export function TextField<T extends FieldValues>({
-  form,
-  name,
-  label,
-  description,
-  placeholder,
-  type = 'text',
-  showPasswordToggle = false,
-  disabled = false,
+  form, 
+  name, 
+  label, 
+  description, 
+  placeholder, 
+  type = 'text', 
+  showPasswordToggle = false, 
+  disabled = false, 
   className
 }: TextFieldProps<T>) {
-  const [showPassword, setShowPassword] = React.useState(false)
+  const [showPassword, setShowPassword] = useState(false)
   const inputType = type === 'password' && showPassword ? 'text' : type
 
   return (
@@ -68,7 +68,7 @@ export function TextField<T extends FieldValues>({
                 placeholder={placeholder}
                 disabled={disabled}
                 className={cn(
-                  fieldState.error && "border-red-500 focus-visible:ring-red-500",
+                  fieldState.error && "border-red-500 focus-visible:ring-red-500", 
                   showPasswordToggle && "pr-10"
                 )}
               />
@@ -103,13 +103,13 @@ export interface TextAreaFieldProps<T extends FieldValues> extends FormFieldProp
 }
 
 export function TextAreaField<T extends FieldValues>({
-  form,
-  name,
-  label,
-  description,
-  placeholder,
-  rows = 3,
-  disabled = false,
+  form, 
+  name, 
+  label, 
+  description, 
+  placeholder, 
+  rows = 3, 
+  disabled = false, 
   className
 }: TextAreaFieldProps<T>) {
   return (
@@ -143,13 +143,13 @@ export interface SelectFieldProps<T extends FieldValues> extends FormFieldProps<
 }
 
 export function SelectField<T extends FieldValues>({
-  form,
-  name,
-  label,
-  description,
-  placeholder = "Select an option...",
-  options,
-  disabled = false,
+  form, 
+  name, 
+  label, 
+  description, 
+  placeholder = "Select an option...", 
+  options, 
+  disabled = false, 
   className
 }: SelectFieldProps<T>) {
   return (
@@ -198,11 +198,11 @@ export interface CheckboxFieldProps<T extends FieldValues> extends FormFieldProp
 }
 
 export function CheckboxField<T extends FieldValues>({
-  form,
-  name,
-  label,
-  description,
-  disabled = false,
+  form, 
+  name, 
+  label, 
+  description, 
+  disabled = false, 
   className
 }: CheckboxFieldProps<T>) {
   return (
@@ -233,11 +233,11 @@ export interface SwitchFieldProps<T extends FieldValues> extends FormFieldProps<
 }
 
 export function SwitchField<T extends FieldValues>({
-  form,
-  name,
-  label,
-  description,
-  disabled = false,
+  form, 
+  name, 
+  label, 
+  description, 
+  disabled = false, 
   className
 }: SwitchFieldProps<T>) {
   return (
@@ -273,11 +273,11 @@ export interface FormActionsProps {
 }
 
 export function FormActions({
-  loading = false,
-  submitText = "Submit",
-  cancelText = "Cancel",
-  onCancel,
-  showCancel = true,
+  loading = false, 
+  submitText = "Submit", 
+  cancelText = "Cancel", 
+  onCancel, 
+  showCancel = true, 
   className
 }: FormActionsProps) {
   return (
@@ -308,16 +308,16 @@ export interface ValidationMessageProps {
 
 export function ValidationMessage({ type, message, className }: ValidationMessageProps) {
   const styles = {
-    error: "text-red-600 bg-red-50 border-red-200 dark:text-red-400 dark:bg-red-950/50 dark:border-red-800",
-    success: "text-green-600 bg-green-50 border-green-200 dark:text-green-400 dark:bg-green-950/50 dark:border-green-800",
-    warning: "text-yellow-600 bg-yellow-50 border-yellow-200 dark:text-yellow-400 dark:bg-yellow-950/50 dark:border-yellow-800",
+    error: "text-red-600 bg-red-50 border-red-200 dark:text-red-400 dark:bg-red-950/50 dark:border-red-800", 
+    success: "text-green-600 bg-green-50 border-green-200 dark:text-green-400 dark:bg-green-950/50 dark:border-green-800", 
+    warning: "text-yellow-600 bg-yellow-50 border-yellow-200 dark:text-yellow-400 dark:bg-yellow-950/50 dark:border-yellow-800", 
     info: "text-blue-600 bg-blue-50 border-blue-200 dark:text-blue-400 dark:bg-blue-950/50 dark:border-blue-800"
   }
 
   const icons = {
-    error: AlertCircle,
-    success: Check,
-    warning: AlertCircle,
+    error: AlertCircle, 
+    success: Check, 
+    warning: AlertCircle, 
     info: AlertCircle
   }
 
@@ -325,8 +325,8 @@ export function ValidationMessage({ type, message, className }: ValidationMessag
 
   return (
     <div className={cn(
-      "flex items-center gap-2 rounded-md border p-3 text-sm",
-      styles[type],
+      "flex items-center gap-2 rounded-md border p-3 text-sm", 
+      styles[type], 
       className
     )}>
       <Icon className="h-4 w-4 flex-shrink-0" />
@@ -338,7 +338,7 @@ export function ValidationMessage({ type, message, className }: ValidationMessag
 export interface FormSectionProps {
   title?: string
   description?: string
-  children: React.ReactNode
+  children: ReactNode
   className?: string
 }
 
@@ -360,13 +360,13 @@ export function FormSection({ title, description, children, className }: FormSec
 
 // Preset form components for common patterns
 export const FormComponents = {
-  TextField,
-  TextAreaField,
-  SelectField,
-  CheckboxField,
-  SwitchField,
-  FormActions,
-  ValidationMessage,
-  FormSection,
+  TextField, 
+  TextAreaField, 
+  SelectField, 
+  CheckboxField, 
+  SwitchField, 
+  FormActions, 
+  ValidationMessage, 
+  FormSection, 
   Form
 }

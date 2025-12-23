@@ -1,4 +1,4 @@
-import * as React from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 export interface AsyncOperationState<T> {
   data: T | null
@@ -19,37 +19,37 @@ export interface AsyncOperationOptions {
  * Hook for managing async operations with loading, error, and retry logic
  */
 export function useAsyncOperation<T = any>(
-  operation: () => Promise<T>,
+  operation: () => Promise<T>, 
   options: AsyncOperationOptions = {}
 ) {
   const {
-    onSuccess,
-    onError,
-    retryCount = 3,
+    onSuccess, 
+    onError, 
+    retryCount = 3, 
     retryDelay = 1000
   } = options
 
-  const [state, setState] = React.useState<AsyncOperationState<T>>({
-    data: null,
-    loading: false,
-    error: null,
-    isSuccess: false,
+  const [state, setState] = useState<AsyncOperationState<T>>({
+    data: null, 
+    loading: false, 
+    error: null, 
+    isSuccess: false, 
     isError: false
   })
 
-  const [currentRetry, setCurrentRetry] = React.useState(0)
-  const retryTimeoutRef = React.useRef<NodeJS.Timeout>()
+  const [currentRetry, setCurrentRetry] = useState(0)
+  const retryTimeoutRef = useRef<NodeJS.Timeout>()
 
-  const execute = React.useCallback(async (resetRetry = true) => {
+  const execute = useCallback(async (resetRetry = true) => {
     if (resetRetry) {
       setCurrentRetry(0)
     }
 
     setState(prev => ({
-      ...prev,
-      loading: true,
-      error: null,
-      isError: false,
+      ...prev, 
+      loading: true, 
+      error: null, 
+      isError: false, 
       isSuccess: false
     }))
 
@@ -57,10 +57,10 @@ export function useAsyncOperation<T = any>(
       const result = await operation()
       
       setState({
-        data: result,
-        loading: false,
-        error: null,
-        isSuccess: true,
+        data: result, 
+        loading: false, 
+        error: null, 
+        isSuccess: true, 
         isError: false
       })
 
@@ -70,10 +70,10 @@ export function useAsyncOperation<T = any>(
       const errorObj = error instanceof Error ? error : new Error(String(error))
       
       setState({
-        data: null,
-        loading: false,
-        error: errorObj,
-        isSuccess: false,
+        data: null, 
+        loading: false, 
+        error: errorObj, 
+        isSuccess: false, 
         isError: true
       })
 
@@ -82,7 +82,7 @@ export function useAsyncOperation<T = any>(
     }
   }, [operation, onSuccess, onError])
 
-  const retry = React.useCallback(async () => {
+  const retry = useCallback(async () => {
     if (currentRetry < retryCount) {
       setCurrentRetry(prev => prev + 1)
       
@@ -107,12 +107,12 @@ export function useAsyncOperation<T = any>(
     }
   }, [currentRetry, retryCount, retryDelay, execute])
 
-  const reset = React.useCallback(() => {
+  const reset = useCallback(() => {
     setState({
-      data: null,
-      loading: false,
-      error: null,
-      isSuccess: false,
+      data: null, 
+      loading: false, 
+      error: null, 
+      isSuccess: false, 
       isError: false
     })
     setCurrentRetry(0)
@@ -123,7 +123,7 @@ export function useAsyncOperation<T = any>(
   }, [])
 
   // Cleanup timeout on unmount
-  React.useEffect(() => {
+  useEffect(() => {
     return () => {
       if (retryTimeoutRef.current) {
         clearTimeout(retryTimeoutRef.current)
@@ -132,11 +132,11 @@ export function useAsyncOperation<T = any>(
   }, [])
 
   return {
-    ...state,
-    execute,
-    retry,
-    reset,
-    canRetry: currentRetry < retryCount,
+    ...state, 
+    execute, 
+    retry, 
+    reset, 
+    canRetry: currentRetry < retryCount, 
     retryCount: currentRetry
   }
 }
@@ -145,7 +145,7 @@ export function useAsyncOperation<T = any>(
  * Hook for managing multiple async operations
  */
 export function useAsyncOperations<T extends Record<string, () => Promise<any>>>(
-  operations: T,
+  operations: T, 
   options: AsyncOperationOptions = {}
 ) {
   type OperationKeys = keyof T
@@ -153,33 +153,33 @@ export function useAsyncOperations<T extends Record<string, () => Promise<any>>>
     [K in OperationKeys]: AsyncOperationState<Awaited<ReturnType<T[K]>>>
   }
 
-  const [states, setStates] = React.useState<OperationResults>(() => {
+  const [states, setStates] = useState<OperationResults>(() => {
     const initialStates = {} as OperationResults
     Object.keys(operations).forEach(key => {
       initialStates[key as OperationKeys] = {
-        data: null,
-        loading: false,
-        error: null,
-        isSuccess: false,
+        data: null, 
+        loading: false, 
+        error: null, 
+        isSuccess: false, 
         isError: false
       }
     })
     return initialStates
   })
 
-  const execute = React.useCallback(async (operationKey: OperationKeys) => {
+  const execute = useCallback(async (operationKey: OperationKeys) => {
     const operation = operations[operationKey]
     if (!operation) {
       throw new Error(`Operation ${String(operationKey)} not found`)
     }
 
     setStates(prev => ({
-      ...prev,
+      ...prev, 
       [operationKey]: {
-        ...prev[operationKey],
-        loading: true,
-        error: null,
-        isError: false,
+        ...prev[operationKey], 
+        loading: true, 
+        error: null, 
+        isError: false, 
         isSuccess: false
       }
     }))
@@ -188,12 +188,12 @@ export function useAsyncOperations<T extends Record<string, () => Promise<any>>>
       const result = await operation()
       
       setStates(prev => ({
-        ...prev,
+        ...prev, 
         [operationKey]: {
-          data: result,
-          loading: false,
-          error: null,
-          isSuccess: true,
+          data: result, 
+          loading: false, 
+          error: null, 
+          isSuccess: true, 
           isError: false
         }
       }))
@@ -204,12 +204,12 @@ export function useAsyncOperations<T extends Record<string, () => Promise<any>>>
       const errorObj = error instanceof Error ? error : new Error(String(error))
       
       setStates(prev => ({
-        ...prev,
+        ...prev, 
         [operationKey]: {
-          data: null,
-          loading: false,
-          error: errorObj,
-          isSuccess: false,
+          data: null, 
+          loading: false, 
+          error: errorObj, 
+          isSuccess: false, 
           isError: true
         }
       }))
@@ -219,7 +219,7 @@ export function useAsyncOperations<T extends Record<string, () => Promise<any>>>
     }
   }, [operations, options])
 
-  const executeAll = React.useCallback(async () => {
+  const executeAll = useCallback(async () => {
     const results = await Promise.allSettled(
       Object.keys(operations).map(key => execute(key as OperationKeys))
     )
@@ -227,15 +227,15 @@ export function useAsyncOperations<T extends Record<string, () => Promise<any>>>
     return results
   }, [operations, execute])
 
-  const reset = React.useCallback((operationKey?: OperationKeys) => {
+  const reset = useCallback((operationKey?: OperationKeys) => {
     if (operationKey) {
       setStates(prev => ({
-        ...prev,
+        ...prev, 
         [operationKey]: {
-          data: null,
-          loading: false,
-          error: null,
-          isSuccess: false,
+          data: null, 
+          loading: false, 
+          error: null, 
+          isSuccess: false, 
           isError: false
         }
       }))
@@ -244,10 +244,10 @@ export function useAsyncOperations<T extends Record<string, () => Promise<any>>>
         const resetStates = {} as OperationResults
         Object.keys(prev).forEach(key => {
           resetStates[key as OperationKeys] = {
-            data: null,
-            loading: false,
-            error: null,
-            isSuccess: false,
+            data: null, 
+            loading: false, 
+            error: null, 
+            isSuccess: false, 
             isError: false
           }
         })
@@ -256,25 +256,25 @@ export function useAsyncOperations<T extends Record<string, () => Promise<any>>>
     }
   }, [])
 
-  const isAnyLoading = React.useMemo(() => {
+  const isAnyLoading = useMemo(() => {
     return Object.values(states).some(state => state.loading)
   }, [states])
 
-  const hasAnyError = React.useMemo(() => {
+  const hasAnyError = useMemo(() => {
     return Object.values(states).some(state => state.isError)
   }, [states])
 
-  const allSuccessful = React.useMemo(() => {
+  const allSuccessful = useMemo(() => {
     return Object.values(states).every(state => state.isSuccess)
   }, [states])
 
   return {
-    states,
-    execute,
-    executeAll,
-    reset,
-    isAnyLoading,
-    hasAnyError,
+    states, 
+    execute, 
+    executeAll, 
+    reset, 
+    isAnyLoading, 
+    hasAnyError, 
     allSuccessful
   }
 }
@@ -283,14 +283,14 @@ export function useAsyncOperations<T extends Record<string, () => Promise<any>>>
  * Hook for debounced async operations
  */
 export function useDebouncedAsyncOperation<T = any>(
-  operation: () => Promise<T>,
-  delay: number = 300,
+  operation: () => Promise<T>, 
+  delay: number = 300, 
   options: AsyncOperationOptions = {}
 ) {
   const asyncOp = useAsyncOperation(operation, options)
-  const timeoutRef = React.useRef<NodeJS.Timeout>()
+  const timeoutRef = useRef<NodeJS.Timeout>()
 
-  const debouncedExecute = React.useCallback(() => {
+  const debouncedExecute = useCallback(() => {
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current)
     }
@@ -300,7 +300,7 @@ export function useDebouncedAsyncOperation<T = any>(
     }, delay)
   }, [asyncOp.execute, delay])
 
-  React.useEffect(() => {
+  useEffect(() => {
     return () => {
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current)
@@ -309,8 +309,8 @@ export function useDebouncedAsyncOperation<T = any>(
   }, [])
 
   return {
-    ...asyncOp,
-    execute: debouncedExecute,
+    ...asyncOp, 
+    execute: debouncedExecute, 
     executeImmediate: asyncOp.execute
   }
 }

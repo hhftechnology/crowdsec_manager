@@ -1,4 +1,4 @@
-import * as React from "react"
+import { ComponentType, ErrorInfo, ReactNode, useCallback, useEffect, useState } from "react"
 import { ThemeProvider, useTheme } from "@/components/ThemeProvider"
 import { ErrorBoundary, ErrorFallbackProps } from "./ErrorBoundary"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -10,7 +10,7 @@ import { AlertTriangle, RefreshCw, Palette } from "lucide-react"
  */
 function ThemeErrorFallback({ error, resetError }: ErrorFallbackProps) {
   // Apply basic fallback theme directly to avoid theme context issues
-  React.useEffect(() => {
+  useEffect(() => {
     document.documentElement.classList.remove('dark', 'light')
     document.documentElement.classList.add('light')
     document.documentElement.style.colorScheme = 'light'
@@ -61,21 +61,21 @@ function ThemeErrorFallback({ error, resetError }: ErrorFallbackProps) {
  * Safe theme provider with error boundary and fallback handling
  */
 export interface SafeThemeProviderProps {
-  children: React.ReactNode
+  children: ReactNode
   defaultTheme?: 'light' | 'dark' | 'system'
   enableSystemDetection?: boolean
   enableAccessibilityFeatures?: boolean
 }
 
 export function SafeThemeProvider({
-  children,
-  defaultTheme = 'system',
-  enableSystemDetection = true,
+  children, 
+  defaultTheme = 'system', 
+  enableSystemDetection = true, 
   enableAccessibilityFeatures = true
 }: SafeThemeProviderProps) {
-  const [themeKey, setThemeKey] = React.useState(0)
+  const [themeKey, setThemeKey] = useState(0)
 
-  const handleThemeError = React.useCallback((error: Error, errorInfo: React.ErrorInfo) => {
+  const handleThemeError = useCallback((error: Error, errorInfo: ErrorInfo) => {
     console.error('Theme system error:', error, errorInfo)
     
     // Apply emergency fallback theme
@@ -92,7 +92,7 @@ export function SafeThemeProvider({
     }
   }, [])
 
-  // const resetTheme = React.useCallback(() => {
+  // const resetTheme = useCallback(() => {
   //   // Force re-mount of theme provider
   //   setThemeKey(prev => prev + 1)
   // }, []) // Unused function
@@ -119,7 +119,7 @@ export function SafeThemeProvider({
  * Hook to safely access theme with error handling
  */
 export function useSafeTheme() {
-  const [themeError, setThemeError] = React.useState<Error | null>(null)
+  const [themeError, setThemeError] = useState<Error | null>(null)
   
   try {
     const theme = useTheme()
@@ -130,32 +130,32 @@ export function useSafeTheme() {
     }
     
     return {
-      ...theme,
-      error: null,
+      ...theme, 
+      error: null, 
       isError: false
     }
   } catch (error) {
     // Fallback theme state when theme context fails
     const fallbackTheme = {
-      theme: 'light' as const,
-      resolvedTheme: 'light' as const,
-      systemTheme: 'light' as const,
+      theme: 'light' as const, 
+      resolvedTheme: 'light' as const, 
+      systemTheme: 'light' as const, 
       accessibility: {
-        highContrast: false,
-        reducedMotion: false,
-        largeText: false,
-        screenReaderOptimized: false,
-      },
+        highContrast: false, 
+        reducedMotion: false, 
+        largeText: false, 
+        screenReaderOptimized: false, 
+      }, 
       setTheme: () => {
         console.warn('Theme system is in error state, cannot change theme')
-      },
+      }, 
       setAccessibilityPreference: () => {
         console.warn('Theme system is in error state, cannot change accessibility preferences')
-      },
+      }, 
       toggleAccessibilityPreference: () => {
         console.warn('Theme system is in error state, cannot toggle accessibility preferences')
-      },
-      error: error as Error,
+      }, 
+      error: error as Error, 
       isError: true
     }
 
@@ -173,7 +173,7 @@ export function useSafeTheme() {
  * Theme-aware component wrapper that handles theme errors gracefully
  */
 export function withSafeTheme<P extends object>(
-  Component: React.ComponentType<P>
+  Component: ComponentType<P>
 ) {
   const WrappedComponent = (props: P) => {
     const theme = useSafeTheme()

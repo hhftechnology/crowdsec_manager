@@ -1,17 +1,17 @@
 import { createContext, useContext, useEffect, useState, useCallback } from "react"
 import { THEME_MODES, type ThemeMode } from "../lib/constants"
 import {
-  type AccessibilityPreferences,
-  getSystemTheme,
-  getSystemAccessibilityPreferences,
-  resolveTheme,
-  applyTheme,
-  getStoredTheme,
-  storeTheme,
-  getStoredAccessibilityPreferences,
-  storeAccessibilityPreferences,
-  createSystemThemeListener,
-  createAccessibilityListeners,
+  type AccessibilityPreferences, 
+  getSystemTheme, 
+  getSystemAccessibilityPreferences, 
+  resolveTheme, 
+  applyTheme, 
+  getStoredTheme, 
+  storeTheme, 
+  getStoredAccessibilityPreferences, 
+  storeAccessibilityPreferences, 
+  createSystemThemeListener, 
+  createAccessibilityListeners, 
 } from "../lib/theme"
 
 type ThemeProviderProps = {
@@ -28,40 +28,40 @@ type ThemeProviderState = {
   accessibility: AccessibilityPreferences
   setTheme: (theme: ThemeMode) => void
   setAccessibilityPreference: <K extends keyof AccessibilityPreferences>(
-    key: K,
+    key: K, 
     value: AccessibilityPreferences[K]
   ) => void
   toggleAccessibilityPreference: (key: keyof AccessibilityPreferences) => void
 }
 
 const initialState: ThemeProviderState = {
-  theme: THEME_MODES.SYSTEM,
-  resolvedTheme: 'light',
-  systemTheme: 'light',
+  theme: THEME_MODES.SYSTEM, 
+  resolvedTheme: 'light', 
+  systemTheme: 'light', 
   accessibility: {
-    highContrast: false,
-    reducedMotion: false,
-    largeText: false,
-    screenReaderOptimized: false,
-  },
-  setTheme: () => null,
-  setAccessibilityPreference: () => null,
-  toggleAccessibilityPreference: () => null,
+    highContrast: false, 
+    reducedMotion: false, 
+    largeText: false, 
+    screenReaderOptimized: false, 
+  }, 
+  setTheme: () => null, 
+  setAccessibilityPreference: () => null, 
+  toggleAccessibilityPreference: () => null, 
 }
 
 const ThemeProviderContext = createContext<ThemeProviderState>(initialState)
 
 export function ThemeProvider({
-  children,
-  defaultTheme = THEME_MODES.SYSTEM,
-  enableSystemDetection = true,
-  enableAccessibilityFeatures = true,
+  children, 
+  defaultTheme = THEME_MODES.SYSTEM, 
+  enableSystemDetection = true, 
+  enableAccessibilityFeatures = true, 
 }: ThemeProviderProps) {
   const [theme, setThemeState] = useState<ThemeMode>(() => getStoredTheme() || defaultTheme)
   const [systemTheme, setSystemTheme] = useState<'light' | 'dark'>(() => getSystemTheme())
   const [accessibility, setAccessibilityState] = useState<AccessibilityPreferences>(() => ({
-    ...getStoredAccessibilityPreferences(),
-    ...getSystemAccessibilityPreferences(),
+    ...getStoredAccessibilityPreferences(), 
+    ...getSystemAccessibilityPreferences(), 
   }))
 
   const resolvedTheme = resolveTheme(theme, systemTheme)
@@ -88,8 +88,8 @@ export function ThemeProvider({
 
     const cleanup = createAccessibilityListeners((newPreferences) => {
       setAccessibilityState(prev => ({
-        ...prev,
-        ...newPreferences,
+        ...prev, 
+        ...newPreferences, 
       }))
     })
 
@@ -104,7 +104,7 @@ export function ThemeProvider({
 
   // Accessibility preference setter
   const setAccessibilityPreference = useCallback(<K extends keyof AccessibilityPreferences>(
-    key: K,
+    key: K, 
     value: AccessibilityPreferences[K]
   ) => {
     setAccessibilityState(prev => {
@@ -124,13 +124,13 @@ export function ThemeProvider({
   }, [])
 
   const value: ThemeProviderState = {
-    theme,
-    resolvedTheme,
-    systemTheme,
-    accessibility,
-    setTheme,
-    setAccessibilityPreference,
-    toggleAccessibilityPreference,
+    theme, 
+    resolvedTheme, 
+    systemTheme, 
+    accessibility, 
+    setTheme, 
+    setAccessibilityPreference, 
+    toggleAccessibilityPreference, 
   }
 
   return (
@@ -154,8 +154,8 @@ export const useAccessibility = () => {
   const { accessibility, setAccessibilityPreference, toggleAccessibilityPreference } = useTheme()
   
   return {
-    accessibility,
-    setAccessibilityPreference,
-    toggleAccessibilityPreference,
+    accessibility, 
+    setAccessibilityPreference, 
+    toggleAccessibilityPreference, 
   }
 }

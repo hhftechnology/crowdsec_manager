@@ -1,51 +1,51 @@
-import * as React from "react"
+import { ButtonHTMLAttributes, forwardRef } from "react"
 import { Slot } from "@radix-ui/react-slot"
 import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 import { useBreakpoints } from "@/hooks/useMediaQuery"
 
 const responsiveButtonVariants = cva(
-  "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
+  "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50", 
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/90",
-        destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
-        outline: "border border-input bg-background hover:bg-accent hover:text-accent-foreground",
-        secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-        ghost: "hover:bg-accent hover:text-accent-foreground",
-        link: "text-primary underline-offset-4 hover:underline",
-      },
+        default: "bg-primary text-primary-foreground hover:bg-primary/90", 
+        destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90", 
+        outline: "border border-input bg-background hover:bg-accent hover:text-accent-foreground", 
+        secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80", 
+        ghost: "hover:bg-accent hover:text-accent-foreground", 
+        link: "text-primary underline-offset-4 hover:underline", 
+      }, 
       size: {
-        default: "h-10 px-4 py-2",
-        sm: "h-9 rounded-md px-3",
-        lg: "h-11 rounded-md px-8",
-        icon: "h-10 w-10",
+        default: "h-10 px-4 py-2", 
+        sm: "h-9 rounded-md px-3", 
+        lg: "h-11 rounded-md px-8", 
+        icon: "h-10 w-10", 
         // Touch-friendly sizes
-        touch: "h-12 px-6 py-3",
-        "touch-sm": "h-10 px-4 py-2",
-        "touch-lg": "h-14 px-8 py-4",
-      },
+        touch: "h-12 px-6 py-3", 
+        "touch-sm": "h-10 px-4 py-2", 
+        "touch-lg": "h-14 px-8 py-4", 
+      }, 
       responsive: {
-        true: "",
-        false: "",
-      },
+        true: "", 
+        false: "", 
+      }, 
       touchOptimized: {
-        true: "touch-manipulation active:scale-95 select-none",
-        false: "",
-      },
-    },
+        true: "touch-manipulation active:scale-95 select-none", 
+        false: "", 
+      }, 
+    }, 
     defaultVariants: {
-      variant: "default",
-      size: "default",
-      responsive: true,
-      touchOptimized: false,
-    },
+      variant: "default", 
+      size: "default", 
+      responsive: true, 
+      touchOptimized: false, 
+    }, 
   }
 )
 
 export interface ResponsiveButtonProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
+  extends ButtonHTMLAttributes<HTMLButtonElement>, 
     VariantProps<typeof responsiveButtonVariants> {
   asChild?: boolean
   fullWidth?: boolean
@@ -53,19 +53,19 @@ export interface ResponsiveButtonProps
   loadingText?: string
 }
 
-const ResponsiveButton = React.forwardRef<HTMLButtonElement, ResponsiveButtonProps>(
+const ResponsiveButton = forwardRef<HTMLButtonElement, ResponsiveButtonProps>(
   ({ 
     className, 
     variant, 
     size, 
-    responsive = true,
-    touchOptimized,
+    responsive = true, 
+    touchOptimized, 
     asChild = false, 
-    fullWidth = false,
-    loading = false,
-    loadingText,
-    children,
-    disabled,
+    fullWidth = false, 
+    loading = false, 
+    loadingText, 
+    children, 
+    disabled, 
     ...props 
   }, ref) => {
     const { isMobile, isTouchDevice } = useBreakpoints()
@@ -100,16 +100,16 @@ const ResponsiveButton = React.forwardRef<HTMLButtonElement, ResponsiveButtonPro
             size: responsiveSize, 
             responsive, 
             touchOptimized: shouldOptimizeForTouch 
-          }),
+          }), 
           // Full width
-          fullWidth && "w-full",
+          fullWidth && "w-full", 
           // Mobile-specific adjustments
           responsive && isMobile && [
             "text-base", // Larger text on mobile
             "min-h-[44px]", // Minimum touch target size
-          ],
+          ], 
           // Loading state
-          loading && "cursor-not-allowed opacity-70",
+          loading && "cursor-not-allowed opacity-70", 
           className
         )}
         ref={ref}

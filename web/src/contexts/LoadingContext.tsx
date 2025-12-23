@@ -1,4 +1,4 @@
-import * as React from "react"
+import { ComponentType, ReactNode, createContext, useCallback, useContext, useState } from "react"
 
 export interface LoadingState {
   id: string
@@ -20,27 +20,27 @@ export interface LoadingContextType {
   globalLoading: boolean
 }
 
-const LoadingContext = React.createContext<LoadingContextType | undefined>(undefined)
+const LoadingContext = createContext<LoadingContextType | undefined>(undefined)
 
 export interface LoadingProviderProps {
-  children: React.ReactNode
+  children: ReactNode
   maxStates?: number
 }
 
 export function LoadingProvider({ children, maxStates = 100 }: LoadingProviderProps) {
-  const [loadingStates, setLoadingStates] = React.useState<LoadingState[]>([])
+  const [loadingStates, setLoadingStates] = useState<LoadingState[]>([])
 
-  const startLoading = React.useCallback((
+  const startLoading = useCallback((
     label: string, 
     context?: string, 
     metadata?: Record<string, any>
   ): string => {
     const loadingState: LoadingState = {
-      id: `loading-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      label,
-      context,
-      startTime: new Date(),
-      progress: undefined,
+      id: `loading-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, 
+      label, 
+      context, 
+      startTime: new Date(), 
+      progress: undefined, 
       metadata
     }
 
@@ -53,7 +53,7 @@ export function LoadingProvider({ children, maxStates = 100 }: LoadingProviderPr
     return loadingState.id
   }, [maxStates])
 
-  const updateLoading = React.useCallback((
+  const updateLoading = useCallback((
     id: string, 
     updates: Partial<Pick<LoadingState, 'label' | 'progress' | 'metadata'>>
   ) => {
@@ -62,11 +62,11 @@ export function LoadingProvider({ children, maxStates = 100 }: LoadingProviderPr
     ))
   }, [])
 
-  const stopLoading = React.useCallback((id: string) => {
+  const stopLoading = useCallback((id: string) => {
     setLoadingStates(prev => prev.filter(state => state.id !== id))
   }, [])
 
-  const stopAllLoading = React.useCallback((context?: string) => {
+  const stopAllLoading = useCallback((context?: string) => {
     if (context) {
       setLoadingStates(prev => prev.filter(state => state.context !== context))
     } else {
@@ -74,27 +74,27 @@ export function LoadingProvider({ children, maxStates = 100 }: LoadingProviderPr
     }
   }, [])
 
-  const isLoading = React.useCallback((context?: string) => {
+  const isLoading = useCallback((context?: string) => {
     if (context) {
       return loadingStates.some(state => state.context === context)
     }
     return loadingStates.length > 0
   }, [loadingStates])
 
-  const getLoadingByContext = React.useCallback((context: string) => {
+  const getLoadingByContext = useCallback((context: string) => {
     return loadingStates.filter(state => state.context === context)
   }, [loadingStates])
 
   const globalLoading = loadingStates.length > 0
 
   const contextValue: LoadingContextType = {
-    loadingStates,
-    startLoading,
-    updateLoading,
-    stopLoading,
-    stopAllLoading,
-    isLoading,
-    getLoadingByContext,
+    loadingStates, 
+    startLoading, 
+    updateLoading, 
+    stopLoading, 
+    stopAllLoading, 
+    isLoading, 
+    getLoadingByContext, 
     globalLoading
   }
 
@@ -106,7 +106,7 @@ export function LoadingProvider({ children, maxStates = 100 }: LoadingProviderPr
 }
 
 export function useLoading() {
-  const context = React.useContext(LoadingContext)
+  const context = useContext(LoadingContext)
   if (context === undefined) {
     throw new Error('useLoading must be used within a LoadingProvider')
   }
@@ -126,14 +126,14 @@ export function useContextualLoading(context: string) {
     getLoadingByContext 
   } = useLoading()
 
-  const startContextLoading = React.useCallback((
+  const startContextLoading = useCallback((
     label: string, 
     metadata?: Record<string, any>
   ) => {
     return startLoading(label, context, metadata)
   }, [startLoading, context])
 
-  const stopContextLoading = React.useCallback(() => {
+  const stopContextLoading = useCallback(() => {
     stopAllLoading(context)
   }, [stopAllLoading, context])
 
@@ -141,11 +141,11 @@ export function useContextualLoading(context: string) {
   const contextLoadingStates = getLoadingByContext(context)
 
   return {
-    startLoading: startContextLoading,
-    updateLoading,
-    stopLoading,
-    stopAllLoading: stopContextLoading,
-    isLoading: contextLoading,
+    startLoading: startContextLoading, 
+    updateLoading, 
+    stopLoading, 
+    stopAllLoading: stopContextLoading, 
+    isLoading: contextLoading, 
     loadingStates: contextLoadingStates
   }
 }
@@ -154,14 +154,14 @@ export function useContextualLoading(context: string) {
  * Hook to wrap async operations with loading state management
  */
 export function useAsyncWithLoading<T extends (...args: any[]) => Promise<any>>(
-  asyncFn: T,
-  loadingLabel: string,
+  asyncFn: T, 
+  loadingLabel: string, 
   context?: string
 ): [T, boolean] {
   const { startLoading, stopLoading, isLoading } = useLoading()
-  const [operationId, setOperationId] = React.useState<string | null>(null)
+  const [operationId, setOperationId] = useState<string | null>(null)
 
-  const wrappedFn = React.useCallback(async (...args: Parameters<T>) => {
+  const wrappedFn = useCallback(async (...args: Parameters<T>) => {
     const id = startLoading(loadingLabel, context)
     setOperationId(id)
 
@@ -184,15 +184,15 @@ export function useAsyncWithLoading<T extends (...args: any[]) => Promise<any>>(
  */
 export function useProgressiveLoading(context: string) {
   const { startLoading, updateLoading, stopLoading } = useLoading()
-  const [currentId, setCurrentId] = React.useState<string | null>(null)
+  const [currentId, setCurrentId] = useState<string | null>(null)
 
-  const startProgress = React.useCallback((label: string) => {
+  const startProgress = useCallback((label: string) => {
     const id = startLoading(label, context, { progress: 0 })
     setCurrentId(id)
     return id
   }, [startLoading, context])
 
-  const updateProgress = React.useCallback((progress: number, label?: string) => {
+  const updateProgress = useCallback((progress: number, label?: string) => {
     if (currentId) {
       const updates: any = { progress: Math.max(0, Math.min(100, progress)) }
       if (label) updates.label = label
@@ -200,7 +200,7 @@ export function useProgressiveLoading(context: string) {
     }
   }, [currentId, updateLoading])
 
-  const completeProgress = React.useCallback(() => {
+  const completeProgress = useCallback(() => {
     if (currentId) {
       stopLoading(currentId)
       setCurrentId(null)
@@ -208,9 +208,9 @@ export function useProgressiveLoading(context: string) {
   }, [currentId, stopLoading])
 
   return {
-    startProgress,
-    updateProgress,
-    completeProgress,
+    startProgress, 
+    updateProgress, 
+    completeProgress, 
     isActive: currentId !== null
   }
 }
@@ -219,7 +219,7 @@ export function useProgressiveLoading(context: string) {
  * Higher-order component to wrap components with loading state management
  */
 export function withLoadingState<P extends object>(
-  Component: React.ComponentType<P>,
+  Component: ComponentType<P>, 
   context?: string
 ) {
   const WrappedComponent = (props: P) => {

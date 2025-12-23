@@ -1,25 +1,25 @@
-import * as React from "react"
+import { Component, ComponentType, ErrorInfo, ReactNode, useEffect, useState } from "react"
 import { AlertTriangle, RefreshCw, Home } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 
 interface ErrorBoundaryProps {
-  children: React.ReactNode
-  fallback?: React.ComponentType<ErrorFallbackProps>
-  onError?: (error: Error, errorInfo: React.ErrorInfo) => void
+  children: ReactNode
+  fallback?: ComponentType<ErrorFallbackProps>
+  onError?: (error: Error, errorInfo: ErrorInfo) => void
   resetKeys?: Array<string | number>
 }
 
 interface ErrorBoundaryState {
   hasError: boolean
   error: Error | null
-  errorInfo: React.ErrorInfo | null
+  errorInfo: ErrorInfo | null
 }
 
 export interface ErrorFallbackProps {
   error: Error | null
-  errorInfo: React.ErrorInfo | null
+  errorInfo: ErrorInfo | null
   resetError: () => void
 }
 
@@ -27,32 +27,32 @@ export interface ErrorFallbackProps {
  * Error Boundary component that catches JavaScript errors anywhere in the child component tree
  * Implements graceful error handling with user-friendly fallback UI
  */
-export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   constructor(props: ErrorBoundaryProps) {
     super(props)
     this.state = {
-      hasError: false,
-      error: null,
-      errorInfo: null,
+      hasError: false, 
+      error: null, 
+      errorInfo: null, 
     }
   }
 
   static getDerivedStateFromError(error: Error): Partial<ErrorBoundaryState> {
     return {
-      hasError: true,
-      error,
+      hasError: true, 
+      error, 
     }
   }
 
-  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     // Log error to console in development
     if (process.env.NODE_ENV === 'development') {
       console.error('ErrorBoundary caught an error:', error, errorInfo)
     }
 
     this.setState({
-      error,
-      errorInfo,
+      error, 
+      errorInfo, 
     })
 
     // Call optional error handler
@@ -74,9 +74,9 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
 
   resetError = () => {
     this.setState({
-      hasError: false,
-      error: null,
-      errorInfo: null,
+      hasError: false, 
+      error: null, 
+      errorInfo: null, 
     })
   }
 
@@ -197,9 +197,9 @@ export function InlineErrorFallback({ error, resetError }: ErrorFallbackProps) {
  * Hook to use error boundary imperatively
  */
 export function useErrorHandler() {
-  const [error, setError] = React.useState<Error | null>(null)
+  const [error, setError] = useState<Error | null>(null)
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (error) {
       throw error
     }
@@ -212,7 +212,7 @@ export function useErrorHandler() {
  * Higher-order component to wrap components with error boundary
  */
 export function withErrorBoundary<P extends object>(
-  Component: React.ComponentType<P>,
+  Component: ComponentType<P>, 
   errorBoundaryProps?: Omit<ErrorBoundaryProps, 'children'>
 ) {
   const WrappedComponent = (props: P) => (

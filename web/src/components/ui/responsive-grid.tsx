@@ -1,8 +1,8 @@
-import * as React from "react"
+import { HTMLAttributes, forwardRef } from "react"
 import { cn } from "@/lib/utils"
 import { useBreakpoints } from "@/hooks/useMediaQuery"
 
-interface ResponsiveGridProps extends React.HTMLAttributes<HTMLDivElement> {
+interface ResponsiveGridProps extends HTMLAttributes<HTMLDivElement> {
   cols?: {
     mobile?: number
     tablet?: number
@@ -13,12 +13,12 @@ interface ResponsiveGridProps extends React.HTMLAttributes<HTMLDivElement> {
   adaptive?: boolean
 }
 
-const ResponsiveGrid = React.forwardRef<HTMLDivElement, ResponsiveGridProps>(
+const ResponsiveGrid = forwardRef<HTMLDivElement, ResponsiveGridProps>(
   ({ 
     className, 
-    cols = { mobile: 1, tablet: 2, desktop: 3, largeDesktop: 4 },
-    gap = 'md',
-    adaptive = true,
+    cols = { mobile: 1, tablet: 2, desktop: 3, largeDesktop: 4 }, 
+    gap = 'md', 
+    adaptive = true, 
     ...props 
   }, ref) => {
     const { isMobile, isTablet, isDesktop, isLargeDesktop } = useBreakpoints()
@@ -38,20 +38,20 @@ const ResponsiveGrid = React.forwardRef<HTMLDivElement, ResponsiveGridProps>(
       <div
         ref={ref}
         className={cn(
-          "grid w-full",
+          "grid w-full", 
           // Responsive grid columns
-          `grid-cols-${currentCols}`,
+          `grid-cols-${currentCols}`, 
           // Responsive gaps
-          gap === 'sm' && (isMobile ? "gap-2" : "gap-3"),
-          gap === 'md' && (isMobile ? "gap-3" : "gap-4"),
-          gap === 'lg' && (isMobile ? "gap-4" : "gap-6"),
-          gap === 'xl' && (isMobile ? "gap-6" : "gap-8"),
+          gap === 'sm' && (isMobile ? "gap-2" : "gap-3"), 
+          gap === 'md' && (isMobile ? "gap-3" : "gap-4"), 
+          gap === 'lg' && (isMobile ? "gap-4" : "gap-6"), 
+          gap === 'xl' && (isMobile ? "gap-6" : "gap-8"), 
           // Adaptive behavior
           adaptive && [
-            "transition-all duration-300",
-            isMobile && "auto-rows-min",
+            "transition-all duration-300", 
+            isMobile && "auto-rows-min", 
             !isMobile && "auto-rows-fr"
-          ],
+          ], 
           className
         )}
         {...props}
@@ -61,7 +61,7 @@ const ResponsiveGrid = React.forwardRef<HTMLDivElement, ResponsiveGridProps>(
 )
 ResponsiveGrid.displayName = "ResponsiveGrid"
 
-interface ResponsiveGridItemProps extends React.HTMLAttributes<HTMLDivElement> {
+interface ResponsiveGridItemProps extends HTMLAttributes<HTMLDivElement> {
   span?: {
     mobile?: number
     tablet?: number
@@ -75,11 +75,11 @@ interface ResponsiveGridItemProps extends React.HTMLAttributes<HTMLDivElement> {
   }
 }
 
-const ResponsiveGridItem = React.forwardRef<HTMLDivElement, ResponsiveGridItemProps>(
+const ResponsiveGridItem = forwardRef<HTMLDivElement, ResponsiveGridItemProps>(
   ({ 
     className, 
-    span = {},
-    order = {},
+    span = {}, 
+    order = {}, 
     ...props 
   }, ref) => {
     const { isMobile, isTablet, isDesktop, isLargeDesktop } = useBreakpoints()
@@ -109,9 +109,9 @@ const ResponsiveGridItem = React.forwardRef<HTMLDivElement, ResponsiveGridItemPr
         ref={ref}
         className={cn(
           // Column span
-          currentSpan > 1 && `col-span-${currentSpan}`,
+          currentSpan > 1 && `col-span-${currentSpan}`, 
           // Order
-          currentOrder && `order-${currentOrder}`,
+          currentOrder && `order-${currentOrder}`, 
           className
         )}
         {...props}
@@ -121,7 +121,7 @@ const ResponsiveGridItem = React.forwardRef<HTMLDivElement, ResponsiveGridItemPr
 )
 ResponsiveGridItem.displayName = "ResponsiveGridItem"
 
-interface ResponsiveFlexProps extends React.HTMLAttributes<HTMLDivElement> {
+interface ResponsiveFlexProps extends HTMLAttributes<HTMLDivElement> {
   direction?: {
     mobile?: 'row' | 'col'
     tablet?: 'row' | 'col'
@@ -133,14 +133,14 @@ interface ResponsiveFlexProps extends React.HTMLAttributes<HTMLDivElement> {
   wrap?: boolean
 }
 
-const ResponsiveFlex = React.forwardRef<HTMLDivElement, ResponsiveFlexProps>(
+const ResponsiveFlex = forwardRef<HTMLDivElement, ResponsiveFlexProps>(
   ({ 
     className, 
-    direction = { mobile: 'col', tablet: 'row', desktop: 'row' },
-    align = 'start',
-    justify = 'start',
-    gap = 'md',
-    wrap = false,
+    direction = { mobile: 'col', tablet: 'row', desktop: 'row' }, 
+    align = 'start', 
+    justify = 'start', 
+    gap = 'md', 
+    wrap = false, 
     ...props 
   }, ref) => {
     const { isMobile, isTablet, isDesktop } = useBreakpoints()
@@ -159,28 +159,28 @@ const ResponsiveFlex = React.forwardRef<HTMLDivElement, ResponsiveFlexProps>(
       <div
         ref={ref}
         className={cn(
-          "flex",
+          "flex", 
           // Direction
-          currentDirection === 'col' ? "flex-col" : "flex-row",
+          currentDirection === 'col' ? "flex-col" : "flex-row", 
           // Alignment
-          align === 'start' && "items-start",
-          align === 'center' && "items-center",
-          align === 'end' && "items-end",
-          align === 'stretch' && "items-stretch",
+          align === 'start' && "items-start", 
+          align === 'center' && "items-center", 
+          align === 'end' && "items-end", 
+          align === 'stretch' && "items-stretch", 
           // Justification
-          justify === 'start' && "justify-start",
-          justify === 'center' && "justify-center",
-          justify === 'end' && "justify-end",
-          justify === 'between' && "justify-between",
-          justify === 'around' && "justify-around",
-          justify === 'evenly' && "justify-evenly",
+          justify === 'start' && "justify-start", 
+          justify === 'center' && "justify-center", 
+          justify === 'end' && "justify-end", 
+          justify === 'between' && "justify-between", 
+          justify === 'around' && "justify-around", 
+          justify === 'evenly' && "justify-evenly", 
           // Gap
-          gap === 'sm' && (isMobile ? "gap-2" : "gap-3"),
-          gap === 'md' && (isMobile ? "gap-3" : "gap-4"),
-          gap === 'lg' && (isMobile ? "gap-4" : "gap-6"),
-          gap === 'xl' && (isMobile ? "gap-6" : "gap-8"),
+          gap === 'sm' && (isMobile ? "gap-2" : "gap-3"), 
+          gap === 'md' && (isMobile ? "gap-3" : "gap-4"), 
+          gap === 'lg' && (isMobile ? "gap-4" : "gap-6"), 
+          gap === 'xl' && (isMobile ? "gap-6" : "gap-8"), 
           // Wrap
-          wrap && "flex-wrap",
+          wrap && "flex-wrap", 
           className
         )}
         {...props}
@@ -191,7 +191,7 @@ const ResponsiveFlex = React.forwardRef<HTMLDivElement, ResponsiveFlexProps>(
 ResponsiveFlex.displayName = "ResponsiveFlex"
 
 export {
-  ResponsiveGrid,
-  ResponsiveGridItem,
+  ResponsiveGrid, 
+  ResponsiveGridItem, 
   ResponsiveFlex
 }

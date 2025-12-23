@@ -1,4 +1,4 @@
-import * as React from "react"
+import { AnchorHTMLAttributes, ComponentType, ErrorInfo, MouseEvent, ReactNode, useCallback, useEffect, useState } from "react"
 import { useNavigate, useLocation, NavigateFunction, Location } from "react-router-dom"
 import { ErrorBoundary, ErrorFallbackProps } from "./ErrorBoundary"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -50,17 +50,17 @@ function NavigationErrorFallback({ error, resetError }: ErrorFallbackProps) {
  * Safe navigation wrapper with error boundary
  */
 export interface SafeNavigationProps {
-  children: React.ReactNode
+  children: ReactNode
 }
 
 export function SafeNavigation({ children }: SafeNavigationProps) {
-  const [navigationKey, setNavigationKey] = React.useState(0)
+  const [navigationKey, setNavigationKey] = useState(0)
 
-  const handleNavigationError = React.useCallback((error: Error, errorInfo: React.ErrorInfo) => {
+  const handleNavigationError = useCallback((error: Error, errorInfo: ErrorInfo) => {
     console.error('Navigation error:', error, errorInfo)
   }, [])
 
-  // const resetNavigation = React.useCallback(() => {
+  // const resetNavigation = useCallback(() => {
   //   setNavigationKey(prev => prev + 1)
   // }, []) // Unused function
 
@@ -81,9 +81,9 @@ export function SafeNavigation({ children }: SafeNavigationProps) {
  */
 export function useSafeNavigate() {
   const navigate = useNavigate()
-  const [navigationError, setNavigationError] = React.useState<Error | null>(null)
+  const [navigationError, setNavigationError] = useState<Error | null>(null)
 
-  const safeNavigate = React.useCallback<NavigateFunction>(
+  const safeNavigate = useCallback<NavigateFunction>(
     (to: any, options?: any) => {
       try {
         setNavigationError(null)
@@ -99,13 +99,13 @@ export function useSafeNavigate() {
           window.history.go(to)
         }
       }
-    },
+    }, 
     [navigate]
   )
 
   return {
-    navigate: safeNavigate,
-    error: navigationError,
+    navigate: safeNavigate, 
+    error: navigationError, 
     clearError: () => setNavigationError(null)
   }
 }
@@ -114,7 +114,7 @@ export function useSafeNavigate() {
  * Safe location hook with error handling
  */
 export function useSafeLocation() {
-  const [locationError, setLocationError] = React.useState<Error | null>(null)
+  const [locationError, setLocationError] = useState<Error | null>(null)
   
   try {
     const location = useLocation()
@@ -124,8 +124,8 @@ export function useSafeLocation() {
     }
     
     return {
-      location,
-      error: null,
+      location, 
+      error: null, 
       isError: false
     }
   } catch (error) {
@@ -137,13 +137,13 @@ export function useSafeLocation() {
     // Fallback location object
     return {
       location: {
-        pathname: window.location.pathname,
-        search: window.location.search,
-        hash: window.location.hash,
-        state: null,
+        pathname: window.location.pathname, 
+        search: window.location.search, 
+        hash: window.location.hash, 
+        state: null, 
         key: 'fallback'
-      } as Location,
-      error: error as Error,
+      } as Location, 
+      error: error as Error, 
       isError: true
     }
   }
@@ -160,15 +160,15 @@ export interface NavigationGuardOptions {
 }
 
 export function useNavigationGuard({
-  condition,
-  redirectTo = '/',
-  onBlock,
+  condition, 
+  redirectTo = '/', 
+  onBlock, 
   message = 'Access denied'
 }: NavigationGuardOptions) {
   const { navigate } = useSafeNavigate()
   const { location } = useSafeLocation()
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (!condition) {
       console.warn(`Navigation blocked: ${message}`)
       onBlock?.()
@@ -188,7 +188,7 @@ export function useNavigationGuard({
  */
 export function useNavigationState<T = any>(key: string, defaultValue: T) {
   const { location } = useSafeLocation()
-  const [state, setState] = React.useState<T>(() => {
+  const [state, setState] = useState<T>(() => {
     try {
       const locationState = location.state as any
       return locationState?.[key] ?? defaultValue
@@ -198,7 +198,7 @@ export function useNavigationState<T = any>(key: string, defaultValue: T) {
     }
   })
 
-  React.useEffect(() => {
+  useEffect(() => {
     try {
       const locationState = location.state as any
       if (locationState?.[key] !== undefined) {
@@ -218,7 +218,7 @@ export function useNavigationState<T = any>(key: string, defaultValue: T) {
 export interface BreadcrumbItem {
   label: string
   path?: string
-  icon?: React.ComponentType<{ className?: string }>
+  icon?: ComponentType<{ className?: string }>
 }
 
 export interface SafeBreadcrumbsProps {
@@ -229,7 +229,7 @@ export interface SafeBreadcrumbsProps {
 export function SafeBreadcrumbs({ items, className }: SafeBreadcrumbsProps) {
   const { navigate, error } = useSafeNavigate()
 
-  const handleNavigate = React.useCallback((path?: string) => {
+  const handleNavigate = useCallback((path?: string) => {
     if (!path) return
     
     try {
@@ -286,17 +286,17 @@ export function SafeBreadcrumbs({ items, className }: SafeBreadcrumbsProps) {
 /**
  * Safe link component with error handling
  */
-export interface SafeLinkProps extends React.AnchorHTMLAttributes<HTMLAnchorElement> {
+export interface SafeLinkProps extends AnchorHTMLAttributes<HTMLAnchorElement> {
   to: string
   replace?: boolean
   state?: any
-  children: React.ReactNode
+  children: ReactNode
 }
 
 export function SafeLink({ to, replace, state, children, onClick, ...props }: SafeLinkProps) {
   const { navigate } = useSafeNavigate()
 
-  const handleClick = React.useCallback((e: React.MouseEvent<HTMLAnchorElement>) => {
+  const handleClick = useCallback((e: MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault()
     
     onClick?.(e)

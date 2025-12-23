@@ -1,4 +1,4 @@
-import * as React from "react"
+import { ComponentType, ReactNode, createContext, useCallback, useContext, useEffect, useState } from "react"
 import { notifications } from "@/components/common/NotificationComponents"
 
 export interface ErrorInfo {
@@ -20,27 +20,27 @@ export interface ErrorContextType {
   hasUnrecoveredErrors: boolean
 }
 
-const ErrorContext = React.createContext<ErrorContextType | undefined>(undefined)
+const ErrorContext = createContext<ErrorContextType | undefined>(undefined)
 
 export interface ErrorProviderProps {
-  children: React.ReactNode
+  children: ReactNode
   maxErrors?: number
   autoNotify?: boolean
 }
 
 export function ErrorProvider({ 
   children, 
-  maxErrors = 50,
+  maxErrors = 50, 
   autoNotify = true 
 }: ErrorProviderProps) {
-  const [errors, setErrors] = React.useState<ErrorInfo[]>([])
+  const [errors, setErrors] = useState<ErrorInfo[]>([])
 
-  const reportError = React.useCallback((error: Error, context?: string): string => {
+  const reportError = useCallback((error: Error, context?: string): string => {
     const errorInfo: ErrorInfo = {
-      id: `error-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      error,
-      context,
-      timestamp: new Date(),
+      id: `error-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, 
+      error, 
+      context, 
+      timestamp: new Date(), 
       recovered: false
     }
 
@@ -53,7 +53,7 @@ export function ErrorProvider({
     // Auto-notify if enabled
     if (autoNotify) {
       notifications.error(
-        error.message || 'An error occurred',
+        error.message || 'An error occurred', 
         context ? `Context: ${context}` : undefined
       )
     }
@@ -66,21 +66,21 @@ export function ErrorProvider({
     return errorInfo.id
   }, [maxErrors, autoNotify])
 
-  const clearError = React.useCallback((id: string) => {
+  const clearError = useCallback((id: string) => {
     setErrors(prev => prev.filter(error => error.id !== id))
   }, [])
 
-  const clearAllErrors = React.useCallback(() => {
+  const clearAllErrors = useCallback(() => {
     setErrors([])
   }, [])
 
-  const markRecovered = React.useCallback((id: string) => {
+  const markRecovered = useCallback((id: string) => {
     setErrors(prev => prev.map(error => 
       error.id === id ? { ...error, recovered: true } : error
     ))
   }, [])
 
-  const getErrorsByContext = React.useCallback((context: string) => {
+  const getErrorsByContext = useCallback((context: string) => {
     return errors.filter(error => error.context === context)
   }, [errors])
 
@@ -88,13 +88,13 @@ export function ErrorProvider({
   const hasUnrecoveredErrors = errors.some(error => !error.recovered)
 
   const contextValue: ErrorContextType = {
-    errors,
-    reportError,
-    clearError,
-    clearAllErrors,
-    markRecovered,
-    getErrorsByContext,
-    hasErrors,
+    errors, 
+    reportError, 
+    clearError, 
+    clearAllErrors, 
+    markRecovered, 
+    getErrorsByContext, 
+    hasErrors, 
     hasUnrecoveredErrors
   }
 
@@ -106,7 +106,7 @@ export function ErrorProvider({
 }
 
 export function useErrorReporting() {
-  const context = React.useContext(ErrorContext)
+  const context = useContext(ErrorContext)
   if (context === undefined) {
     throw new Error('useErrorReporting must be used within an ErrorProvider')
   }
@@ -119,11 +119,11 @@ export function useErrorReporting() {
 export function useContextualErrorHandler(context: string) {
   const { reportError, clearError, getErrorsByContext, markRecovered } = useErrorReporting()
 
-  const handleError = React.useCallback((error: Error) => {
+  const handleError = useCallback((error: Error) => {
     return reportError(error, context)
   }, [reportError, context])
 
-  const clearContextErrors = React.useCallback(() => {
+  const clearContextErrors = useCallback(() => {
     const contextErrors = getErrorsByContext(context)
     contextErrors.forEach(error => clearError(error.id))
   }, [getErrorsByContext, clearError, context])
@@ -132,10 +132,10 @@ export function useContextualErrorHandler(context: string) {
   const hasContextErrors = contextErrors.length > 0
 
   return {
-    handleError,
-    clearContextErrors,
-    markRecovered,
-    contextErrors,
+    handleError, 
+    clearContextErrors, 
+    markRecovered, 
+    contextErrors, 
     hasContextErrors
   }
 }
@@ -144,17 +144,17 @@ export function useContextualErrorHandler(context: string) {
  * Hook to wrap async operations with error handling
  */
 export function useAsyncErrorHandler<T extends (...args: any[]) => Promise<any>>(
-  asyncFn: T,
+  asyncFn: T, 
   context?: string
 ): T {
   const { reportError } = useErrorReporting()
 
-  return React.useCallback(async (...args: Parameters<T>) => {
+  return useCallback(async (...args: Parameters<T>) => {
     try {
       return await asyncFn(...args)
     } catch (error) {
       const errorId = reportError(
-        error instanceof Error ? error : new Error(String(error)),
+        error instanceof Error ? error : new Error(String(error)), 
         context
       )
       throw { ...error, errorId }
@@ -166,23 +166,23 @@ export function useAsyncErrorHandler<T extends (...args: any[]) => Promise<any>>
  * Higher-order component to wrap components with error reporting
  */
 export function withErrorReporting<P extends object>(
-  Component: React.ComponentType<P>,
+  Component: ComponentType<P>, 
   context?: string
 ) {
   const WrappedComponent = (props: P) => {
     const { reportError } = useErrorReporting()
 
-    React.useEffect(() => {
+    useEffect(() => {
       const handleError = (event: ErrorEvent) => {
         reportError(
-          new Error(event.message),
+          new Error(event.message), 
           context || Component.displayName || Component.name
         )
       }
 
       const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
         reportError(
-          event.reason instanceof Error ? event.reason : new Error(String(event.reason)),
+          event.reason instanceof Error ? event.reason : new Error(String(event.reason)), 
           context || Component.displayName || Component.name
         )
       }
