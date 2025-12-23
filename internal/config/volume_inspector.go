@@ -116,7 +116,7 @@ func (v *VolumeInspector) IsContainerRunning(ctx context.Context, containerName 
 }
 
 // GetContainerInfo retrieves basic container information
-func (v *VolumeInspector) GetContainerInfo(ctx context.Context, containerName string) (*types.ContainerJSON, error) {
+func (v *VolumeInspector) GetContainerInfo(ctx context.Context, containerName string) (types.ContainerJSON, error) {
 	return v.dockerClient.ContainerInspect(ctx, containerName)
 }
 
