@@ -47,14 +47,16 @@ export default defineConfig({
               id.includes('react-router-dom') ||
               id.includes('@radix-ui/') ||
               id.includes('@tanstack/react-query') ||
-              id.includes('react-hook-form')
+              id.includes('react-hook-form') ||
+              id.includes('sonner') ||  // Toast library uses React hooks
+              id.includes('cmdk')       // Command menu uses React hooks
             ) {
               return 'vendor'
             }
 
             // Icons and styling
             if (id.includes('lucide-react') || id.includes('class-variance-authority') ||
-                id.includes('clsx') || id.includes('tailwind-merge') || id.includes('sonner')) {
+                id.includes('clsx') || id.includes('tailwind-merge')) {
               return 'ui-utils'
             }
 
@@ -96,9 +98,11 @@ export default defineConfig({
       'react-dom',
       'react-router-dom',
       '@tanstack/react-query',
+      'react-hook-form',
       'axios',
       'lucide-react',
       'sonner',
+      'cmdk',
       'clsx',
       'tailwind-merge',
       'class-variance-authority'
