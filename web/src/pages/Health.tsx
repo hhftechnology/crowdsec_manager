@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { CheckCircle2, XCircle, Activity, Shield } from 'lucide-react'
 import { StandardizedStatusCard as StatusCard, CounterStatusCard } from '@/components/common/StandardizedStatusCard'
+import { DashboardGrid } from '@/components/common/DashboardGrid'
 
 export default function Health() {
   const { data: diagnostics, isLoading } = useQuery({
