@@ -15,9 +15,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { 
   StatusCardBaseProps, 
-  TrendData, 
-  BaseComponentProps,
-  StatusVariant 
+  TrendData 
 } from "@/lib/component-patterns"
 
 // Extended props for the standardized status card
@@ -226,7 +224,7 @@ export function StandardizedStatusCard({
 }
 
 // Preset status cards for common use cases (eliminates duplication)
-export interface HealthStatusCardProps extends Omit<StandardizedStatusCardProps, 'variant' | 'value'> {
+export interface HealthStatusCardProps extends Omit<StandardizedStatusCardProps, 'variant' | 'value' | 'title'> {
   isHealthy: boolean
   title?: string
 }
@@ -249,22 +247,34 @@ export function HealthStatusCard({
 export interface CounterStatusCardProps extends Omit<StandardizedStatusCardProps, 'variant' | 'value'> {
   count: number
   threshold?: { warning?: number; error?: number }
+  higherIsBetter?: boolean
 }
 
 export function CounterStatusCard({ 
   count, 
   threshold,
+  higherIsBetter = false,
   ...props 
 }: CounterStatusCardProps) {
   let variant: StatusCardBaseProps['variant'] = 'neutral'
   
   if (threshold) {
-    if (threshold.error !== undefined && count >= threshold.error) {
-      variant = 'error'
-    } else if (threshold.warning !== undefined && count >= threshold.warning) {
-      variant = 'warning'
+    if (higherIsBetter) {
+      if (threshold.error !== undefined && count <= threshold.error) {
+        variant = 'error'
+      } else if (threshold.warning !== undefined && count <= threshold.warning) {
+        variant = 'warning'
+      } else {
+        variant = 'success'
+      }
     } else {
-      variant = 'success'
+      if (threshold.error !== undefined && count >= threshold.error) {
+        variant = 'error'
+      } else if (threshold.warning !== undefined && count >= threshold.warning) {
+        variant = 'warning'
+      } else {
+        variant = 'success'
+      }
     }
   }
 

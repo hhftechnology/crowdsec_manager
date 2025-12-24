@@ -97,13 +97,15 @@ export function ValidationDashboard({ className }: ValidationDashboardProps) {
   }
 
   if (error) {
+    console.error('Validation Dashboard Error:', error)
     return (
       <Card className={className}>
         <CardContent className="py-8">
           <Alert variant="destructive">
             <AlertDescription>
-              Failed to load validation data. Please try again.
+              Failed to load validation data. {(error as any)?.message || 'Unknown error'}
             </AlertDescription>
+
           </Alert>
           <Button onClick={handleValidate} className="mt-4">
             <RefreshCw className="h-4 w-4 mr-2" />

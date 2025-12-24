@@ -50,33 +50,33 @@
   }
 
   .dark {
-    /* Netflix-inspired Dark Theme */
-    --background: 0 0% 9%;
-    --foreground: 0 0% 98%;
-    --card: 0 0% 14%;
-    --card-foreground: 0 0% 98%;
-    --popover: 0 0% 14%;
-    --popover-foreground: 0 0% 98%;
+    /* Improved Dark Theme with Better Contrast */
+    --background: 0 0% 8%;
+    --foreground: 0 0% 95%;
+    --card: 0 0% 12%;
+    --card-foreground: 0 0% 95%;
+    --popover: 0 0% 12%;
+    --popover-foreground: 0 0% 95%;
     --primary: 0 100% 50%;
     --primary-foreground: 0 0% 98%;
-    --secondary: 0 0% 20%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 20%;
-    --muted-foreground: 0 0% 65%;
-    --accent: 0 0% 20%;
-    --accent-foreground: 0 0% 98%;
+    --secondary: 0 0% 16%;
+    --secondary-foreground: 0 0% 90%;
+    --muted: 0 0% 16%;
+    --muted-foreground: 0 0% 70%;
+    --accent: 0 0% 16%;
+    --accent-foreground: 0 0% 90%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 20%;
-    --input: 0 0% 20%;
+    --border: 0 0% 24%;
+    --input: 0 0% 16%;
     --ring: 0 100% 50%;
     
-    /* Dark theme shadows */
-    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
-    --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.4), 0 1px 2px -1px rgb(0 0 0 / 0.4);
-    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.4);
-    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.4), 0 4px 6px -4px rgb(0 0 0 / 0.4);
-    --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.4), 0 8px 10px -6px rgb(0 0 0 / 0.4);
+    /* Enhanced dark theme shadows with better visibility */
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.4);
+    --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.5), 0 1px 2px -1px rgb(0 0 0 / 0.5);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.5), 0 2px 4px -2px rgb(0 0 0 / 0.5);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.5), 0 4px 6px -4px rgb(0 0 0 / 0.5);
+    --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.5), 0 8px 10px -6px rgb(0 0 0 / 0.5);
   }
   
   /* Smooth theme transitions to prevent white flashes */
@@ -143,6 +143,45 @@
   
   .header-height-mobile {
     height: var(--header-height-mobile);
+  }
+  
+  /* Enhanced dark mode card utilities */
+  .dark .card-enhanced {
+    @apply bg-card/80 backdrop-blur-sm border-border/60 shadow-lg;
+  }
+  
+  .dark .card-enhanced:hover {
+    @apply bg-card/90 border-border/80 shadow-xl;
+  }
+  
+  .dark .card-stats {
+    @apply bg-gradient-to-br from-card/90 to-card/70 border-border/50 shadow-md;
+  }
+  
+  .dark .card-stats:hover {
+    @apply from-card to-card/80 border-border/70 shadow-lg;
+  }
+  
+  /* Enhanced text contrast for dark mode */
+  .dark .text-enhanced {
+    @apply text-foreground/95;
+  }
+  
+  .dark .text-muted-enhanced {
+    @apply text-muted-foreground/80;
+  }
+  
+  /* Status variant cards for dark mode */
+  .dark .card-success {
+    @apply bg-green-950/50 border-green-800/50 text-green-100;
+  }
+  
+  .dark .card-warning {
+    @apply bg-yellow-950/50 border-yellow-800/50 text-yellow-100;
+  }
+  
+  .dark .card-error {
+    @apply bg-red-950/50 border-red-800/50 text-red-100;
   }
   
   /* Scrolling utilities */

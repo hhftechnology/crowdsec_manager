@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"crowdsec-manager/internal/logger"
+
 	"github.com/docker/docker/client"
 )
 
@@ -29,8 +31,9 @@ func NewValidator(cfg *Config, dockerClient *client.Client) *Validator {
 	}
 }
 
-// ValidateComplete performs complete validation of all layers
+// ValidateComplete performs all validation checks
 func (v *Validator) ValidateComplete() (*ValidationResult, error) {
+	logger.Info("Validator: Starting ValidateComplete")
 	result := &ValidationResult{
 		ProxyType: v.config.ProxyType,
 		Timestamp: time.Now(),
@@ -43,30 +46,37 @@ func (v *Validator) ValidateComplete() (*ValidationResult, error) {
 	}
 
 	// 1. Validate environment variables
+	logger.Info("Validator: Validating Environment Variables")
 	envVarResult := v.ValidateEnvironmentVariables()
 	result.EnvVars = envVarResult
 
 	// 2. Validate host paths (Layer 1)
+	logger.Info("Validator: Validating Host Paths")
 	hostPathsResult := v.ValidateHostPaths()
 	result.Layers.HostPaths = hostPathsResult
 
 	// 3. Validate volume mappings (Layer 2)
+	logger.Info("Validator: Validating Volume Mappings")
 	volumeMappingsResult := v.ValidateVolumeMappings()
 	result.Layers.VolumeMappings = volumeMappingsResult
 
 	// 4. Validate container paths (Layer 3)
+	logger.Info("Validator: Validating Container Paths")
 	containerPathsResult := v.ValidateContainerPaths()
 	result.Layers.ContainerPaths = containerPathsResult
 
 	// 5. Calculate summary
+	logger.Info("Validator: Calculating Summary")
 	result.Summary = v.calculateSummary(result)
 
 	// 6. Generate suggestions based on errors and warnings
+	logger.Info("Validator: Generating Suggestions")
 	result.Suggestions = v.generateSuggestions(result)
 
 	// 7. Set overall validity
 	result.Valid = result.Summary.OverallStatus == StatusValid
 
+	logger.Info("Validator: ValidateComplete Finished")
 	return result, nil
 }
 

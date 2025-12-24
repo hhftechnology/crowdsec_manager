@@ -3,6 +3,8 @@ package handlers
 import (
 	"crowdsec-manager/internal/config"
 	"crowdsec-manager/internal/docker"
+	"crowdsec-manager/internal/logger"
+	"fmt"
 	"os"
 
 	"github.com/gin-gonic/gin"
@@ -12,10 +14,22 @@ import (
 // GET /api/config/validate/complete
 func ValidateComplete(cfg *config.Config, dockerClient *docker.Client) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		logger.Info("Starting complete validation")
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Error("Panic in ValidateComplete", "error", r)
+				c.JSON(500, gin.H{
+					"success": false,
+					"error":   fmt.Sprintf("Internal Panic: %v", r),
+				})
+			}
+		}()
+
 		validator := config.NewValidator(cfg, dockerClient.GetClient())
 
 		result, err := validator.ValidateComplete()
 		if err != nil {
+			logger.Error("Validation failed", "error", err)
 			c.JSON(500, gin.H{
 				"success": false,
 				"error":   err.Error(),
@@ -23,12 +37,14 @@ func ValidateComplete(cfg *config.Config, dockerClient *docker.Client) gin.Handl
 			return
 		}
 
+		logger.Info("Validation completed successfully", "valid", result.Valid, "overall_status", result.Summary.OverallStatus)
 		c.JSON(200, gin.H{
 			"success": true,
 			"data":    result,
 		})
 	}
 }
+
 
 // ValidateEnv validates environment variables only
 // POST /api/config/env/validate
