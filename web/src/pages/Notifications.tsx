@@ -148,7 +148,13 @@ export default function Notifications() {
               <Info className="h-4 w-4" />
               <AlertTitle>Existing Configuration Detected</AlertTitle>
               <AlertDescription>
-                {config.config_source === 'container' && (
+                {config.config_source === 'container_env' && (
+                  <>Discord configuration was detected in the CrowdSec container's environment variables. These values are pre-populated below.</>
+                )}
+                {config.config_source === 'container_file' && (
+                  <>A manual Discord configuration file was found in the CrowdSec container. The values below have been pre-populated from your existing setup.</>
+                )}
+                {(config.config_source === 'container' || !config.config_source) && (
                   <>A manual Discord configuration was found in the CrowdSec container. The values below have been pre-populated from your existing setup.</>
                 )}
                 {config.config_source === 'both' && (

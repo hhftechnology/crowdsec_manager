@@ -12,7 +12,7 @@ import (
 // GET /api/config/validate/complete
 func ValidateComplete(cfg *config.Config, dockerClient *docker.Client) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		validator := config.NewValidator(cfg, dockerClient.Client)
+		validator := config.NewValidator(cfg, dockerClient.GetClient())
 
 		result, err := validator.ValidateComplete()
 		if err != nil {
@@ -34,7 +34,7 @@ func ValidateComplete(cfg *config.Config, dockerClient *docker.Client) gin.Handl
 // POST /api/config/env/validate
 func ValidateEnv(cfg *config.Config, dockerClient *docker.Client) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		validator := config.NewValidator(cfg, dockerClient.Client)
+		validator := config.NewValidator(cfg, dockerClient.GetClient())
 		envValidation := validator.ValidateEnvironmentVariables()
 
 		c.JSON(200, gin.H{
@@ -93,7 +93,7 @@ func GetRequiredEnvVars(cfg *config.Config) gin.HandlerFunc {
 // GET /api/config/paths/validate/host
 func ValidateHostPaths(cfg *config.Config, dockerClient *docker.Client) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		validator := config.NewValidator(cfg, dockerClient.Client)
+		validator := config.NewValidator(cfg, dockerClient.GetClient())
 		result := validator.ValidateHostPaths()
 
 		c.JSON(200, gin.H{
@@ -107,7 +107,7 @@ func ValidateHostPaths(cfg *config.Config, dockerClient *docker.Client) gin.Hand
 // GET /api/config/volumes/validate
 func ValidateVolumeMappings(cfg *config.Config, dockerClient *docker.Client) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		validator := config.NewValidator(cfg, dockerClient.Client)
+		validator := config.NewValidator(cfg, dockerClient.GetClient())
 		result := validator.ValidateVolumeMappings()
 
 		c.JSON(200, gin.H{
@@ -121,7 +121,7 @@ func ValidateVolumeMappings(cfg *config.Config, dockerClient *docker.Client) gin
 // GET /api/config/paths/validate/container
 func ValidateContainerPaths(cfg *config.Config, dockerClient *docker.Client) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		validator := config.NewValidator(cfg, dockerClient.Client)
+		validator := config.NewValidator(cfg, dockerClient.GetClient())
 		result := validator.ValidateContainerPaths()
 
 		c.JSON(200, gin.H{
@@ -135,7 +135,7 @@ func ValidateContainerPaths(cfg *config.Config, dockerClient *docker.Client) gin
 // GET /api/config/suggestions
 func GetSuggestions(cfg *config.Config, dockerClient *docker.Client) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		validator := config.NewValidator(cfg, dockerClient.Client)
+		validator := config.NewValidator(cfg, dockerClient.GetClient())
 
 		// Run complete validation first
 		result, err := validator.ValidateComplete()
@@ -187,7 +187,7 @@ func GetProxyRequirements() gin.HandlerFunc {
 // GET /api/config/export/env
 func ExportEnvFile(cfg *config.Config, dockerClient *docker.Client) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		validator := config.NewValidator(cfg, dockerClient.Client)
+		validator := config.NewValidator(cfg, dockerClient.GetClient())
 
 		// Run complete validation
 		result, err := validator.ValidateComplete()
@@ -267,7 +267,7 @@ func TestPath() gin.HandlerFunc {
 // GET /api/config/summary
 func GetValidationSummary(cfg *config.Config, dockerClient *docker.Client) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		validator := config.NewValidator(cfg, dockerClient.Client)
+		validator := config.NewValidator(cfg, dockerClient.GetClient())
 
 		result, err := validator.ValidateComplete()
 		if err != nil {
