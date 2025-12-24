@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"gopkg.in/yaml.v3"
 )
 
 // DefaultProfilesYAML is the default content for profiles.yaml
@@ -162,6 +163,18 @@ func UpdateProfiles(db *database.Database, cfg *config.Config, dockerClient *doc
 			c.JSON(http.StatusBadRequest, models.Response{
 				Success: false,
 				Error:   "invalid request body",
+			})
+			return
+		}
+
+
+		// Validate YAML
+		var temp interface{}
+		if err := yaml.Unmarshal([]byte(req.Content), &temp); err != nil {
+			logger.Error("Invalid profiles.yaml format", "error", err)
+			c.JSON(http.StatusBadRequest, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Invalid YAML format: %v", err),
 			})
 			return
 		}

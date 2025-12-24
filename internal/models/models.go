@@ -363,6 +363,7 @@ type DiscordConfig struct {
 	CrowdSecRestarted bool   `json:"crowdsec_restarted,omitempty"` // Status flag
 	ManuallyConfigured bool  `json:"manually_configured,omitempty"` // Indicates if config was manually added by user
 	ConfigSource      string `json:"config_source,omitempty"`       // Where config was found: "database", "container", "both"
+	RawYAML           string `json:"raw_yaml,omitempty"`            // Raw content for custom configuration
 }
 
 // ConsoleStatus represents the CrowdSec Console enrollment status

@@ -353,7 +353,54 @@ func GetDiscordConfig(db *database.Database, cfg *config.Config, dockerClient *d
 	}
 }
 
+// PreviewDiscordConfig generates the expected content of discord.yaml based on current settings
+// GET /api/notifications/discord/preview
+func PreviewDiscordConfig(db *database.Database, cfg *config.Config, dockerClient *docker.Client) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Just return the default template for now, as that's what we generate.
+		// If we had dynamic template generation based on DB values, we would fetch DB values here.
+		
+		// 1. Try to read existing file from container first?
+		// The user might want to edit the *existing* file or the *default* template.
+		// Let's support both via a query param? ?source=container vs ?source=default
+		
+		source := c.Query("source")
+		var content string
+
+
+		if source == "container" {
+			// Read from container
+			config, err := readDiscordConfigFromContainer(dockerClient, cfg)
+			if err == nil && config != nil && config.ManuallyConfigured {
+				// We need to read the raw file, readDiscordConfigFromContainer returns struct.
+				// But readDiscordConfigFromContainer calls `cat ...`.
+				// Let's call cat directly here or reuse helper.
+				output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
+					"cat", "/etc/crowdsec/notifications/discord.yaml",
+				})
+				if err == nil {
+					content = strings.TrimSpace(output)
+				}
+			}
+			if content == "" {
+				// Fallback to default if container read failed or empty
+				content = DiscordTemplate
+			}
+		} else {
+			// Default template
+			content = DiscordTemplate
+		}
+
+		c.JSON(http.StatusOK, models.Response{
+			Success: true,
+			Data:    content,
+		})
+	}
+}
+
 // UpdateDiscordConfig updates the Discord configuration
+// POST /api/notifications/discord
+// Now supports JSON body for configuration
 func UpdateDiscordConfig(db *database.Database, cfg *config.Config, dockerClient *docker.Client) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req models.DiscordConfig
@@ -388,14 +435,37 @@ func UpdateDiscordConfig(db *database.Database, cfg *config.Config, dockerClient
 			return
 		}
 
-		// 1. Generate discord.yaml directly in CrowdSec container config
-		// Write to the existing crowdsec-config volume, not a separate mount
-		if err := generateDiscordYamlInContainer(dockerClient, cfg, req); err != nil {
-			c.JSON(http.StatusInternalServerError, models.Response{
-				Success: false,
-				Error:   fmt.Sprintf("Failed to generate discord.yaml: %v", err),
-			})
-			return
+		// Check if we should use raw YAML (custom config) or generate from fields
+		if req.RawYAML != "" {
+			// Validate YAML
+			var temp interface{}
+			if err := yaml.Unmarshal([]byte(req.RawYAML), &temp); err != nil {
+				c.JSON(http.StatusBadRequest, models.Response{
+					Success: false,
+					Error:   fmt.Sprintf("Invalid YAML format: %v", err),
+				})
+				return
+			}
+			
+			// Write custom content
+			if err := WriteDiscordYamlToContainer(dockerClient, cfg, req.RawYAML); err != nil {
+				c.JSON(http.StatusInternalServerError, models.Response{
+					Success: false,
+					Error:   fmt.Sprintf("Failed to write custom discord.yaml: %v", err),
+				})
+				return
+			}
+		} else {
+			// Generate from default template
+			// 1. Generate discord.yaml and write to container (using standard template)
+			if err := generateDiscordYamlInContainer(dockerClient, cfg, req); err != nil {
+				logger.Error("Failed to generate discord.yaml", "error", err)
+				c.JSON(http.StatusInternalServerError, models.Response{
+					Success: false,
+					Error:   "Failed to configure CrowdSec container: " + err.Error(),
+				})
+				return
+			}
 		}
 
 		// 2. Update docker-compose.yml with environment variables ONLY (no volume mount)
