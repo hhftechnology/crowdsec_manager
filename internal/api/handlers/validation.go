@@ -64,7 +64,7 @@ func ValidateEnv(cfg *config.Config, dockerClient *docker.Client) gin.HandlerFun
 // GET /api/config/env
 func GetEnvVars(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		requirements := config.GetProxyRequirements(cfg.ProxyType)
+		requirements := config.GetProxyRequirementsFromConfig(cfg)
 
 		envVars := make(map[string]string)
 		allVars := append(requirements.RequiredEnvVars, requirements.OptionalEnvVars...)
@@ -91,7 +91,10 @@ func GetRequiredEnvVars(cfg *config.Config) gin.HandlerFunc {
 			proxyType = cfg.ProxyType
 		}
 
-		requirements := config.GetProxyRequirements(proxyType)
+		// Create a temporary config with the requested proxy type to get dynamic requirements
+		tempCfg := *cfg
+		tempCfg.ProxyType = proxyType
+		requirements := config.GetProxyRequirementsFromConfig(&tempCfg)
 
 		c.JSON(200, gin.H{
 			"success": true,
@@ -176,7 +179,7 @@ func GetSuggestions(cfg *config.Config, dockerClient *docker.Client) gin.Handler
 // GetProxyRequirements returns requirements for all or specific proxy type
 // GET /api/config/requirements
 // GET /api/config/requirements/:proxyType
-func GetProxyRequirements() gin.HandlerFunc {
+func GetProxyRequirements(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		proxyType := c.Param("proxyType")
 
@@ -190,8 +193,10 @@ func GetProxyRequirements() gin.HandlerFunc {
 			return
 		}
 
-		// Return specific proxy requirements
-		requirements := config.GetProxyRequirements(proxyType)
+		// Return specific proxy requirements with actual config values
+		tempCfg := *cfg
+		tempCfg.ProxyType = proxyType
+		requirements := config.GetProxyRequirementsFromConfig(&tempCfg)
 		c.JSON(200, gin.H{
 			"success": true,
 			"data":    requirements,

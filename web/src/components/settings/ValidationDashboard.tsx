@@ -40,8 +40,13 @@ export function ValidationDashboard({ className }: ValidationDashboardProps) {
     queryKey: ['validation-complete'],
     queryFn: async () => {
       const response = await api.validation.validateComplete()
+      console.log('Validation API Response:', response)
+      if (!response.data || !response.data.data) {
+        throw new Error(`Invalid response structure. Data: ${JSON.stringify(response.data)}`)
+      }
       return response.data.data as ValidationResult
     },
+
     staleTime: 30000, // 30 seconds
   })
 

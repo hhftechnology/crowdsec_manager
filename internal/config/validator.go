@@ -82,7 +82,7 @@ func (v *Validator) ValidateComplete() (*ValidationResult, error) {
 
 // ValidateEnvironmentVariables validates all environment variables for the proxy type
 func (v *Validator) ValidateEnvironmentVariables() EnvVarValidation {
-	requirements := GetProxyRequirements(v.config.ProxyType)
+	requirements := GetProxyRequirementsFromConfig(v.config)
 	validation := EnvVarValidation{
 		Required: []EnvVarCheck{},
 		Optional: []EnvVarCheck{},
@@ -186,7 +186,7 @@ func (v *Validator) validateEnvVarFormat(envVar, value string) bool {
 
 // getDefaultEnvVarSuggestion returns a default value suggestion for an env var
 func (v *Validator) getDefaultEnvVarSuggestion(envVar string) string {
-	requirements := GetProxyRequirements(v.config.ProxyType)
+	requirements := GetProxyRequirementsFromConfig(v.config)
 
 	// Check if it's a path requirement
 	for _, pathReq := range requirements.RequiredPaths {
@@ -235,7 +235,7 @@ func (v *Validator) getFormatSuggestion(envVar, value string) string {
 
 // ValidateHostPaths validates that required files/directories exist on host
 func (v *Validator) ValidateHostPaths() LayerValidation {
-	requirements := GetProxyRequirements(v.config.ProxyType)
+	requirements := GetProxyRequirementsFromConfig(v.config)
 	checks := []ValidationCheck{}
 
 	// Validate required paths
@@ -329,7 +329,7 @@ func (v *Validator) validateHostPath(pathReq PathRequirement, required bool) Val
 
 // ValidateVolumeMappings validates Docker volume mappings
 func (v *Validator) ValidateVolumeMappings() LayerValidation {
-	requirements := GetProxyRequirements(v.config.ProxyType)
+	requirements := GetProxyRequirementsFromConfig(v.config)
 	containerName := v.getContainerName()
 
 	checks := v.volumeInspector.CompareWithExpectedVolumes(v.ctx, containerName, requirements.RequiredVolumes)
@@ -342,7 +342,7 @@ func (v *Validator) ValidateVolumeMappings() LayerValidation {
 
 // ValidateContainerPaths validates paths inside containers
 func (v *Validator) ValidateContainerPaths() LayerValidation {
-	requirements := GetProxyRequirements(v.config.ProxyType)
+	requirements := GetProxyRequirementsFromConfig(v.config)
 	containerName := v.getContainerName()
 	checks := []ValidationCheck{}
 

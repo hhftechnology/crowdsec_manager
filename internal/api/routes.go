@@ -251,7 +251,7 @@ func RegisterValidationRoutes(router *gin.RouterGroup, dockerClient *docker.Clie
 	router.GET("/config/volumes/validate", handlers.ValidateVolumeMappings(cfg, dockerClient))
 
 	// Requirements and export
-	router.GET("/config/requirements", handlers.GetProxyRequirements())
-	router.GET("/config/requirements/:proxyType", handlers.GetProxyRequirements())
+	router.GET("/config/requirements", handlers.GetProxyRequirements(cfg))
+	router.GET("/config/requirements/:proxyType", handlers.GetProxyRequirements(cfg))
 	router.GET("/config/export/env", handlers.ExportEnvFile(cfg, dockerClient))
 }

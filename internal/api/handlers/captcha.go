@@ -303,12 +303,34 @@ func GetCaptchaStatus(dockerClient *docker.Client, db *database.Database, cfg *c
 
 		// Check if captcha.html exists in Traefik container (verifies mount is working)
 		captchaHTMLExistsInContainer := false
+		actualCaptchaPath := containerCaptchaPath // Track where we actually found it
+
 		logger.Info("Checking captcha HTML file in container", "path", containerCaptchaPath)
 		exists, err := dockerClient.FileExists(cfg.TraefikContainerName, containerCaptchaPath)
 		if err == nil && exists {
 			captchaHTMLExistsInContainer = true
 		} else if err != nil {
 			logger.Warn("Failed to check captcha HTML file in container", "path", containerCaptchaPath, "error", err)
+
+			// Try common fallback locations if configured path doesn't exist
+			fallbackPaths := []string{
+				"/etc/traefik/captcha.html",
+				"/etc/traefik/assets/captcha.html",
+				"/etc/traefik/conf/captcha.html",
+				"/captcha.html",
+			}
+
+			for _, fallbackPath := range fallbackPaths {
+				if fallbackPath != containerCaptchaPath {
+					logger.Debug("Trying fallback path", "path", fallbackPath)
+					if exists, err := dockerClient.FileExists(cfg.TraefikContainerName, fallbackPath); err == nil && exists {
+						captchaHTMLExistsInContainer = true
+						actualCaptchaPath = fallbackPath
+						logger.Info("Found captcha HTML at fallback location", "path", fallbackPath, "configured_path", containerCaptchaPath)
+						break
+					}
+				}
+			}
 		}
 
 		// For backwards compatibility, captchaHTMLExists is true if it exists in container
@@ -341,6 +363,8 @@ func GetCaptchaStatus(dockerClient *docker.Client, db *database.Database, cfg *c
 			"captchaHTMLExistsOnHost":      captchaHTMLExistsOnHost,         // True if captcha.html exists on host
 			"captchaHTMLExistsInContainer": captchaHTMLExistsInContainer,    // True if captcha.html exists in container
 			"hostHTMLPath":                 hostHTMLPath,                    // Host path where captcha.html should be
+			"containerHTMLPath":            containerCaptchaPath,            // Configured container path
+			"actualContainerHTMLPath":      actualCaptchaPath,               // Actual path where file was found (may differ from configured)
 			"hasHTMLPath":                  hasHTMLPath,                     // True if captchaHTMLFilePath is configured
 			"implemented":                  configured && captchaHTMLExists, // Fully implemented if both exist
 			"site_key":                     siteKey,                         // Site key from config (for UI pre-population)
