@@ -3,6 +3,7 @@ package database
 import (
 	"crowdsec-manager/internal/models"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -106,6 +107,26 @@ func (d *Database) initSchema() error {
 		"ALTER TABLE settings ADD COLUMN discord_webhook_token TEXT NOT NULL DEFAULT ''",
 		"ALTER TABLE settings ADD COLUMN geoapify_key TEXT NOT NULL DEFAULT ''",
 		"ALTER TABLE settings ADD COLUMN cti_key TEXT NOT NULL DEFAULT ''",
+		// Path configuration migrations (v2.0)
+		"ALTER TABLE settings ADD COLUMN traefik_assets_dir TEXT NOT NULL DEFAULT '/etc/traefik/assets'",
+		"ALTER TABLE settings ADD COLUMN traefik_captcha_html TEXT NOT NULL DEFAULT '/etc/traefik/assets/captcha.html'",
+		"ALTER TABLE settings ADD COLUMN traefik_rules_dir TEXT NOT NULL DEFAULT '/etc/traefik/rules'",
+		"ALTER TABLE settings ADD COLUMN traefik_conf_dir TEXT NOT NULL DEFAULT '/etc/traefik/conf'",
+		"ALTER TABLE settings ADD COLUMN crowdsec_acquis_dir TEXT NOT NULL DEFAULT '/etc/crowdsec/acquis.d'",
+		"ALTER TABLE settings ADD COLUMN crowdsec_config_dir TEXT NOT NULL DEFAULT '/etc/crowdsec'",
+		"ALTER TABLE settings ADD COLUMN crowdsec_data_dir TEXT NOT NULL DEFAULT '/var/lib/crowdsec/data'",
+		"ALTER TABLE settings ADD COLUMN manager_config_dir TEXT NOT NULL DEFAULT '/app/config'",
+		"ALTER TABLE settings ADD COLUMN manager_data_dir TEXT NOT NULL DEFAULT '/app/data'",
+		"ALTER TABLE settings ADD COLUMN manager_backup_dir TEXT NOT NULL DEFAULT '/app/backups'",
+		"ALTER TABLE settings ADD COLUMN manager_log_dir TEXT NOT NULL DEFAULT '/app/logs'",
+		// Multi-proxy path support
+		"ALTER TABLE settings ADD COLUMN nginx_config_path TEXT NOT NULL DEFAULT '/data/nginx'",
+		"ALTER TABLE settings ADD COLUMN nginx_log_path TEXT NOT NULL DEFAULT '/data/logs'",
+		"ALTER TABLE settings ADD COLUMN caddy_config_path TEXT NOT NULL DEFAULT '/etc/caddy'",
+		"ALTER TABLE settings ADD COLUMN caddy_log_path TEXT NOT NULL DEFAULT '/var/log/caddy'",
+		"ALTER TABLE settings ADD COLUMN haproxy_config_path TEXT NOT NULL DEFAULT '/usr/local/etc/haproxy'",
+		"ALTER TABLE settings ADD COLUMN haproxy_socket_path TEXT NOT NULL DEFAULT '/var/run/haproxy.sock'",
+		"ALTER TABLE settings ADD COLUMN zoraxy_config_path TEXT NOT NULL DEFAULT '/opt/zoraxy'",
 	}
 
 	for _, query := range migrations {
@@ -320,24 +341,36 @@ func (d *Database) GetProxySettings() (*models.ProxySettings, error) {
 		return nil, err
 	}
 
-	// Parse JSON fields (simplified parsing for now)
-	settings.ConfigPaths = make(map[string]string)
-	settings.CustomSettings = make(map[string]string)
-	settings.EnabledFeatures = []string{}
+	// Parse JSON fields
+	if err := json.Unmarshal([]byte(configPathsJSON), &settings.ConfigPaths); err != nil {
+		settings.ConfigPaths = make(map[string]string)
+	}
+	if err := json.Unmarshal([]byte(customSettingsJSON), &settings.CustomSettings); err != nil {
+		settings.CustomSettings = make(map[string]string)
+	}
+	if err := json.Unmarshal([]byte(enabledFeaturesJSON), &settings.EnabledFeatures); err != nil {
+		settings.EnabledFeatures = []string{}
+	}
 
-	// TODO: Implement proper JSON parsing
-	// For now, return basic structure
 	return settings, nil
 }
 
 // UpdateProxySettings updates proxy settings in database
 func (d *Database) UpdateProxySettings(settings *models.ProxySettings) error {
-	// TODO: Implement JSON marshaling for map fields
-	configPathsJSON := "{}"
-	customSettingsJSON := "{}"
-	enabledFeaturesJSON := "[]"
+	configPathsBytes, err := json.Marshal(settings.ConfigPaths)
+	if err != nil {
+		return fmt.Errorf("failed to marshal config paths: %w", err)
+	}
+	customSettingsBytes, err := json.Marshal(settings.CustomSettings)
+	if err != nil {
+		return fmt.Errorf("failed to marshal custom settings: %w", err)
+	}
+	enabledFeaturesBytes, err := json.Marshal(settings.EnabledFeatures)
+	if err != nil {
+		return fmt.Errorf("failed to marshal enabled features: %w", err)
+	}
 
-	_, err := d.db.Exec(`
+	_, err = d.db.Exec(`
 		UPDATE proxy_settings
 		SET proxy_type = ?,
 		    container_name = ?,
@@ -347,7 +380,7 @@ func (d *Database) UpdateProxySettings(settings *models.ProxySettings) error {
 		    updated_at = CURRENT_TIMESTAMP
 		WHERE id = 1
 	`, settings.ProxyType, settings.ContainerName,
-		configPathsJSON, customSettingsJSON, enabledFeaturesJSON)
+		string(configPathsBytes), string(customSettingsBytes), string(enabledFeaturesBytes))
 	
 	return err
 }

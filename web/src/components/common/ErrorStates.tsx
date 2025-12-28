@@ -1,15 +1,15 @@
-import * as React from "react"
+import { useCallback, useMemo, useState } from "react"
 import { 
   AlertTriangle, 
   RefreshCw, 
   Wifi, 
   WifiOff, 
   Server, 
-  Database,
-  Shield,
-  AlertCircle,
-  XCircle,
-  Clock,
+  Database, 
+  Shield, 
+  AlertCircle, 
+  XCircle, 
+  Clock, 
   Loader2
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -32,45 +32,45 @@ export interface ErrorStateProps {
 
 const errorTypeConfig = {
   generic: {
-    icon: AlertTriangle,
-    title: "Something went wrong",
-    description: "An unexpected error occurred",
+    icon: AlertTriangle, 
+    title: "Something went wrong", 
+    description: "An unexpected error occurred", 
     color: "text-destructive"
-  },
+  }, 
   network: {
-    icon: WifiOff,
-    title: "Connection Error",
-    description: "Unable to connect to the server",
+    icon: WifiOff, 
+    title: "Connection Error", 
+    description: "Unable to connect to the server", 
     color: "text-orange-500"
-  },
+  }, 
   server: {
-    icon: Server,
-    title: "Server Error",
-    description: "The server encountered an error",
+    icon: Server, 
+    title: "Server Error", 
+    description: "The server encountered an error", 
     color: "text-red-500"
-  },
+  }, 
   database: {
-    icon: Database,
-    title: "Database Error",
-    description: "Unable to access the database",
+    icon: Database, 
+    title: "Database Error", 
+    description: "Unable to access the database", 
     color: "text-purple-500"
-  },
+  }, 
   auth: {
-    icon: Shield,
-    title: "Authentication Error",
-    description: "You are not authorized to access this resource",
+    icon: Shield, 
+    title: "Authentication Error", 
+    description: "You are not authorized to access this resource", 
     color: "text-yellow-500"
-  },
+  }, 
   timeout: {
-    icon: Clock,
-    title: "Request Timeout",
-    description: "The request took too long to complete",
+    icon: Clock, 
+    title: "Request Timeout", 
+    description: "The request took too long to complete", 
     color: "text-blue-500"
-  },
+  }, 
   validation: {
-    icon: XCircle,
-    title: "Validation Error",
-    description: "The provided data is invalid",
+    icon: XCircle, 
+    title: "Validation Error", 
+    description: "The provided data is invalid", 
     color: "text-pink-500"
   }
 }
@@ -79,20 +79,20 @@ const errorTypeConfig = {
  * Comprehensive error state component with different variants and error types
  */
 export function ErrorState({
-  title,
-  description,
-  error,
-  onRetry,
-  retryLabel = "Try Again",
-  showDetails = false,
-  className,
-  variant = 'default',
+  title, 
+  description, 
+  error, 
+  onRetry, 
+  retryLabel = "Try Again", 
+  showDetails = false, 
+  className, 
+  variant = 'default', 
   type = 'generic'
 }: ErrorStateProps) {
   const config = errorTypeConfig[type]
   const Icon = config.icon
   
-  const errorMessage = React.useMemo(() => {
+  const errorMessage = useMemo(() => {
     if (typeof error === 'string') return error
     if (error instanceof Error) return error.message
     return null
@@ -228,10 +228,10 @@ export interface DataErrorStateProps extends ErrorStateProps {
 }
 
 export function DataErrorState({
-  isLoading,
-  isEmpty,
-  emptyMessage = "No data available",
-  emptyDescription = "There's nothing to display right now",
+  isLoading, 
+  isEmpty, 
+  emptyMessage = "No data available", 
+  emptyDescription = "There's nothing to display right now", 
   ...props
 }: DataErrorStateProps) {
   if (isLoading) {
@@ -283,9 +283,9 @@ export interface ConnectionStatusProps {
 }
 
 export function ConnectionStatus({
-  isConnected,
-  isConnecting,
-  onReconnect,
+  isConnected, 
+  isConnecting, 
+  onReconnect, 
   className
 }: ConnectionStatusProps) {
   if (isConnecting) {
@@ -341,19 +341,19 @@ export function DataLoadingErrorFallback({ error, resetError }: { error: Error |
  * Hook to handle common error states
  */
 export function useErrorState() {
-  const [error, setError] = React.useState<Error | null>(null)
-  const [isRetrying, setIsRetrying] = React.useState(false)
+  const [error, setError] = useState<Error | null>(null)
+  const [isRetrying, setIsRetrying] = useState(false)
 
-  const handleError = React.useCallback((error: Error | string) => {
+  const handleError = useCallback((error: Error | string) => {
     setError(error instanceof Error ? error : new Error(error))
   }, [])
 
-  const clearError = React.useCallback(() => {
+  const clearError = useCallback(() => {
     setError(null)
     setIsRetrying(false)
   }, [])
 
-  const retry = React.useCallback(async (retryFn?: () => Promise<void> | void) => {
+  const retry = useCallback(async (retryFn?: () => Promise<void> | void) => {
     if (!retryFn) {
       clearError()
       return
@@ -371,10 +371,10 @@ export function useErrorState() {
   }, [clearError, handleError])
 
   return {
-    error,
-    isRetrying,
-    handleError,
-    clearError,
+    error, 
+    isRetrying, 
+    handleError, 
+    clearError, 
     retry
   }
 }

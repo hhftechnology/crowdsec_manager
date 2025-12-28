@@ -1,23 +1,22 @@
-import * as React from "react"
-import { useState, useMemo } from "react"
+import { Fragment, ReactNode, useState, useMemo } from "react"
 import { ChevronDown, ChevronUp, ChevronsUpDown, Search, Filter, MoreHorizontal } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useBreakpoints } from "@/hooks/useMediaQuery"
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, 
+  TableBody, 
+  TableCell, 
+  TableHead, 
+  TableHeader, 
+  TableRow, 
 } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuTrigger, 
 } from "@/components/ui/dropdown-menu"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Card, CardContent } from "@/components/ui/card"
@@ -27,7 +26,7 @@ export interface ColumnDef<T> {
   id: string
   header: string
   accessorKey?: keyof T
-  cell?: (item: T) => React.ReactNode
+  cell?: (item: T) => ReactNode
   sortable?: boolean
   filterable?: boolean
   width?: string
@@ -71,23 +70,23 @@ export interface DataTableProps<T> {
   className?: string
   emptyMessage?: string
   mobileView?: 'table' | 'cards' | 'auto' // Mobile display mode
-  cardRenderer?: (item: T, index: number) => React.ReactNode // Custom card renderer for mobile
+  cardRenderer?: (item: T, index: number) => ReactNode // Custom card renderer for mobile
 }
 
 export function DataTable<T extends Record<string, any>>({
-  data,
-  columns,
-  loading = false,
-  pagination,
-  onPaginationChange,
-  sorting,
-  onSortingChange,
-  filtering = [],
-  onFilteringChange,
-  selection,
-  className,
-  emptyMessage = "No data available",
-  mobileView = 'auto',
+  data, 
+  columns, 
+  loading = false, 
+  pagination, 
+  onPaginationChange, 
+  sorting, 
+  onSortingChange, 
+  filtering = [], 
+  onFilteringChange, 
+  selection, 
+  className, 
+  emptyMessage = "No data available", 
+  mobileView = 'auto', 
   cardRenderer
 }: DataTableProps<T>) {
   const [localSorting, setLocalSorting] = useState<SortingConfig | null>(null)
@@ -367,11 +366,11 @@ export function DataTable<T extends Record<string, any>>({
     <div className={cn("space-y-4", className)}>
       {/* Search and Filter Controls */}
       <div className={cn(
-        "flex items-center gap-4",
+        "flex items-center gap-4", 
         isMobile ? "flex-col space-y-3" : "justify-between"
       )}>
         <div className={cn(
-          "flex items-center gap-2",
+          "flex items-center gap-2", 
           isMobile ? "w-full" : "flex-1"
         )}>
           <div className={cn("relative", isMobile ? "flex-1" : "max-w-sm")}>
@@ -381,7 +380,7 @@ export function DataTable<T extends Record<string, any>>({
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className={cn(
-                "pl-9",
+                "pl-9", 
                 needsTouchOptimization && "min-h-[44px]"
               )}
               data-search-input
@@ -466,8 +465,8 @@ export function DataTable<T extends Record<string, any>>({
                     <TableHead 
                       key={column.id}
                       className={cn(
-                        column.sortable && "cursor-pointer select-none hover:bg-muted/50",
-                        column.width && `w-[${column.width}]`,
+                        column.sortable && "cursor-pointer select-none hover:bg-muted/50", 
+                        column.width && `w-[${column.width}]`, 
                         needsTouchOptimization && "min-h-[44px]"
                       )}
                       onClick={() => column.sortable && handleSort(column.id)}
@@ -546,7 +545,7 @@ export function DataTable<T extends Record<string, any>>({
       {/* Pagination */}
       {pagination && onPaginationChange && (
         <div className={cn(
-          "flex items-center gap-4",
+          "flex items-center gap-4", 
           isMobile ? "flex-col space-y-3" : "justify-between"
         )}>
           <div className="text-sm text-muted-foreground">
@@ -560,7 +559,7 @@ export function DataTable<T extends Record<string, any>>({
               size={needsTouchOptimization ? "default" : "sm"}
               disabled={pagination.page <= 1}
               onClick={() => onPaginationChange({
-                ...pagination,
+                ...pagination, 
                 page: pagination.page - 1
               })}
               className={needsTouchOptimization ? "min-h-[44px]" : ""}
@@ -584,7 +583,7 @@ export function DataTable<T extends Record<string, any>>({
                     Math.abs(page - pagination.page) <= 1
                   )
                   .map((page, index, array) => (
-                    <React.Fragment key={page}>
+                    <Fragment key={page}>
                       {index > 0 && array[index - 1] !== page - 1 && (
                         <span className="px-2 text-muted-foreground">...</span>
                       )}
@@ -592,13 +591,13 @@ export function DataTable<T extends Record<string, any>>({
                         variant={page === pagination.page ? "default" : "outline"}
                         size="sm"
                         onClick={() => onPaginationChange({
-                          ...pagination,
+                          ...pagination, 
                           page
                         })}
                       >
                         {page}
                       </Button>
-                    </React.Fragment>
+                    </Fragment>
                   ))
               )}
             </div>
@@ -608,7 +607,7 @@ export function DataTable<T extends Record<string, any>>({
               size={needsTouchOptimization ? "default" : "sm"}
               disabled={pagination.page >= Math.ceil(processedData.length / pagination.pageSize)}
               onClick={() => onPaginationChange({
-                ...pagination,
+                ...pagination, 
                 page: pagination.page + 1
               })}
               className={needsTouchOptimization ? "min-h-[44px]" : ""}

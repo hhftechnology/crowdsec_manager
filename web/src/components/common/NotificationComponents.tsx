@@ -1,12 +1,12 @@
-import * as React from "react"
+import { ReactNode } from "react"
 import { toast } from "sonner"
 import { 
   CheckCircle, 
   AlertCircle, 
   AlertTriangle, 
   Info, 
-  X,
-  Bell,
+  X, 
+  Bell, 
   BellRing
 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -14,52 +14,52 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
+  Card, 
+  CardContent, 
+  CardDescription, 
+  CardHeader, 
+  CardTitle, 
 } from "@/components/ui/card"
 
 // Toast notification helpers
 export const notifications = {
   success: (message: string, description?: string) => {
     toast.success(message, {
-      description,
-      duration: 4000,
+      description, 
+      duration: 4000, 
     })
-  },
+  }, 
   
   error: (message: string, description?: string) => {
     toast.error(message, {
-      description,
-      duration: 6000,
+      description, 
+      duration: 6000, 
     })
-  },
+  }, 
   
   warning: (message: string, description?: string) => {
     toast.warning(message, {
-      description,
-      duration: 5000,
+      description, 
+      duration: 5000, 
     })
-  },
+  }, 
   
   info: (message: string, description?: string) => {
     toast.info(message, {
-      description,
-      duration: 4000,
+      description, 
+      duration: 4000, 
     })
-  },
+  }, 
   
   loading: (message: string, promise: Promise<any>) => {
     return toast.promise(promise, {
-      loading: message,
-      success: "Operation completed successfully",
-      error: "Operation failed",
+      loading: message, 
+      success: "Operation completed successfully", 
+      error: "Operation failed", 
     })
-  },
+  }, 
   
-  custom: (content: React.ReactNode, options?: any) => {
+  custom: (content: ReactNode, options?: any) => {
     toast.custom(content, options)
   }
 }
@@ -69,45 +69,45 @@ export interface AlertProps {
   variant?: 'default' | 'destructive' | 'warning' | 'success' | 'info'
   title?: string
   description?: string
-  children?: React.ReactNode
+  children?: ReactNode
   onClose?: () => void
   className?: string
 }
 
 const alertVariants = {
   default: {
-    container: "",
-    icon: Info,
+    container: "", 
+    icon: Info, 
     iconColor: "text-blue-600 dark:text-blue-400"
-  },
+  }, 
   destructive: {
-    container: "border-red-200 bg-red-50/50 dark:border-red-800 dark:bg-red-950/50",
-    icon: AlertCircle,
+    container: "border-red-200 bg-red-50/50 dark:border-red-800 dark:bg-red-950/50", 
+    icon: AlertCircle, 
     iconColor: "text-red-600 dark:text-red-400"
-  },
+  }, 
   warning: {
-    container: "border-yellow-200 bg-yellow-50/50 dark:border-yellow-800 dark:bg-yellow-950/50",
-    icon: AlertTriangle,
+    container: "border-yellow-200 bg-yellow-50/50 dark:border-yellow-800 dark:bg-yellow-950/50", 
+    icon: AlertTriangle, 
     iconColor: "text-yellow-600 dark:text-yellow-400"
-  },
+  }, 
   success: {
-    container: "border-green-200 bg-green-50/50 dark:border-green-800 dark:bg-green-950/50",
-    icon: CheckCircle,
+    container: "border-green-200 bg-green-50/50 dark:border-green-800 dark:bg-green-950/50", 
+    icon: CheckCircle, 
     iconColor: "text-green-600 dark:text-green-400"
-  },
+  }, 
   info: {
-    container: "border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/50",
-    icon: Info,
+    container: "border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/50", 
+    icon: Info, 
     iconColor: "text-blue-600 dark:text-blue-400"
   }
 }
 
 export function AlertNotification({
-  variant = 'default',
-  title,
-  description,
-  children,
-  onClose,
+  variant = 'default', 
+  title, 
+  description, 
+  children, 
+  onClose, 
   className
 }: AlertProps) {
   const variantConfig = alertVariants[variant]
@@ -151,11 +151,11 @@ export interface NotificationBannerProps {
 }
 
 export function NotificationBanner({
-  variant = 'info',
-  title,
-  message,
-  action,
-  onDismiss,
+  variant = 'info', 
+  title, 
+  message, 
+  action, 
+  onDismiss, 
   className
 }: NotificationBannerProps) {
   const variantConfig = alertVariants[variant] || alertVariants.info
@@ -163,8 +163,8 @@ export function NotificationBanner({
 
   return (
     <div className={cn(
-      "flex items-center gap-3 rounded-lg border p-4",
-      variantConfig.container,
+      "flex items-center gap-3 rounded-lg border p-4", 
+      variantConfig.container, 
       className
     )}>
       <Icon className={cn("h-5 w-5 flex-shrink-0", variantConfig.iconColor)} />
@@ -217,27 +217,27 @@ export interface NotificationCardProps {
 }
 
 export function NotificationCard({
-  title,
-  description,
-  timestamp,
-  read = false,
-  priority = 'medium',
-  actions = [],
-  onMarkAsRead,
-  onDismiss,
+  title, 
+  description, 
+  timestamp, 
+  read = false, 
+  priority = 'medium', 
+  actions = [], 
+  onMarkAsRead, 
+  onDismiss, 
   className
 }: NotificationCardProps) {
   const priorityColors = {
-    low: "border-l-blue-500",
-    medium: "border-l-yellow-500",
+    low: "border-l-blue-500", 
+    medium: "border-l-yellow-500", 
     high: "border-l-red-500"
   }
 
   return (
     <Card className={cn(
-      "border-l-4 transition-all duration-200",
-      priorityColors[priority],
-      !read && "bg-muted/30",
+      "border-l-4 transition-all duration-200", 
+      priorityColors[priority], 
+      !read && "bg-muted/30", 
       className
     )}>
       <CardHeader className="pb-3">
@@ -322,9 +322,9 @@ export interface NotificationCenterProps {
 }
 
 export function NotificationCenter({
-  notifications: notificationList,
-  onMarkAllAsRead,
-  onClearAll,
+  notifications: notificationList, 
+  onMarkAllAsRead, 
+  onClearAll, 
   className
 }: NotificationCenterProps) {
   const unreadCount = notificationList.filter(n => !n.read).length
@@ -389,9 +389,9 @@ export function NotificationCenter({
 
 // Preset notification components for common patterns
 export const NotificationComponents = {
-  notifications,
-  AlertNotification,
-  NotificationBanner,
-  NotificationCard,
+  notifications, 
+  AlertNotification, 
+  NotificationBanner, 
+  NotificationCard, 
   NotificationCenter
 }

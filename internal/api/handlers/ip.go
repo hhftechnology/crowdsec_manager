@@ -249,7 +249,7 @@ func CheckIPSecurity(dockerClient *docker.Client, cfg *config.Config) gin.Handle
 		// 4. Check Traefik dynamic_config.yml for ipWhiteList
 		// Read Traefik dynamic configuration
 		dynamicConfigPaths := []string{
-			"/etc/traefik/dynamic_config.yml",
+			cfg.Paths.TraefikDynamicConfig,
 			"/etc/traefik/config/dynamic_config.yml",
 			"/etc/traefik/dynamic_config.yaml",
 			"/etc/traefik/config/dynamic_config.yaml",

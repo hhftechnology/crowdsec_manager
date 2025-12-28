@@ -7,6 +7,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Textarea } from "@/components/ui/textarea"
 
 interface DiscordConfig {
   enabled: boolean
@@ -17,6 +19,7 @@ interface DiscordConfig {
   crowdsec_restarted?: boolean
   manually_configured?: boolean
   config_source?: string
+  raw_yaml?: string
 }
 
 export default function Notifications() {
@@ -28,6 +31,8 @@ export default function Notifications() {
     crowdsec_cti_api_key: '',
   })
   const [webhookUrl, setWebhookUrl] = useState('')
+  const [rawConfig, setRawConfig] = useState('')
+  const [activeTab, setActiveTab] = useState('simple')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [restarting, setRestarting] = useState(false)
@@ -56,6 +61,33 @@ export default function Notifications() {
       console.error(error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchPreview = async (source = 'default') => {
+    try {
+      const url = `/api/notifications/discord/preview?source=${source}`
+      const response = await fetch(url)
+      const data = await response.json()
+      if (data.success) {
+        setRawConfig(data.data)
+      } else {
+        toast.error('Failed to load preview: ' + data.error)
+      }
+    } catch (error) {
+      toast.error('Failed to load preview')
+    }
+  }
+
+  const handleTabChange = (value: string) => {
+    setActiveTab(value)
+    if (value === 'advanced' && !rawConfig) {
+      // Try to load container config if available, else default
+      if (config.manually_configured) {
+        fetchPreview('container')
+      } else {
+        fetchPreview('default')
+      }
     }
   }
 
@@ -89,6 +121,7 @@ export default function Notifications() {
         },
         body: JSON.stringify({
           ...config,
+          raw_yaml: activeTab === 'advanced' ? rawConfig : '',
           crowdsec_restarted: shouldRestart
         }),
       })
@@ -143,70 +176,114 @@ export default function Notifications() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {config.manually_configured && (
-            <Alert>
-              <Info className="h-4 w-4" />
-              <AlertTitle>Existing Configuration Detected</AlertTitle>
-              <AlertDescription>
-                {config.config_source === 'container' && (
-                  <>A manual Discord configuration was found in the CrowdSec container. The values below have been pre-populated from your existing setup.</>
-                )}
-                {config.config_source === 'both' && (
-                  <>Discord notifications are configured in both the database and container. You can update them here to synchronize both sources.</>
-                )}
-              </AlertDescription>
-            </Alert>
-          )}
 
-          <div className="space-y-2">
-            <Label htmlFor="webhook-url">
-              Webhook URL
+          <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+            <div className="flex items-center justify-between mb-4">
+                <TabsList>
+                  <TabsTrigger value="simple">Simple Configuration</TabsTrigger>
+                  <TabsTrigger value="advanced">Advanced (YAML)</TabsTrigger>
+                </TabsList>
+                {activeTab === 'advanced' && (
+                    <Button variant="ghost" size="sm" onClick={() => fetchPreview('default')}>
+                        <RefreshCw className="h-3 w-3 mr-2" />
+                        Reset to Template
+                    </Button>
+                )}
+            </div>
+
+            <TabsContent value="simple" className="space-y-4">
               {config.manually_configured && (
-                <span className="ml-2 text-xs text-muted-foreground font-normal">(Pre-populated from existing config)</span>
+                <Alert>
+                  <Info className="h-4 w-4" />
+                  <AlertTitle>Existing Configuration Detected</AlertTitle>
+                  <AlertDescription>
+                    {config.config_source === 'container_env' && (
+                      <>Discord configuration was detected in the CrowdSec container's environment variables. These values are pre-populated below.</>
+                    )}
+                    {config.config_source === 'container_file' && (
+                      <>A manual Discord configuration file was found in the CrowdSec container. The values below have been pre-populated from your existing setup.</>
+                    )}
+                    {(config.config_source === 'container' || !config.config_source) && (
+                      <>A manual Discord configuration was found in the CrowdSec container. The values below have been pre-populated from your existing setup.</>
+                    )}
+                    {config.config_source === 'both' && (
+                      <>Discord notifications are configured in both the database and container. You can update them here to synchronize both sources.</>
+                    )}
+                  </AlertDescription>
+                </Alert>
               )}
-            </Label>
-            <Input
-              id="webhook-url"
-              placeholder="https://discord.com/api/webhooks/..."
-              value={webhookUrl}
-              onChange={handleWebhookUrlChange}
-            />
-            <p className="text-sm text-muted-foreground">
-              Paste the full Webhook URL from Discord channel settings.
-            </p>
-          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="geoapify-key">
-                Geoapify API Key
-                {config.manually_configured && config.geoapify_key && (
-                  <span className="ml-2 text-xs text-muted-foreground font-normal">(Pre-populated)</span>
-                )}
-              </Label>
-              <Input
-                id="geoapify-key"
-                type="password"
-                value={config.geoapify_key}
-                onChange={(e) => setConfig(prev => ({ ...prev, geoapify_key: e.target.value }))}
+              <div className="space-y-2">
+                <Label htmlFor="webhook-url">
+                  Webhook URL
+                  {config.manually_configured && (
+                    <span className="ml-2 text-xs text-muted-foreground font-normal">(Pre-populated from existing config)</span>
+                  )}
+                </Label>
+                <Input
+                  id="webhook-url"
+                  placeholder="https://discord.com/api/webhooks/..."
+                  value={webhookUrl}
+                  onChange={handleWebhookUrlChange}
+                />
+                <p className="text-sm text-muted-foreground">
+                  Paste the full Webhook URL from Discord channel settings.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="geoapify-key">
+                    Geoapify API Key
+                    {config.manually_configured && config.geoapify_key && (
+                      <span className="ml-2 text-xs text-muted-foreground font-normal">(Pre-populated)</span>
+                    )}
+                  </Label>
+                  <Input
+                    id="geoapify-key"
+                    type="password"
+                    value={config.geoapify_key}
+                    onChange={(e) => setConfig(prev => ({ ...prev, geoapify_key: e.target.value }))}
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Required for static map generation.
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="cti-key">CrowdSec CTI Key (Optional)</Label>
+                  <Input
+                    id="cti-key"
+                    type="password"
+                    value={config.crowdsec_cti_api_key}
+                    onChange={(e) => setConfig(prev => ({ ...prev, crowdsec_cti_api_key: e.target.value }))}
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    For enhanced IP information and maliciousness scores.
+                  </p>
+                </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="advanced" className="space-y-4">
+              <Alert>
+                <AlertTriangle className="h-4 w-4" />
+                <AlertTitle>Advanced Configuration</AlertTitle>
+                <AlertDescription>
+                  You are editing the raw discord.yaml file. This bypasses the standard configuration form. 
+                  Ensure your YAML is valid and follows CrowdSec's notification plugin format.
+                  <br/>
+                  <strong>Valid YAML structure is required.</strong>
+                </AlertDescription>
+              </Alert>
+              
+              <Textarea
+                value={rawConfig}
+                onChange={(e) => setRawConfig(e.target.value)}
+                className="font-mono min-h-[400px]"
+                spellCheck={false}
               />
-              <p className="text-sm text-muted-foreground">
-                Required for static map generation.
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="cti-key">CrowdSec CTI Key (Optional)</Label>
-              <Input
-                id="cti-key"
-                type="password"
-                value={config.crowdsec_cti_api_key}
-                onChange={(e) => setConfig(prev => ({ ...prev, crowdsec_cti_api_key: e.target.value }))}
-              />
-              <p className="text-sm text-muted-foreground">
-                For enhanced IP information and maliciousness scores.
-              </p>
-            </div>
-          </div>
+            </TabsContent>
+          </Tabs>
 
           <Alert>
             <AlertTriangle className="h-4 w-4" />

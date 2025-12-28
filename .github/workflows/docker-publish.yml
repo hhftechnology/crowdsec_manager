@@ -8,6 +8,7 @@ on:
       - dev-discord
       - traefik
       - traefik-dev-Dashboard
+      - traefuk-dev-variables
     tags:
       - 'v*'
   pull_request:

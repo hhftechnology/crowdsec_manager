@@ -1,9 +1,9 @@
+import { ReactNode } from "react"
 /**
  * Standardized DashboardGrid component
  * Eliminates duplication in dashboard layouts across different features
  */
 
-import * as React from "react"
 import { cn } from "@/lib/utils"
 import { BaseComponentProps } from "@/lib/component-patterns"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -26,7 +26,7 @@ export interface DashboardSection {
   id: string
   title?: string
   description?: string
-  content: React.ReactNode
+  content: ReactNode
   span?: number // Grid span for this section
   loading?: boolean
   error?: string
@@ -49,7 +49,7 @@ export interface DashboardGridProps extends BaseComponentProps {
   error?: string
   lastUpdated?: Date
   onRefresh?: () => void
-  actions?: React.ReactNode
+  actions?: ReactNode
   alert?: {
     variant: 'default' | 'destructive'
     title: string
@@ -58,12 +58,12 @@ export interface DashboardGridProps extends BaseComponentProps {
 }
 
 const gridLayoutClasses: Record<GridLayout, string> = {
-  '1-col': 'grid-cols-1',
-  '2-col': 'grid-cols-1 md:grid-cols-2',
-  '3-col': 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3',
-  '4-col': 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4',
-  '2-1-1': 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4',
-  '1-2-1': 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4',
+  '1-col': 'grid-cols-1', 
+  '2-col': 'grid-cols-1 md:grid-cols-2', 
+  '3-col': 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3', 
+  '4-col': 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4', 
+  '2-1-1': 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4', 
+  '1-2-1': 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4', 
   'auto': 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
 }
 
@@ -143,7 +143,7 @@ function DashboardSections({
 }) {
   return (
     <div className={cn(
-      "grid gap-4",
+      "grid gap-4", 
       gridLayoutClasses[layout]
     )}>
       {sections.map((section) => (
@@ -162,20 +162,20 @@ function DashboardSections({
  * Provides consistent dashboard layouts across all features
  */
 export function DashboardGrid({
-  title,
-  description,
-  layout = 'auto',
-  sections = [],
-  tabs,
-  loading = false,
-  error,
-  lastUpdated,
-  onRefresh,
-  actions,
-  alert,
-  className,
-  'data-testid': testId,
-  children,
+  title, 
+  description, 
+  layout = 'auto', 
+  sections = [], 
+  tabs, 
+  loading = false, 
+  error, 
+  lastUpdated, 
+  onRefresh, 
+  actions, 
+  alert, 
+  className, 
+  'data-testid': testId, 
+  children, 
   ...props
 }: DashboardGridProps) {
   return (
@@ -214,7 +214,7 @@ export function DashboardGrid({
                 disabled={loading}
               >
                 <RefreshCw className={cn(
-                  "h-4 w-4 mr-2",
+                  "h-4 w-4 mr-2", 
                   loading && "animate-spin"
                 )} />
                 Refresh
@@ -280,43 +280,43 @@ export function DashboardGrid({
 
 // Preset dashboard configurations for common use cases
 export interface SystemDashboardProps extends Omit<DashboardGridProps, 'tabs'> {
-  systemHealth?: React.ReactNode
-  containerStatus?: React.ReactNode
-  securityMetrics?: React.ReactNode
-  quickActions?: React.ReactNode
+  systemHealth?: ReactNode
+  containerStatus?: ReactNode
+  securityMetrics?: ReactNode
+  quickActions?: ReactNode
 }
 
 export function SystemDashboard({
-  systemHealth,
-  containerStatus,
-  securityMetrics,
-  quickActions,
+  systemHealth, 
+  containerStatus, 
+  securityMetrics, 
+  quickActions, 
   ...props
 }: SystemDashboardProps) {
   const tabs: DashboardTab[] = [
     {
-      id: 'overview',
-      label: 'Overview',
-      layout: '2-col',
+      id: 'overview', 
+      label: 'Overview', 
+      layout: '2-col', 
       sections: [
-        ...(systemHealth ? [{ id: 'health', content: systemHealth }] : []),
-        ...(quickActions ? [{ id: 'actions', content: quickActions }] : []),
+        ...(systemHealth ? [{ id: 'health', content: systemHealth }] : []), 
+        ...(quickActions ? [{ id: 'actions', content: quickActions }] : []), 
       ]
-    },
+    }, 
     {
-      id: 'containers',
-      label: 'Containers',
-      layout: '1-col',
+      id: 'containers', 
+      label: 'Containers', 
+      layout: '1-col', 
       sections: [
-        ...(containerStatus ? [{ id: 'containers', content: containerStatus }] : []),
+        ...(containerStatus ? [{ id: 'containers', content: containerStatus }] : []), 
       ]
-    },
+    }, 
     {
-      id: 'security',
-      label: 'Security',
-      layout: '2-col',
+      id: 'security', 
+      label: 'Security', 
+      layout: '2-col', 
       sections: [
-        ...(securityMetrics ? [{ id: 'security', content: securityMetrics }] : []),
+        ...(securityMetrics ? [{ id: 'security', content: securityMetrics }] : []), 
       ]
     }
   ]
@@ -333,20 +333,20 @@ export interface MetricsDashboardProps extends Omit<DashboardGridProps, 'section
   metrics: Array<{
     id: string
     title: string
-    content: React.ReactNode
+    content: ReactNode
     span?: number
   }>
 }
 
 export function MetricsDashboard({
-  metrics,
-  layout = '4-col',
+  metrics, 
+  layout = '4-col', 
   ...props
 }: MetricsDashboardProps) {
   const sections: DashboardSection[] = metrics.map(metric => ({
-    id: metric.id,
-    title: metric.title,
-    content: metric.content,
+    id: metric.id, 
+    title: metric.title, 
+    content: metric.content, 
     span: metric.span
   }))
 

@@ -1,14 +1,14 @@
-import * as React from "react"
+import { HTMLAttributes, forwardRef } from "react"
 import { cn } from "@/lib/utils"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "./card"
 import { useBreakpoints } from "@/hooks/useMediaQuery"
 
-interface ResponsiveCardProps extends React.HTMLAttributes<HTMLDivElement> {
+interface ResponsiveCardProps extends HTMLAttributes<HTMLDivElement> {
   variant?: 'default' | 'compact' | 'feature' | 'status'
   touchOptimized?: boolean
 }
 
-const ResponsiveCard = React.forwardRef<HTMLDivElement, ResponsiveCardProps>(
+const ResponsiveCard = forwardRef<HTMLDivElement, ResponsiveCardProps>(
   ({ className, variant = 'default', touchOptimized = false, ...props }, ref) => {
     const { isMobile, isTablet } = useBreakpoints()
     
@@ -16,37 +16,37 @@ const ResponsiveCard = React.forwardRef<HTMLDivElement, ResponsiveCardProps>(
       <Card
         ref={ref}
         className={cn(
-          "transition-all duration-200",
+          "transition-all duration-200", 
           // Base responsive styles
           variant === 'default' && [
-            "w-full",
-            isMobile && "rounded-lg shadow-sm",
-            isTablet && "rounded-xl shadow-md",
+            "w-full", 
+            isMobile && "rounded-lg shadow-sm", 
+            isTablet && "rounded-xl shadow-md", 
             !isMobile && !isTablet && "rounded-xl shadow-lg hover:shadow-xl"
-          ],
+          ], 
           // Compact variant for mobile-first design
           variant === 'compact' && [
-            "w-full",
-            isMobile && "p-3 rounded-md",
+            "w-full", 
+            isMobile && "p-3 rounded-md", 
             !isMobile && "p-4 rounded-lg"
-          ],
+          ], 
           // Feature cards with enhanced mobile experience
           variant === 'feature' && [
-            "w-full cursor-pointer",
-            isMobile && "p-4 rounded-lg active:scale-95",
+            "w-full cursor-pointer", 
+            isMobile && "p-4 rounded-lg active:scale-95", 
             !isMobile && "p-6 rounded-xl hover:scale-105"
-          ],
+          ], 
           // Status cards with responsive indicators
           variant === 'status' && [
-            "w-full border-l-4",
-            isMobile && "p-3 rounded-r-lg",
+            "w-full border-l-4", 
+            isMobile && "p-3 rounded-r-lg", 
             !isMobile && "p-4 rounded-r-xl"
-          ],
+          ], 
           // Touch optimization
           touchOptimized && [
-            "touch-manipulation",
+            "touch-manipulation", 
             isMobile && "min-h-[60px] active:bg-accent/50"
-          ],
+          ], 
           className
         )}
         {...props}
@@ -56,11 +56,11 @@ const ResponsiveCard = React.forwardRef<HTMLDivElement, ResponsiveCardProps>(
 )
 ResponsiveCard.displayName = "ResponsiveCard"
 
-interface ResponsiveCardHeaderProps extends React.HTMLAttributes<HTMLDivElement> {
+interface ResponsiveCardHeaderProps extends HTMLAttributes<HTMLDivElement> {
   compact?: boolean
 }
 
-const ResponsiveCardHeader = React.forwardRef<HTMLDivElement, ResponsiveCardHeaderProps>(
+const ResponsiveCardHeader = forwardRef<HTMLDivElement, ResponsiveCardHeaderProps>(
   ({ className, compact = false, ...props }, ref) => {
     const { isMobile } = useBreakpoints()
     
@@ -68,8 +68,8 @@ const ResponsiveCardHeader = React.forwardRef<HTMLDivElement, ResponsiveCardHead
       <CardHeader
         ref={ref}
         className={cn(
-          compact && isMobile ? "pb-2" : "pb-4",
-          isMobile && "px-4 pt-4",
+          compact && isMobile ? "pb-2" : "pb-4", 
+          isMobile && "px-4 pt-4", 
           className
         )}
         {...props}
@@ -79,11 +79,11 @@ const ResponsiveCardHeader = React.forwardRef<HTMLDivElement, ResponsiveCardHead
 )
 ResponsiveCardHeader.displayName = "ResponsiveCardHeader"
 
-interface ResponsiveCardTitleProps extends React.HTMLAttributes<HTMLHeadingElement> {
+interface ResponsiveCardTitleProps extends HTMLAttributes<HTMLHeadingElement> {
   size?: 'sm' | 'md' | 'lg'
 }
 
-const ResponsiveCardTitle = React.forwardRef<HTMLParagraphElement, ResponsiveCardTitleProps>(
+const ResponsiveCardTitle = forwardRef<HTMLParagraphElement, ResponsiveCardTitleProps>(
   ({ className, size = 'md', ...props }, ref) => {
     const { isMobile } = useBreakpoints()
     
@@ -92,11 +92,11 @@ const ResponsiveCardTitle = React.forwardRef<HTMLParagraphElement, ResponsiveCar
         ref={ref}
         className={cn(
           // Responsive text sizing
-          size === 'sm' && (isMobile ? "text-sm" : "text-base"),
-          size === 'md' && (isMobile ? "text-base" : "text-lg"),
-          size === 'lg' && (isMobile ? "text-lg" : "text-xl"),
+          size === 'sm' && (isMobile ? "text-sm" : "text-base"), 
+          size === 'md' && (isMobile ? "text-base" : "text-lg"), 
+          size === 'lg' && (isMobile ? "text-lg" : "text-xl"), 
           // Mobile-specific adjustments
-          isMobile && "leading-tight",
+          isMobile && "leading-tight", 
           className
         )}
         {...props}
@@ -106,11 +106,11 @@ const ResponsiveCardTitle = React.forwardRef<HTMLParagraphElement, ResponsiveCar
 )
 ResponsiveCardTitle.displayName = "ResponsiveCardTitle"
 
-interface ResponsiveCardContentProps extends React.HTMLAttributes<HTMLDivElement> {
+interface ResponsiveCardContentProps extends HTMLAttributes<HTMLDivElement> {
   spacing?: 'tight' | 'normal' | 'loose'
 }
 
-const ResponsiveCardContent = React.forwardRef<HTMLDivElement, ResponsiveCardContentProps>(
+const ResponsiveCardContent = forwardRef<HTMLDivElement, ResponsiveCardContentProps>(
   ({ className, spacing = 'normal', ...props }, ref) => {
     const { isMobile } = useBreakpoints()
     
@@ -119,9 +119,9 @@ const ResponsiveCardContent = React.forwardRef<HTMLDivElement, ResponsiveCardCon
         ref={ref}
         className={cn(
           // Responsive spacing
-          spacing === 'tight' && (isMobile ? "p-3" : "p-4"),
-          spacing === 'normal' && (isMobile ? "p-4" : "p-6"),
-          spacing === 'loose' && (isMobile ? "p-5" : "p-8"),
+          spacing === 'tight' && (isMobile ? "p-3" : "p-4"), 
+          spacing === 'normal' && (isMobile ? "p-4" : "p-6"), 
+          spacing === 'loose' && (isMobile ? "p-5" : "p-8"), 
           className
         )}
         {...props}
@@ -131,11 +131,11 @@ const ResponsiveCardContent = React.forwardRef<HTMLDivElement, ResponsiveCardCon
 )
 ResponsiveCardContent.displayName = "ResponsiveCardContent"
 
-interface ResponsiveCardFooterProps extends React.HTMLAttributes<HTMLDivElement> {
+interface ResponsiveCardFooterProps extends HTMLAttributes<HTMLDivElement> {
   sticky?: boolean
 }
 
-const ResponsiveCardFooter = React.forwardRef<HTMLDivElement, ResponsiveCardFooterProps>(
+const ResponsiveCardFooter = forwardRef<HTMLDivElement, ResponsiveCardFooterProps>(
   ({ className, sticky = false, ...props }, ref) => {
     const { isMobile } = useBreakpoints()
     
@@ -144,9 +144,9 @@ const ResponsiveCardFooter = React.forwardRef<HTMLDivElement, ResponsiveCardFoot
         ref={ref}
         className={cn(
           // Responsive padding
-          isMobile ? "px-4 pb-4 pt-2" : "px-6 pb-6 pt-4",
+          isMobile ? "px-4 pb-4 pt-2" : "px-6 pb-6 pt-4", 
           // Sticky footer for mobile
-          sticky && isMobile && "sticky bottom-0 bg-card border-t",
+          sticky && isMobile && "sticky bottom-0 bg-card border-t", 
           className
         )}
         {...props}
@@ -157,11 +157,11 @@ const ResponsiveCardFooter = React.forwardRef<HTMLDivElement, ResponsiveCardFoot
 ResponsiveCardFooter.displayName = "ResponsiveCardFooter"
 
 export {
-  ResponsiveCard,
-  ResponsiveCardHeader,
-  ResponsiveCardTitle,
-  ResponsiveCardContent,
-  ResponsiveCardFooter,
+  ResponsiveCard, 
+  ResponsiveCardHeader, 
+  ResponsiveCardTitle, 
+  ResponsiveCardContent, 
+  ResponsiveCardFooter, 
   ResponsiveCardDescription
 }
 

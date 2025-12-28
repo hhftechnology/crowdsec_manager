@@ -1,12 +1,12 @@
-import * as React from "react"
+import { ComponentType } from "react"
 import { TrendingUp, TrendingDown, Minus } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
+  Card, 
+  CardContent, 
+  CardDescription, 
+  CardHeader, 
+  CardTitle, 
 } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 
@@ -14,7 +14,7 @@ export interface StatusCardProps {
   title: string
   value: string | number
   description?: string
-  icon?: React.ComponentType<{ className?: string }>
+  icon?: ComponentType<{ className?: string }>
   status?: 'success' | 'warning' | 'error' | 'info' | 'neutral'
   trend?: {
     value: number
@@ -28,53 +28,53 @@ export interface StatusCardProps {
 
 const statusStyles = {
   success: {
-    card: "border-green-200 bg-green-50/50 dark:border-green-800 dark:bg-green-950/50",
-    icon: "text-green-600 dark:text-green-400",
+    card: "border-green-200 bg-green-50/50 dark:border-green-800 dark:bg-green-950/50", 
+    icon: "text-green-600 dark:text-green-400", 
     badge: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300"
-  },
+  }, 
   warning: {
-    card: "border-yellow-200 bg-yellow-50/50 dark:border-yellow-800 dark:bg-yellow-950/50",
-    icon: "text-yellow-600 dark:text-yellow-400",
+    card: "border-yellow-200 bg-yellow-50/50 dark:border-yellow-800 dark:bg-yellow-950/50", 
+    icon: "text-yellow-600 dark:text-yellow-400", 
     badge: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300"
-  },
+  }, 
   error: {
-    card: "border-red-200 bg-red-50/50 dark:border-red-800 dark:bg-red-950/50",
-    icon: "text-red-600 dark:text-red-400",
+    card: "border-red-200 bg-red-50/50 dark:border-red-800 dark:bg-red-950/50", 
+    icon: "text-red-600 dark:text-red-400", 
     badge: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300"
-  },
+  }, 
   info: {
-    card: "border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/50",
-    icon: "text-blue-600 dark:text-blue-400",
+    card: "border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/50", 
+    icon: "text-blue-600 dark:text-blue-400", 
     badge: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300"
-  },
+  }, 
   neutral: {
-    card: "",
-    icon: "text-muted-foreground",
+    card: "", 
+    icon: "text-muted-foreground", 
     badge: "bg-muted text-muted-foreground"
   }
 }
 
 const trendIcons = {
-  up: TrendingUp,
-  down: TrendingDown,
+  up: TrendingUp, 
+  down: TrendingDown, 
   neutral: Minus
 }
 
 const trendColors = {
-  up: "text-green-600 dark:text-green-400",
-  down: "text-red-600 dark:text-red-400",
+  up: "text-green-600 dark:text-green-400", 
+  down: "text-red-600 dark:text-red-400", 
   neutral: "text-muted-foreground"
 }
 
 export function StatusCard({
-  title,
-  value,
-  description,
-  icon: Icon,
-  status = 'neutral',
-  trend,
-  loading = false,
-  className,
+  title, 
+  value, 
+  description, 
+  icon: Icon, 
+  status = 'neutral', 
+  trend, 
+  loading = false, 
+  className, 
   onClick
 }: StatusCardProps) {
   const styles = statusStyles[status]
@@ -99,9 +99,9 @@ export function StatusCard({
   return (
     <Card 
       className={cn(
-        "transition-all duration-200",
-        styles.card,
-        onClick && "cursor-pointer hover:shadow-md",
+        "transition-all duration-200", 
+        styles.card, 
+        onClick && "cursor-pointer hover:shadow-md", 
         className
       )}
       onClick={onClick}
@@ -157,7 +157,7 @@ export function StatusCard({
 // Preset status cards for common use cases
 export function HealthStatusCard({ 
   isHealthy, 
-  title = "System Health",
+  title = "System Health", 
   ...props 
 }: Omit<StatusCardProps, 'status' | 'value'> & { 
   isHealthy: boolean 
@@ -175,8 +175,8 @@ export function HealthStatusCard({
 
 export function CounterStatusCard({ 
   count, 
-  title,
-  threshold,
+  title, 
+  threshold, 
   ...props 
 }: Omit<StatusCardProps, 'status' | 'value'> & { 
   count: number
@@ -206,7 +206,7 @@ export function CounterStatusCard({
 
 export function PercentageStatusCard({ 
   percentage, 
-  title,
+  title, 
   ...props 
 }: Omit<StatusCardProps, 'status' | 'value'> & { 
   percentage: number 

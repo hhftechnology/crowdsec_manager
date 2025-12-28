@@ -770,6 +770,284 @@ docker volume prune
 docker-compose --profile new-proxy up -d
 ```
 
+## Path Configuration Issues (v2.0+)
+
+<Callout type="info">
+**New in v2.0**: Path configuration issues that were causing whitelist and captcha failures (Issue #28) have been resolved. Environment variables are now respected.
+</Callout>
+
+###Path Configuration Not Working
+
+#### Symptoms
+- Environment variables like `TRAEFIK_DYNAMIC_CONFIG` being ignored
+- Whitelist operations failing with "file not found" errors
+- Captcha configuration not working
+- Operations attempting to access `/etc/traefik/dynamic_config.yml` instead of custom path
+
+#### Common Causes and Solutions
+
+**Environment Variables Not Set**
+```bash
+# Check if environment variables are loaded
+docker exec crowdsec-manager env | grep TRAEFIK
+
+# Verify .env file is being loaded
+docker-compose config | grep TRAEFIK_DYNAMIC_CONFIG
+
+# Solution: Ensure .env file is in the same directory as docker-compose.yml
+ls -la .env docker-compose.yml
+```
+
+**Wrong Path Priority**
+```bash
+# Check current path configuration
+curl http://localhost:8080/api/config/paths
+
+# Configuration priority is: Database > Environment > Defaults
+# If database has old values, they override environment variables
+
+# Solution: Update via API or clear database and restart
+docker exec crowdsec-manager rm /app/data/settings.db
+docker restart crowdsec-manager
+```
+
+**Container-Internal vs Host Paths Confusion**
+```bash
+# WRONG: Setting host path as environment variable
+TRAEFIK_DYNAMIC_CONFIG=./config/traefik/dynamic_config.yml  # ❌
+
+# CORRECT: Set container-internal path
+TRAEFIK_DYNAMIC_CONFIG=/etc/traefik/dynamic_config.yml  # ✅
+
+# The volume mount maps host to container:
+volumes:
+  - ./config/traefik:/etc/traefik  # Host ./config/traefik → Container /etc/traefik
+```
+
+**File Doesn't Exist at Specified Path**
+```bash
+# Check if file exists inside container
+docker exec traefik ls -la /etc/traefik/rules/dynamic_config.yml
+
+# If file doesn't exist, check volume mounts
+docker inspect traefik | grep -A 10 Mounts
+
+# Verify path in environment variable matches actual location
+echo $TRAEFIK_DYNAMIC_CONFIG
+```
+
+### Whitelist Operations Failing
+
+#### Symptoms
+- "Failed to add IP to whitelist" errors
+- sed command failures
+- File permissions errors
+- Changes not persisting
+
+#### Solutions
+
+**Path Mismatch**
+```bash
+# Check what path the application is using
+docker logs crowdsec-manager | grep "dynamic_config"
+
+# Verify it matches your actual file location
+docker exec traefik find /etc/traefik -name "dynamic_config.yml"
+
+# Update environment variable to match
+TRAEFIK_DYNAMIC_CONFIG=/etc/traefik/rules/dynamic_config.yml
+docker restart crowdsec-manager
+```
+
+**File Permissions**
+```bash
+# Check file permissions inside container
+docker exec traefik ls -la /etc/traefik/dynamic_config.yml
+
+# File must be writable by the process
+# Fix permissions if needed
+docker exec traefik chmod 644 /etc/traefik/dynamic_config.yml
+```
+
+**File Not Mounted Correctly**
+```bash
+# Check volume mount
+docker inspect traefik | jq '.[0].Mounts'
+
+# Ensure dynamic config file is in mounted directory
+# Update docker-compose.yml if needed
+volumes:
+  - ./config/traefik:/etc/traefik:rw  # Ensure read-write
+```
+
+### Captcha Configuration Failing
+
+#### Symptoms
+- Captcha HTML file not found
+- captcha.html path errors
+- Captcha not activating
+
+#### Solutions
+
+**Custom Captcha Path Not Set**
+```bash
+# If you use custom path like /etc/traefik/conf/captcha.html
+# Set the environment variable
+TRAEFIK_CAPTCHA_HTML=/etc/traefik/conf/captcha.html
+
+# Verify file exists
+docker exec traefik ls -la /etc/traefik/conf/captcha.html
+
+# Check current configuration
+curl http://localhost:8080/api/captcha/status | jq .
+```
+
+**Default Path Changed**
+```bash
+# v2.0 changed default from /etc/traefik/conf/captcha.html
+# to /etc/traefik/assets/captcha.html
+
+# If you have the old structure, set the environment variable
+TRAEFIK_CAPTCHA_HTML=/etc/traefik/conf/captcha.html
+
+# Or move the file to the new location
+docker exec traefik mv /etc/traefik/conf/captcha.html /etc/traefik/assets/
+```
+
+### Custom Folder Structure Not Working
+
+#### Symptoms
+- Using folder structure like `/etc/traefik/rules/` and `/etc/traefik/conf/`
+- Operations failing to find files
+- Default paths being used despite setting environment variables
+
+#### Solution
+
+This was the exact issue reported in #28. Set ALL relevant environment variables:
+
+```env
+# For folder structure:
+# /etc/traefik/
+#   ├── rules/
+#   │   └── dynamic_config.yml
+#   └── conf/
+#       └── captcha.html
+
+TRAEFIK_DYNAMIC_CONFIG=/etc/traefik/rules/dynamic_config.yml
+TRAEFIK_CAPTCHA_HTML=/etc/traefik/conf/captcha.html
+TRAEFIK_RULES_DIR=/etc/traefik/rules
+TRAEFIK_CONF_DIR=/etc/traefik/conf
+```
+
+**Verify Configuration**
+```bash
+# Check all paths are correctly set
+docker exec crowdsec-manager env | grep TRAEFIK
+
+# Test each path
+docker exec traefik ls -la /etc/traefik/rules/dynamic_config.yml
+docker exec traefik ls -la /etc/traefik/conf/captcha.html
+
+# Restart manager to apply changes
+docker restart crowdsec-manager
+```
+
+### Migration from v1.x
+
+#### Symptoms
+- Upgrade to v2.0 causing path-related errors
+- Previously working configuration now failing
+- Environment variables suddenly being respected (different behavior)
+
+#### Solutions
+
+**Review Migration Guide**
+```bash
+# Read the comprehensive migration guide
+cat PATH_CONFIGURATION_MIGRATION_GUIDE.md
+
+# Check current settings
+curl http://localhost:8080/api/config/paths | jq .
+```
+
+**Database Migration Issues**
+```bash
+# Check if database was migrated
+docker logs crowdsec-manager | grep migration
+
+# If migration failed, backup and reset
+docker exec crowdsec-manager cp /app/data/settings.db /app/backups/pre-v2-backup.db
+docker exec crowdsec-manager rm /app/data/settings.db
+docker restart crowdsec-manager
+```
+
+**Verify All Paths**
+```bash
+# Use the path validation API (coming soon)
+curl -X POST http://localhost:8080/api/config/paths/test \
+  -H "Content-Type: application/json" \
+  -d '{"container":"traefik","path":"/etc/traefik/dynamic_config.yml"}'
+
+# Should return
+{
+  "exists": true,
+  "readable": true,
+  "writable": true
+}
+```
+
+### Path Validation Tips
+
+**Best Practices**
+```bash
+# 1. Always use container-internal paths, not host paths
+TRAEFIK_DYNAMIC_CONFIG=/etc/traefik/dynamic_config.yml  # ✅
+# NOT: ./config/traefik/dynamic_config.yml  # ❌
+
+# 2. Test paths inside containers
+docker exec traefik cat $TRAEFIK_DYNAMIC_CONFIG
+
+# 3. Check volume mounts match your paths
+docker inspect traefik | jq '.[0].Mounts'
+
+# 4. Verify read/write permissions
+docker exec traefik test -r /etc/traefik/dynamic_config.yml && echo "Readable"
+docker exec traefik test -w /etc/traefik/dynamic_config.yml && echo "Writable"
+
+# 5. Monitor logs for path-related errors
+docker logs crowdsec-manager | grep -i "path\|config\|not found"
+```
+
+**Quick Diagnostic Script**
+```bash
+#!/bin/bash
+# Save as check-paths.sh
+
+echo "=== Path Configuration Diagnostic ==="
+echo ""
+echo "Environment Variables:"
+docker exec crowdsec-manager env | grep -E "TRAEFIK|CROWDSEC|MANAGER" | sort
+
+echo ""
+echo "File Existence Check:"
+for path in \
+  "/etc/traefik/dynamic_config.yml" \
+  "/etc/traefik/assets/captcha.html" \
+  "/etc/crowdsec/acquis.yaml"
+do
+  container=$(echo $path | cut -d'/' -f3)
+  if docker exec $container test -f $path 2>/dev/null; then
+    echo "✅ $path exists"
+  else
+    echo "❌ $path NOT FOUND"
+  fi
+done
+
+echo ""
+echo "Volume Mounts:"
+docker inspect traefik | jq '.[0].Mounts[] | "\(.Source) → \(.Destination)"'
+```
+
 ## Getting Help
 
 ### Collecting Debug Information

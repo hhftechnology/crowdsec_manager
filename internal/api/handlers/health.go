@@ -447,7 +447,7 @@ func RunCompleteDiagnostics(dockerClient *docker.Client, db *database.Database, 
 
 		// Check multiple possible config files
 		configPaths := []string{
-			"/etc/traefik/dynamic_config.yml",
+			cfg.Paths.TraefikDynamicConfig,
 			"/etc/traefik/traefik_config.yml",
 		}
 

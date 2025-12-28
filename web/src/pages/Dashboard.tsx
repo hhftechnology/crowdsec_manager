@@ -60,9 +60,23 @@ export default function Dashboard() {
 
   const parseBouncersCount = (data: any): number => {
     if (!data) return 0
+    
+    // Try to get the list of bouncers to filter by status
+    let bouncersList: any[] = []
+    if (Array.isArray(data)) {
+      bouncersList = data
+    } else if (data.bouncers && Array.isArray(data.bouncers)) {
+      bouncersList = data.bouncers
+    }
+    
+    // If we have a list, count only connected bouncers
+    if (bouncersList.length > 0) {
+      return bouncersList.filter((b: any) => b?.status?.toLowerCase() === 'connected').length
+    }
+    
+    // Fallback to count property if list is not available (though it should be)
     if (typeof data.count === 'number') return data.count
-    if (Array.isArray(data)) return data.length
-    if (data.bouncers && Array.isArray(data.bouncers)) return data.bouncers.length
+    
     return 0
   }
 
@@ -190,7 +204,8 @@ export default function Dashboard() {
           icon={Users}
           description="Connected enforcement agents"
           loading={bouncersLoading}
-          threshold={{ warning: 1, error: 0 }}
+          threshold={{ error: 0 }}
+          higherIsBetter={true}
         />
 
         {/* Containers Status */}
@@ -198,7 +213,7 @@ export default function Dashboard() {
           title="Containers"
           value={healthLoading ? "Loading..." : `${healthData?.containers.filter((c: any) => c.running).length || 0}/${healthData?.containers.length || 0}`}
           icon={Container}
-          status={healthLoading ? 'neutral' : healthData?.allRunning ? 'success' : 'error'}
+          variant={healthLoading ? 'neutral' : healthData?.allRunning ? 'success' : 'error'}
           description="Running containers"
           loading={healthLoading}
         />

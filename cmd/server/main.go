@@ -169,7 +169,9 @@ func main() {
 		api.RegisterNotificationRoutes(apiGroup, dockerClient, db, cfg)
 		api.RegisterProfileRoutes(apiGroup, db, cfg, dockerClient)
 		api.RegisterProxyRoutes(apiGroup, proxyManager, proxyAdapter) // New proxy management routes
+		api.RegisterValidationRoutes(apiGroup, dockerClient, cfg)
 	}
+
 
 	// Serve React frontend static assets and handle client-side routing
 	router.Static("/assets", "./web/dist/assets")

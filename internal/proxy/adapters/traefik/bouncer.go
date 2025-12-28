@@ -29,14 +29,15 @@ func NewTraefikBouncerManager(dockerClient *docker.Client, cfg *config.Config) *
 
 // IsBouncerConfigured checks if the Traefik bouncer plugin is configured
 func (t *TraefikBouncerManager) IsBouncerConfigured(ctx context.Context) (bool, error) {
-	logger.Info("Checking if Traefik bouncer is configured")
-	
+	configPath := t.cfg.Paths.TraefikDynamicConfig
+	logger.Info("Checking if Traefik bouncer is configured", "config_path", configPath)
+
 	// Check dynamic_config.yml for bouncer configuration
 	configContent, err := t.dockerClient.ExecCommand(t.cfg.TraefikContainerName, []string{
-		"cat", "/etc/traefik/dynamic_config.yml",
+		"cat", configPath,
 	})
 	if err != nil {
-		return false, fmt.Errorf("failed to read dynamic config: %w", err)
+		return false, fmt.Errorf("failed to read dynamic config at %s: %w", configPath, err)
 	}
 	
 	// Check for CrowdSec bouncer plugin configuration
@@ -50,11 +51,12 @@ func (t *TraefikBouncerManager) IsBouncerConfigured(ctx context.Context) (bool, 
 
 // GetBouncerStatus retrieves the current bouncer integration status
 func (t *TraefikBouncerManager) GetBouncerStatus(ctx context.Context) (*proxy.BouncerStatus, error) {
-	logger.Info("Getting Traefik bouncer status")
-	
+	configPath := t.cfg.Paths.TraefikDynamicConfig
+	logger.Info("Getting Traefik bouncer status", "config_path", configPath)
+
 	status := &proxy.BouncerStatus{
 		IntegrationType: "plugin",
-		ConfigPath:      "/etc/traefik/dynamic_config.yml",
+		ConfigPath:      configPath,
 	}
 	
 	// Check if bouncer is configured in dynamic config
@@ -109,14 +111,15 @@ func (t *TraefikBouncerManager) GetBouncerStatus(ctx context.Context) (*proxy.Bo
 
 // ValidateConfiguration validates the Traefik bouncer configuration
 func (t *TraefikBouncerManager) ValidateConfiguration(ctx context.Context) error {
-	logger.Info("Validating Traefik bouncer configuration")
-	
+	configPath := t.cfg.Paths.TraefikDynamicConfig
+	logger.Info("Validating Traefik bouncer configuration", "config_path", configPath)
+
 	// Read dynamic config
 	configContent, err := t.dockerClient.ExecCommand(t.cfg.TraefikContainerName, []string{
-		"cat", "/etc/traefik/dynamic_config.yml",
+		"cat", configPath,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to read dynamic config: %w", err)
+		return fmt.Errorf("failed to read dynamic config at %s: %w", configPath, err)
 	}
 	
 	// Parse YAML to validate structure
@@ -249,14 +252,15 @@ func (t *TraefikBouncerManager) findTraefikBouncer(bouncersJSON string) *Bouncer
 
 // GetLAPIKey retrieves the LAPI key from the Traefik configuration
 func (t *TraefikBouncerManager) GetLAPIKey(ctx context.Context) (string, error) {
-	logger.Info("Retrieving LAPI key from Traefik configuration")
-	
+	configPath := t.cfg.Paths.TraefikDynamicConfig
+	logger.Info("Retrieving LAPI key from Traefik configuration", "config_path", configPath)
+
 	// Read dynamic config
 	configContent, err := t.dockerClient.ExecCommand(t.cfg.TraefikContainerName, []string{
-		"cat", "/etc/traefik/dynamic_config.yml",
+		"cat", configPath,
 	})
 	if err != nil {
-		return "", fmt.Errorf("failed to read dynamic config: %w", err)
+		return "", fmt.Errorf("failed to read dynamic config at %s: %w", configPath, err)
 	}
 	
 	// Parse YAML to extract LAPI key
@@ -326,14 +330,15 @@ func (t *TraefikBouncerManager) VerifyLAPIConnection(ctx context.Context) error 
 
 // GetBouncerConfiguration retrieves the complete bouncer configuration from Traefik
 func (t *TraefikBouncerManager) GetBouncerConfiguration(ctx context.Context) (map[string]interface{}, error) {
-	logger.Info("Retrieving Traefik bouncer configuration")
-	
+	configPath := t.cfg.Paths.TraefikDynamicConfig
+	logger.Info("Retrieving Traefik bouncer configuration", "config_path", configPath)
+
 	// Read dynamic config
 	configContent, err := t.dockerClient.ExecCommand(t.cfg.TraefikContainerName, []string{
-		"cat", "/etc/traefik/dynamic_config.yml",
+		"cat", configPath,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to read dynamic config: %w", err)
+		return nil, fmt.Errorf("failed to read dynamic config at %s: %w", configPath, err)
 	}
 	
 	// Parse YAML to extract bouncer configuration

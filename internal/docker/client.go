@@ -42,6 +42,11 @@ func (c *Client) Close() error {
 	return c.cli.Close()
 }
 
+// GetClient returns the underlying Docker SDK client for direct API access
+func (c *Client) GetClient() *client.Client {
+	return c.cli
+}
+
 // Ping verifies connectivity to the Docker daemon
 func (c *Client) Ping() error {
 	_, err := c.cli.Ping(c.ctx)
@@ -329,11 +334,6 @@ func (c *Client) InspectContainer(name string) (*types.ContainerJSON, error) {
 // GetContext returns the context
 func (c *Client) GetContext() context.Context {
 	return c.ctx
-}
-
-// GetClient returns the underlying Docker client
-func (c *Client) GetClient() *client.Client {
-	return c.cli
 }
 
 // FileExists checks if a file or directory exists inside a container

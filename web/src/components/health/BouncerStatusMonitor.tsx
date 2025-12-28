@@ -89,13 +89,27 @@ const calculateBouncerMetrics = (bouncers: Bouncer[]): BouncerMetrics => {
   let disconnectedBouncers = 0
 
   bouncers.forEach(bouncer => {
+    // Prioritize backend-provided status if available
+    if (bouncer.status) {
+      if (bouncer.status === 'connected') {
+        activeBouncers++
+        connectedBouncers++
+      } else if (bouncer.status === 'stale') {
+        staleBouncers++
+      } else {
+        disconnectedBouncers++
+      }
+      return
+    }
+
+    // Fallback logic
     const lastPull = new Date(bouncer.last_pull)
     const minutesAgo = Math.floor((now.getTime() - lastPull.getTime()) / (1000 * 60))
 
     if (minutesAgo <= 5) {
       activeBouncers++
       connectedBouncers++
-    } else if (minutesAgo <= 60 && bouncer.valid) {
+    } else if (bouncer.valid && (minutesAgo <= 60 * 24)) { // Allow up to 24h as stale if valid
       staleBouncers++
     } else {
       disconnectedBouncers++

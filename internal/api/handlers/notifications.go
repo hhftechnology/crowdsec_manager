@@ -172,11 +172,38 @@ func parseDiscordYaml(path string) (*models.DiscordConfig, error) {
 
 // readDiscordConfigFromContainer reads discord.yaml from CrowdSec container and detects manual configuration
 func readDiscordConfigFromContainer(dockerClient *docker.Client, cfg *config.Config) (*models.DiscordConfig, error) {
-	// Read discord.yaml from container
+	// 1. Inspect container environment variables first
+	inspect, err := dockerClient.InspectContainer(cfg.CrowdsecContainerName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to inspect container: %w", err)
+	}
+
+	envMap := make(map[string]string)
+	for _, env := range inspect.Config.Env {
+		parts := strings.SplitN(env, "=", 2)
+		if len(parts) == 2 {
+			envMap[parts[0]] = parts[1]
+		}
+	}
+
+	// 2. Read discord.yaml from container
 	output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
 		"cat", "/etc/crowdsec/notifications/discord.yaml",
 	})
+	
+	// If discord.yaml doesn't exist, check if we have env vars that imply it should
 	if err != nil {
+		// If we have env vars, we might still want to return a config
+		if envMap["DISCORD_WEBHOOK_ID"] != "" && envMap["DISCORD_WEBHOOK_TOKEN"] != "" {
+			return &models.DiscordConfig{
+				WebhookID:    envMap["DISCORD_WEBHOOK_ID"],
+				WebhookToken: envMap["DISCORD_WEBHOOK_TOKEN"],
+				GeoapifyKey:  envMap["GEOAPIFY_API_KEY"],
+				CrowdSecCTIKey: envMap["CROWDSEC_CTI_API_KEY"],
+				ManuallyConfigured: true,
+				ConfigSource: "container_env",
+			}, nil
+		}
 		return nil, fmt.Errorf("discord.yaml not found in container: %w", err)
 	}
 
@@ -192,6 +219,17 @@ func readDiscordConfigFromContainer(dockerClient *docker.Client, cfg *config.Con
 
 	config := &models.DiscordConfig{}
 	hasManualConfig := false
+	source := "container_file"
+
+	// Check if values are in environment variables
+	if envMap["DISCORD_WEBHOOK_ID"] != "" && envMap["DISCORD_WEBHOOK_TOKEN"] != "" {
+		config.WebhookID = envMap["DISCORD_WEBHOOK_ID"]
+		config.WebhookToken = envMap["DISCORD_WEBHOOK_TOKEN"]
+		config.GeoapifyKey = envMap["GEOAPIFY_API_KEY"]
+		config.CrowdSecCTIKey = envMap["CROWDSEC_CTI_API_KEY"]
+		hasManualConfig = true
+		source = "container_env"
+	}
 
 	// Extract URL and check if it has hardcoded values or template variables
 	if urlStr, ok := yamlData["url"].(string); ok {
@@ -199,18 +237,20 @@ func readDiscordConfigFromContainer(dockerClient *docker.Client, cfg *config.Con
 		if strings.Contains(urlStr, "discord.com/api/webhooks/") {
 			// Check if it uses template variables like ${DISCORD_WEBHOOK_ID}
 			if !strings.Contains(urlStr, "${DISCORD_WEBHOOK_ID}") && !strings.Contains(urlStr, "${DISCORD_WEBHOOK_TOKEN}") {
-				// Has hardcoded values - extract them
+				// Has hardcoded values - extract them (override env if present, as file is explicit)
 				parts := strings.Split(urlStr, "/")
 				if len(parts) >= 7 {
 					config.WebhookID = parts[5]
 					config.WebhookToken = parts[6]
 					hasManualConfig = true
+					source = "container_file"
 				}
 			}
 		}
 	}
 
 	// Extract Geoapify key if hardcoded (not template variable)
+	// Only override if not already found in env or if file has explicit value
 	if formatStr, ok := yamlData["format"].(string); ok {
 		if strings.Contains(formatStr, "geoapify") {
 			// Check if it's NOT using template variable
@@ -221,14 +261,16 @@ func readDiscordConfigFromContainer(dockerClient *docker.Client, cfg *config.Con
 				if len(matches) > 1 && matches[1] != "" {
 					config.GeoapifyKey = matches[1]
 					hasManualConfig = true
+					// Keep source as is (could be mixed)
 				}
 			}
 		}
 	}
 
 	config.ManuallyConfigured = hasManualConfig
+	config.ConfigSource = source
 	if hasManualConfig {
-		logger.Info("Detected manually configured discord.yaml in container")
+		logger.Info("Detected configured discord settings in container", "source", source)
 	}
 
 	return config, nil
@@ -263,31 +305,34 @@ func GetDiscordConfig(db *database.Database, cfg *config.Config, dockerClient *d
 			ConfigSource: "database",
 		}
 
-		// Try to read from container to detect manual configuration
+		// Try to read from container to detect manual/env configuration
 		containerConfig, err := readDiscordConfigFromContainer(dockerClient, cfg)
 		if err == nil && containerConfig != nil {
 			// Container config exists - check if it's manually configured or uses templates
 			if containerConfig.ManuallyConfigured {
-				// User manually configured discord.yaml with hardcoded values
+				// User manually configured discord.yaml (file or env)
 				config.ManuallyConfigured = true
-				config.ConfigSource = "container"
+				config.ConfigSource = containerConfig.ConfigSource
 
-				// Pre-populate with container values if database is empty
+				// Pre-populate with container values if database is empty or we prefer container (which represents lived truth)
+				// Actually, if we have container config, we should probably prefer it for display if DB is empty
+				
 				if config.WebhookID == "" && containerConfig.WebhookID != "" {
 					config.WebhookID = containerConfig.WebhookID
-					logger.Info("Pre-populated WebhookID from manually configured container discord.yaml")
 				}
 				if config.WebhookToken == "" && containerConfig.WebhookToken != "" {
 					config.WebhookToken = containerConfig.WebhookToken
-					logger.Info("Pre-populated WebhookToken from manually configured container discord.yaml")
 				}
 				if config.GeoapifyKey == "" && containerConfig.GeoapifyKey != "" {
 					config.GeoapifyKey = containerConfig.GeoapifyKey
-					logger.Info("Pre-populated GeoapifyKey from manually configured container discord.yaml")
+				}
+				if config.CrowdSecCTIKey == "" && containerConfig.CrowdSecCTIKey != "" {
+					config.CrowdSecCTIKey = containerConfig.CrowdSecCTIKey
 				}
 
-				// If both sources have values, indicate that
-				if settings.DiscordWebhookID != "" || settings.DiscordWebhookToken != "" {
+				// If both sources have values, indicate that but might differ
+				if settings.DiscordWebhookID != "" && settings.DiscordWebhookID != containerConfig.WebhookID {
+					// Mismatch? For now just say both.
 					config.ConfigSource = "both"
 				}
 			} else {
@@ -308,7 +353,54 @@ func GetDiscordConfig(db *database.Database, cfg *config.Config, dockerClient *d
 	}
 }
 
+// PreviewDiscordConfig generates the expected content of discord.yaml based on current settings
+// GET /api/notifications/discord/preview
+func PreviewDiscordConfig(db *database.Database, cfg *config.Config, dockerClient *docker.Client) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Just return the default template for now, as that's what we generate.
+		// If we had dynamic template generation based on DB values, we would fetch DB values here.
+		
+		// 1. Try to read existing file from container first?
+		// The user might want to edit the *existing* file or the *default* template.
+		// Let's support both via a query param? ?source=container vs ?source=default
+		
+		source := c.Query("source")
+		var content string
+
+
+		if source == "container" {
+			// Read from container
+			config, err := readDiscordConfigFromContainer(dockerClient, cfg)
+			if err == nil && config != nil && config.ManuallyConfigured {
+				// We need to read the raw file, readDiscordConfigFromContainer returns struct.
+				// But readDiscordConfigFromContainer calls `cat ...`.
+				// Let's call cat directly here or reuse helper.
+				output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
+					"cat", "/etc/crowdsec/notifications/discord.yaml",
+				})
+				if err == nil {
+					content = strings.TrimSpace(output)
+				}
+			}
+			if content == "" {
+				// Fallback to default if container read failed or empty
+				content = DiscordTemplate
+			}
+		} else {
+			// Default template
+			content = DiscordTemplate
+		}
+
+		c.JSON(http.StatusOK, models.Response{
+			Success: true,
+			Data:    content,
+		})
+	}
+}
+
 // UpdateDiscordConfig updates the Discord configuration
+// POST /api/notifications/discord
+// Now supports JSON body for configuration
 func UpdateDiscordConfig(db *database.Database, cfg *config.Config, dockerClient *docker.Client) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req models.DiscordConfig
@@ -343,14 +435,37 @@ func UpdateDiscordConfig(db *database.Database, cfg *config.Config, dockerClient
 			return
 		}
 
-		// 1. Generate discord.yaml directly in CrowdSec container config
-		// Write to the existing crowdsec-config volume, not a separate mount
-		if err := generateDiscordYamlInContainer(dockerClient, cfg, req); err != nil {
-			c.JSON(http.StatusInternalServerError, models.Response{
-				Success: false,
-				Error:   fmt.Sprintf("Failed to generate discord.yaml: %v", err),
-			})
-			return
+		// Check if we should use raw YAML (custom config) or generate from fields
+		if req.RawYAML != "" {
+			// Validate YAML
+			var temp interface{}
+			if err := yaml.Unmarshal([]byte(req.RawYAML), &temp); err != nil {
+				c.JSON(http.StatusBadRequest, models.Response{
+					Success: false,
+					Error:   fmt.Sprintf("Invalid YAML format: %v", err),
+				})
+				return
+			}
+			
+			// Write custom content
+			if err := WriteDiscordYamlToContainer(dockerClient, cfg, req.RawYAML); err != nil {
+				c.JSON(http.StatusInternalServerError, models.Response{
+					Success: false,
+					Error:   fmt.Sprintf("Failed to write custom discord.yaml: %v", err),
+				})
+				return
+			}
+		} else {
+			// Generate from default template
+			// 1. Generate discord.yaml and write to container (using standard template)
+			if err := generateDiscordYamlInContainer(dockerClient, cfg, req); err != nil {
+				logger.Error("Failed to generate discord.yaml", "error", err)
+				c.JSON(http.StatusInternalServerError, models.Response{
+					Success: false,
+					Error:   "Failed to configure CrowdSec container: " + err.Error(),
+				})
+				return
+			}
 		}
 
 		// 2. Update docker-compose.yml with environment variables ONLY (no volume mount)
@@ -413,11 +528,11 @@ func UpdateDiscordConfig(db *database.Database, cfg *config.Config, dockerClient
 		// Build success message
 		message := "Discord configuration updated successfully. "
 		if req.Enabled {
-			message += "Created discord.yaml in CrowdSec config and updated docker-compose.yml with environment variables. "
+			message += "Created discord.yaml and updated environment variables. "
 			if restarted {
-				message += "CrowdSec container restarted. Run 'docker-compose up -d' to apply environment variable changes."
+				message += "CrowdSec container restarted."
 			} else {
-				message += "Run 'docker-compose up -d' to apply environment variable changes."
+				message += "Run 'docker-compose up -d' to apply changes."
 			}
 		} else {
 			message += "Discord notifications disabled in profiles.yaml."
@@ -679,8 +794,20 @@ func updateProfilesYaml(path string, enable bool) error {
 	return os.WriteFile(path, output, 0644)
 }
 
-// generateDiscordYamlInContainer writes discord.yaml directly to CrowdSec container config
-func generateDiscordYamlInContainer(dockerClient *docker.Client, cfg *config.Config, config models.DiscordConfig) error {
+// GenerateDiscordYamlContent generates the content for discord.yaml
+func GenerateDiscordYamlContent(config models.DiscordConfig) (string, error) {
+	// For now, we use the static template.
+	// In the future, if we want to support dynamic Go-side substitution, we can do it here.
+	// But currently environment variables handle the dynamic parts.
+	
+	// Escape single quotes in the template for shell command usage later?
+	// No, GenerateDiscordYamlContent should just return the raw YAML content.
+	// The caller is responsible for escaping if passing to a shell command.
+	return DiscordTemplate, nil
+}
+
+// WriteDiscordYamlToContainer writes the given content to discord.yaml in the CrowdSec container
+func WriteDiscordYamlToContainer(dockerClient *docker.Client, cfg *config.Config, content string) error {
 	// Create notifications directory if it doesn't exist
 	_, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
 		"mkdir", "-p", "/etc/crowdsec/notifications",
@@ -689,12 +816,12 @@ func generateDiscordYamlInContainer(dockerClient *docker.Client, cfg *config.Con
 		logger.Warn("Failed to create notifications directory (may already exist)", "error", err)
 	}
 
-	// Escape single quotes in the template for shell command
-	escapedTemplate := strings.ReplaceAll(DiscordTemplate, "'", "'\\''")
+	// Escape single quotes in the content for shell command
+	escapedContent := strings.ReplaceAll(content, "'", "'\\''")
 
 	// Write discord.yaml directly to container
 	_, err = dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
-		"sh", "-c", fmt.Sprintf("echo '%s' > /etc/crowdsec/notifications/discord.yaml", escapedTemplate),
+		"sh", "-c", fmt.Sprintf("echo '%s' > /etc/crowdsec/notifications/discord.yaml", escapedContent),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to write discord.yaml to container: %w", err)
@@ -702,6 +829,15 @@ func generateDiscordYamlInContainer(dockerClient *docker.Client, cfg *config.Con
 
 	logger.Info("Discord YAML created in CrowdSec container", "path", "/etc/crowdsec/notifications/discord.yaml")
 	return nil
+}
+
+// generateDiscordYamlInContainer is a wrapper for backward compatibility and convenience
+func generateDiscordYamlInContainer(dockerClient *docker.Client, cfg *config.Config, config models.DiscordConfig) error {
+	content, err := GenerateDiscordYamlContent(config)
+	if err != nil {
+		return err
+	}
+	return WriteDiscordYamlToContainer(dockerClient, cfg, content)
 }
 
 // updateDockerComposeEnvOnly updates docker-compose.yml to add Discord environment variables ONLY (no volume mount)

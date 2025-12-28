@@ -184,13 +184,13 @@ export function LogStatsDashboard({
   const getCardVariantClass = (variant: StatCard['variant']) => {
     switch (variant) {
       case 'success':
-        return 'border-green-200 bg-green-50'
+        return 'border-green-200 bg-green-50 dark:border-green-800/50 dark:bg-green-950/30 dark:text-green-100'
       case 'warning':
-        return 'border-yellow-200 bg-yellow-50'
+        return 'border-yellow-200 bg-yellow-50 dark:border-yellow-800/50 dark:bg-yellow-950/30 dark:text-yellow-100'
       case 'error':
-        return 'border-red-200 bg-red-50'
+        return 'border-red-200 bg-red-50 dark:border-red-800/50 dark:bg-red-950/30 dark:text-red-100'
       default:
-        return ''
+        return 'dark:bg-card/95 dark:border-border/70'
     }
   }
 
@@ -375,8 +375,10 @@ export function LogStatsDashboard({
                 const isHighTraffic = percentage > 20
                 
                 return (
-                  <div key={ipData.ip} className={`flex items-center justify-between p-3 border rounded-lg ${
-                    isHighTraffic ? 'bg-yellow-50 border-yellow-200' : ''
+                  <div key={ipData.ip} className={`flex items-center justify-between p-3 border rounded-lg transition-colors ${
+                    isHighTraffic 
+                      ? 'bg-yellow-50 border-yellow-200 dark:bg-yellow-950/20 dark:border-yellow-800/40' 
+                      : 'dark:bg-card/50 dark:border-border/50'
                   }`}>
                     <div className="flex items-center gap-3">
                       <Badge variant="outline" className="text-xs">
@@ -422,7 +424,7 @@ export function LogStatsDashboard({
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="p-4 border rounded-lg">
+            <div className="p-4 border rounded-lg dark:bg-card/50 dark:border-border/50">
               <div className="flex items-center gap-2 mb-2">
                 <Shield className="h-4 w-4 text-green-500" />
                 <span className="font-medium">Traffic Health</span>
@@ -430,20 +432,20 @@ export function LogStatsDashboard({
               <div className="space-y-1 text-sm">
                 <div className="flex justify-between">
                   <span>Success Rate:</span>
-                  <span className={stats.successRate > 90 ? 'text-green-600' : 'text-yellow-600'}>
+                  <span className={stats.successRate > 90 ? 'text-green-600 dark:text-green-400' : 'text-yellow-600 dark:text-yellow-400'}>
                     {stats.successRate.toFixed(1)}%
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span>Error Rate:</span>
-                  <span className={stats.errorRate < 5 ? 'text-green-600' : 'text-red-600'}>
+                  <span className={stats.errorRate < 5 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}>
                     {stats.errorRate.toFixed(1)}%
                   </span>
                 </div>
               </div>
             </div>
 
-            <div className="p-4 border rounded-lg">
+            <div className="p-4 border rounded-lg dark:bg-card/50 dark:border-border/50">
               <div className="flex items-center gap-2 mb-2">
                 <Server className="h-4 w-4 text-blue-500" />
                 <span className="font-medium">Load Distribution</span>
@@ -460,7 +462,7 @@ export function LogStatsDashboard({
               </div>
             </div>
 
-            <div className="p-4 border rounded-lg">
+            <div className="p-4 border rounded-lg dark:bg-card/50 dark:border-border/50">
               <div className="flex items-center gap-2 mb-2">
                 <Activity className="h-4 w-4 text-purple-500" />
                 <span className="font-medium">Log Quality</span>
@@ -472,7 +474,7 @@ export function LogStatsDashboard({
                 </div>
                 <div className="flex justify-between">
                   <span>Error Entries:</span>
-                  <span className={stats.errorEntries > 10 ? 'text-yellow-600' : 'text-green-600'}>
+                  <span className={stats.errorEntries > 10 ? 'text-yellow-600 dark:text-yellow-400' : 'text-green-600 dark:text-green-400'}>
                     {stats.errorEntries}
                   </span>
                 </div>
