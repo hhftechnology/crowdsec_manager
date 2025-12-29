@@ -2,7 +2,7 @@
 
 export type ProxyType = 'traefik' | 'nginx' | 'caddy' | 'haproxy' | 'zoraxy' | 'standalone'
 
-export type Feature = 'whitelist' | 'captcha' | 'logs' | 'bouncer' | 'health' | 'appsec'
+export type Feature = 'whitelist' | 'captcha' | 'logs' | 'bouncer' | 'health' | 'appsec' | 'backup' | 'cron' | 'pangolin' | 'gerbil'
 
 export interface ProxyInfo {
   type: ProxyType
@@ -130,5 +130,9 @@ export const FEATURE_DESCRIPTIONS: Record<Feature, string> = {
   logs: 'Parse and analyze proxy access logs',
   bouncer: 'CrowdSec bouncer integration and monitoring',
   health: 'Health monitoring and diagnostics',
-  appsec: 'Application security and WAF features'
+  appsec: 'Application security and WAF features',
+  backup: 'System configuration backup and management',
+  cron: 'Scheduled task management',
+  pangolin: 'Pangolin interface integration',
+  gerbil: 'Gerbil interface integration'
 }

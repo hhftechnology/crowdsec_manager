@@ -10,6 +10,8 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { Shield, Globe, Plus } from 'lucide-react'
+import { useRunningContainers, useProxyType, useFeature } from '@/contexts/DeploymentContext'
+import { ContainerRole } from '@/lib/deployment-types'
 
 export default function Whitelist() {
   const queryClient = useQueryClient()
@@ -17,6 +19,48 @@ export default function Whitelist() {
   const [cidr, setCidr] = useState('')
   const [addToCrowdSec, setAddToCrowdSec] = useState(true)
   const [addToTraefik, setAddToTraefik] = useState(true)
+
+  // Get deployment information
+  const runningContainers = useRunningContainers()
+  const proxyType = useProxyType()
+  const hasProxyWhitelist = useFeature('whitelistProxy')
+  
+  // Determine which containers support whitelisting
+  const hasCrowdSec = runningContainers.some(c => 
+    c.role === ContainerRole.SECURITY && c.name.toLowerCase().includes('crowdsec')
+  )
+  const hasTraefik = runningContainers.some(c => 
+    c.role === ContainerRole.PROXY && c.name.toLowerCase().includes('traefik')
+  )
+  const hasOtherProxy = runningContainers.some(c => 
+    c.role === ContainerRole.PROXY && 
+    !c.name.toLowerCase().includes('traefik') &&
+    c.capabilities.includes('whitelist')
+  )
+  
+  // Determine proxy name for display
+  const getProxyDisplayName = () => {
+    if (hasTraefik) return 'Traefik'
+    if (hasOtherProxy) {
+      const proxyContainer = runningContainers.find(c => 
+        c.role === ContainerRole.PROXY && 
+        !c.name.toLowerCase().includes('traefik') &&
+        c.capabilities.includes('whitelist')
+      )
+      if (proxyContainer) {
+        const name = proxyContainer.name.toLowerCase()
+        if (name.includes('nginx')) return 'Nginx'
+        if (name.includes('caddy')) return 'Caddy'
+        if (name.includes('haproxy')) return 'HAProxy'
+        if (name.includes('zoraxy')) return 'Zoraxy'
+        return 'Proxy'
+      }
+    }
+    return 'Proxy'
+  }
+  
+  const proxyDisplayName = getProxyDisplayName()
+  const showProxyOptions = hasTraefik || hasOtherProxy
 
   const { data: whitelistData, isLoading } = useQuery({
     queryKey: ['whitelist'],
@@ -93,7 +137,7 @@ export default function Whitelist() {
     whitelistManualMutation.mutate({
       ip: manualIP,
       add_to_crowdsec: addToCrowdSec,
-      add_to_traefik: addToTraefik,
+      add_to_traefik: showProxyOptions ? addToTraefik : false,
     })
   }
 
@@ -107,7 +151,7 @@ export default function Whitelist() {
       ip: '',
       cidr: cidr,
       add_to_crowdsec: addToCrowdSec,
-      add_to_traefik: addToTraefik,
+      add_to_traefik: showProxyOptions ? addToTraefik : false,
     })
   }
 
@@ -119,7 +163,7 @@ export default function Whitelist() {
     comprehensiveMutation.mutate({
       ip: publicIPData.ip,
       add_to_crowdsec: true,
-      add_to_traefik: true,
+      add_to_traefik: showProxyOptions,
       comprehensive: true,
     })
   }
@@ -129,7 +173,10 @@ export default function Whitelist() {
       <div>
         <h1 className="text-3xl font-bold">Whitelist Management</h1>
         <p className="text-muted-foreground mt-2">
-          Manage whitelisted IPs and CIDR ranges across CrowdSec and Traefik
+          {showProxyOptions 
+            ? `Manage whitelisted IPs and CIDR ranges across CrowdSec and ${proxyDisplayName}`
+            : 'Manage whitelisted IPs and CIDR ranges for CrowdSec'
+          }
         </p>
       </div>
 
@@ -169,7 +216,10 @@ export default function Whitelist() {
               Setup Comprehensive Whitelist
             </Button>
             <p className="text-xs text-muted-foreground mt-2 text-center">
-              Adds your IP to all whitelist locations (CrowdSec + Traefik)
+              {showProxyOptions 
+                ? `Adds your IP to all whitelist locations (CrowdSec + ${proxyDisplayName})`
+                : 'Adds your IP to CrowdSec whitelist'
+              }
             </p>
           </div>
         </CardContent>
@@ -217,18 +267,20 @@ export default function Whitelist() {
                     />
                   </div>
 
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label>Add to Traefik</Label>
-                      <p className="text-sm text-muted-foreground">
-                        Add to Traefik whitelist
-                      </p>
+                  {showProxyOptions && (
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label>Add to {proxyDisplayName}</Label>
+                        <p className="text-sm text-muted-foreground">
+                          Add to {proxyDisplayName} whitelist
+                        </p>
+                      </div>
+                      <Switch
+                        checked={addToTraefik}
+                        onCheckedChange={setAddToTraefik}
+                      />
                     </div>
-                    <Switch
-                      checked={addToTraefik}
-                      onCheckedChange={setAddToTraefik}
-                    />
-                  </div>
+                  )}
                 </div>
 
                 <Button
@@ -281,18 +333,20 @@ export default function Whitelist() {
                     />
                   </div>
 
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label>Add to Traefik</Label>
-                      <p className="text-sm text-muted-foreground">
-                        Add to Traefik whitelist
-                      </p>
+                  {showProxyOptions && (
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label>Add to {proxyDisplayName}</Label>
+                        <p className="text-sm text-muted-foreground">
+                          Add to {proxyDisplayName} whitelist
+                        </p>
+                      </div>
+                      <Switch
+                        checked={addToTraefik}
+                        onCheckedChange={setAddToTraefik}
+                      />
                     </div>
-                    <Switch
-                      checked={addToTraefik}
-                      onCheckedChange={setAddToTraefik}
-                    />
-                  </div>
+                  )}
                 </div>
 
                 <Button
@@ -324,49 +378,62 @@ export default function Whitelist() {
             </div>
           ) : (
             <div className="space-y-4">
-              {/* CrowdSec Whitelist */}
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <Shield className="h-4 w-4" />
-                  <h3 className="font-semibold">CrowdSec Whitelist</h3>
-                  <Badge>{whitelistData?.crowdsec?.length || 0} entries</Badge>
+              {/* CrowdSec Whitelist - Always show if CrowdSec is present */}
+              {hasCrowdSec && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Shield className="h-4 w-4" />
+                    <h3 className="font-semibold">CrowdSec Whitelist</h3>
+                    <Badge>{whitelistData?.crowdsec?.length || 0} entries</Badge>
+                  </div>
+                  <div className="p-4 border rounded-lg bg-muted/50">
+                    {whitelistData?.crowdsec && whitelistData.crowdsec.length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {whitelistData.crowdsec.map((ip, index) => (
+                          <Badge key={index} variant="secondary" className="font-mono">
+                            {ip}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No IPs whitelisted</p>
+                    )}
+                  </div>
                 </div>
-                <div className="p-4 border rounded-lg bg-muted/50">
-                  {whitelistData?.crowdsec && whitelistData.crowdsec.length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
-                      {whitelistData.crowdsec.map((ip, index) => (
-                        <Badge key={index} variant="secondary" className="font-mono">
-                          {ip}
-                        </Badge>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">No IPs whitelisted</p>
-                  )}
-                </div>
-              </div>
+              )}
 
-              {/* Traefik Whitelist */}
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <Globe className="h-4 w-4" />
-                  <h3 className="font-semibold">Traefik Whitelist</h3>
-                  <Badge>{whitelistData?.traefik?.length || 0} entries</Badge>
+              {/* Proxy Whitelist - Only show if proxy container is present */}
+              {showProxyOptions && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Globe className="h-4 w-4" />
+                    <h3 className="font-semibold">{proxyDisplayName} Whitelist</h3>
+                    <Badge>{whitelistData?.traefik?.length || 0} entries</Badge>
+                  </div>
+                  <div className="p-4 border rounded-lg bg-muted/50">
+                    {whitelistData?.traefik && whitelistData.traefik.length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {whitelistData.traefik.map((ip, index) => (
+                          <Badge key={index} variant="secondary" className="font-mono">
+                            {ip}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No IPs whitelisted</p>
+                    )}
+                  </div>
                 </div>
-                <div className="p-4 border rounded-lg bg-muted/50">
-                  {whitelistData?.traefik && whitelistData.traefik.length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
-                      {whitelistData.traefik.map((ip, index) => (
-                        <Badge key={index} variant="secondary" className="font-mono">
-                          {ip}
-                        </Badge>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">No IPs whitelisted</p>
-                  )}
+              )}
+
+              {/* Show message if no containers are detected */}
+              {!hasCrowdSec && !showProxyOptions && (
+                <div className="text-center py-8">
+                  <p className="text-muted-foreground">
+                    No whitelist-capable containers detected in current deployment
+                  </p>
                 </div>
-              </div>
+              )}
             </div>
           )}
         </CardContent>

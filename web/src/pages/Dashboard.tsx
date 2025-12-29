@@ -1,25 +1,24 @@
 import { useQuery } from '@tanstack/react-query'
 import api from '@/lib/api'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { AlertCircle, CheckCircle2, Container, Shield, Users } from 'lucide-react'
+import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { AlertCircle, Container, Shield, Users } from 'lucide-react'
 import { StandardizedStatusCard as StatusCard, CounterStatusCard } from '@/components/common/StandardizedStatusCard'
 import { ResponsiveGrid } from '@/components/ui/responsive-grid'
 import { useBreakpoints } from '@/hooks/useMediaQuery'
 import { cn } from '@/lib/utils'
+import { useDeployment, useContainers } from '@/contexts/DeploymentContext'
+import { ContainerStatusList } from '@/components/dashboard/ContainerStatusList'
 
 export default function Dashboard() {
-  const { isMobile, needsTouchOptimization } = useBreakpoints()
+  const { isMobile } = useBreakpoints()
   
-  const { data: healthData, isLoading: healthLoading, error: healthError } = useQuery({
-    queryKey: ['health'],
-    queryFn: async () => {
-      const response = await api.health.checkStack()
-      return response.data.data
-    },
-    refetchInterval: 5000, // Refresh every 5 seconds
-    retry: 1, // Only retry once
-  })
+  /* Deployment Context Integration */
+  const { deployment, isLoading: deploymentLoading, error: deploymentError } = useDeployment()
+  const containers = useContainers()
+  
+  // Calculate health stats from context
+  const runningContainers = containers.filter(c => c.running)
+  const allRunning = containers.length > 0 && containers.every(c => c.running)
 
   const { data: decisionsData, isLoading: decisionsLoading, error: decisionsError } = useQuery({
     queryKey: ['decisions'],
@@ -42,7 +41,8 @@ export default function Dashboard() {
   })
 
   // Check if we have connection errors
-  const hasConnectionError = healthError || decisionsError || bouncersError
+  // Check if we have connection errors
+  const hasConnectionError = !!deploymentError || !!decisionsError || !!bouncersError
 
   const parseDecisionsCount = (data: any): number => {
     if (!data) return 0
@@ -117,70 +117,8 @@ export default function Dashboard() {
         </Card>
       )}
 
-      {/* System Health Status */}
-      <Card className={cn(
-        "transition-all duration-200",
-        needsTouchOptimization && "active:scale-[0.98]"
-      )}>
-        <CardHeader>
-          <CardTitle className={cn(
-            "flex items-center gap-2",
-            isMobile ? "text-lg" : "text-xl"
-          )}>
-            {healthLoading ? (
-              <AlertCircle className="h-5 w-5 animate-pulse" />
-            ) : healthData?.allRunning ? (
-              <CheckCircle2 className="h-5 w-5 text-green-500" />
-            ) : (
-              <AlertCircle className="h-5 w-5 text-red-500" />
-            )}
-            System Health
-          </CardTitle>
-          <CardDescription>
-            {healthData?.allRunning
-              ? 'All containers are running'
-              : 'Some containers are not running'}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-2">
-            {healthData?.containers.map((container: any) => (
-              <div
-                key={container.id}
-                className={cn(
-                  "flex items-center justify-between rounded-lg border transition-colors",
-                  isMobile ? "p-3" : "p-3",
-                  needsTouchOptimization && "min-h-[44px] active:bg-accent/50"
-                )}
-              >
-                <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <Container className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                  <div className="min-w-0 flex-1">
-                    <p className={cn(
-                      "font-medium truncate",
-                      isMobile ? "text-sm" : "text-base"
-                    )}>
-                      {container.name}
-                    </p>
-                    <p className={cn(
-                      "text-muted-foreground truncate",
-                      isMobile ? "text-xs" : "text-sm"
-                    )}>
-                      {container.id.substring(0, 12)}
-                    </p>
-                  </div>
-                </div>
-                <Badge
-                  variant={container.running ? 'default' : 'destructive'}
-                  className={isMobile ? "text-xs" : ""}
-                >
-                  {container.status}
-                </Badge>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+      {/* System Health Status - Grouped by Role */}
+      <ContainerStatusList containers={containers} isLoading={deploymentLoading} />
 
       {/* Statistics Grid */}
       <ResponsiveGrid
@@ -209,23 +147,24 @@ export default function Dashboard() {
         />
 
         {/* Containers Status */}
+        {/* Containers Status */}
         <StatusCard
           title="Containers"
-          value={healthLoading ? "Loading..." : `${healthData?.containers.filter((c: any) => c.running).length || 0}/${healthData?.containers.length || 0}`}
+          value={deploymentLoading ? "Loading..." : `${runningContainers.length}/${containers.length}`}
           icon={Container}
-          variant={healthLoading ? 'neutral' : healthData?.allRunning ? 'success' : 'error'}
+          variant={deploymentLoading ? 'neutral' : allRunning ? 'success' : 'error'}
           description="Running containers"
-          loading={healthLoading}
+          loading={deploymentLoading}
         />
       </ResponsiveGrid>
 
       {/* Timestamp */}
-      {healthData?.timestamp && (
+      {deployment?.detectedAt && (
         <p className={cn(
           "text-muted-foreground text-center",
           isMobile ? "text-xs" : "text-sm"
         )}>
-          Last updated: {new Date(healthData.timestamp).toLocaleString()}
+          Last updated: {new Date(deployment.detectedAt).toLocaleString()}
         </p>
       )}
     </div>

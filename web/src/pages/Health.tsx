@@ -5,8 +5,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { CheckCircle2, XCircle, Activity, Shield } from 'lucide-react'
 import { StandardizedStatusCard as StatusCard, CounterStatusCard } from '@/components/common/StandardizedStatusCard'
 import { DashboardGrid } from '@/components/common/DashboardGrid'
+import { useDeployment, useRunningContainers, useContainers, useProxyType } from '@/contexts/DeploymentContext'
 
 export default function Health() {
+  const { isLoading: deploymentLoading } = useDeployment()
+  const runningContainers = useRunningContainers()
+  const allContainers = useContainers()
+  const proxyType = useProxyType()
+
   const { data: diagnostics, isLoading } = useQuery({
     queryKey: ['diagnostics'],
     queryFn: async () => {
@@ -16,10 +22,29 @@ export default function Health() {
     refetchInterval: 10000, // Refresh every 10 seconds
   })
 
+  // Filter containers to only show those in current deployment
+  const deploymentContainers = allContainers
+  const runningDeploymentContainers = runningContainers
+
   const bouncers = diagnostics?.bouncers ?? []
-  const allRunning = diagnostics?.health?.allRunning || false
-  const runningContainers = diagnostics?.health?.containers?.filter(c => c.running).length || 0
-  const totalContainers = diagnostics?.health?.containers?.length || 0
+  const allRunning = runningDeploymentContainers.length === deploymentContainers.length && deploymentContainers.length > 0
+  const runningContainerCount = runningDeploymentContainers.length
+  const totalContainerCount = deploymentContainers.length
+
+  // Group containers by role for better organization
+  const containersByRole = deploymentContainers.reduce((acc, container) => {
+    if (!acc[container.role]) {
+      acc[container.role] = []
+    }
+    acc[container.role].push(container)
+    return acc
+  }, {} as Record<string, typeof deploymentContainers>)
+
+  // Check if Traefik integration should be shown
+  const hasTraefikContainer = runningDeploymentContainers.some(c => 
+    c.name.toLowerCase().includes('traefik') && c.running
+  )
+  const shouldShowTraefikIntegration = hasTraefikContainer || proxyType === 'traefik'
 
   return (
     <DashboardGrid
@@ -44,11 +69,11 @@ export default function Health() {
                 <div className="grid gap-4 md:grid-cols-2">
                   <StatusCard
                     title="Containers"
-                    value={`${runningContainers}/${totalContainers}`}
+                    value={`${runningContainerCount}/${totalContainerCount}`}
                     icon={Activity}
-                    status={allRunning ? 'success' : 'error'}
-                    description="Running containers"
-                    loading={isLoading}
+                    variant={allRunning ? 'success' : 'error'}
+                    description="Running containers in deployment"
+                    loading={isLoading || deploymentLoading}
                   />
                   <CounterStatusCard
                     title="Active Bouncers"
@@ -71,47 +96,73 @@ export default function Health() {
             {
               id: 'container-status',
               title: 'Container Status',
-              description: 'Status of all Docker containers in the stack',
-              content: isLoading ? (
+              description: 'Status of containers in current deployment',
+              content: isLoading || deploymentLoading ? (
                 <div className="space-y-2">
                   <div className="h-16 bg-muted animate-pulse rounded" />
                   <div className="h-16 bg-muted animate-pulse rounded" />
                 </div>
+              ) : deploymentContainers.length > 0 ? (
+                <div className="space-y-4">
+                  {/* Group containers by role */}
+                  {Object.entries(containersByRole).map(([role, containers]) => (
+                    containers.length > 0 && (
+                      <div key={role} className="space-y-2">
+                        <h4 className="text-sm font-medium text-muted-foreground capitalize">
+                          {role} Containers
+                        </h4>
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Name</TableHead>
+                              <TableHead>Container ID</TableHead>
+                              <TableHead>Status</TableHead>
+                              <TableHead>Running</TableHead>
+                              <TableHead>Capabilities</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {containers.map((container) => (
+                              <TableRow key={container.id}>
+                                <TableCell className="font-medium">
+                                  {container.name}
+                                </TableCell>
+                                <TableCell className="font-mono text-sm">
+                                  {container.id.substring(0, 12)}
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant={container.running ? 'default' : 'destructive'}>
+                                    {container.status}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell>
+                                  {container.running ? (
+                                    <CheckCircle2 className="h-4 w-4 text-green-500" />
+                                  ) : (
+                                    <XCircle className="h-4 w-4 text-red-500" />
+                                  )}
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex flex-wrap gap-1">
+                                    {container.capabilities.map((capability) => (
+                                      <Badge key={capability} variant="outline" className="text-xs">
+                                        {capability}
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    )
+                  ))}
+                </div>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Container ID</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Running</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {diagnostics?.health?.containers?.map((container) => (
-                      <TableRow key={container.id}>
-                        <TableCell className="font-medium">
-                          {container.name}
-                        </TableCell>
-                        <TableCell className="font-mono text-sm">
-                          {container.id.substring(0, 12)}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={container.running ? 'default' : 'destructive'}>
-                            {container.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {container.running ? (
-                            <CheckCircle2 className="h-4 w-4 text-green-500" />
-                          ) : (
-                            <XCircle className="h-4 w-4 text-red-500" />
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                <p className="text-muted-foreground text-center py-8">
+                  No containers detected in current deployment
+                </p>
               )
             }
           ]
@@ -159,10 +210,11 @@ export default function Health() {
             }
           ]
         },
-        {
+        // Only show Traefik integration tab if Traefik is present in deployment
+        ...(shouldShowTraefikIntegration ? [{
           id: 'traefik',
           label: 'Traefik Integration',
-          layout: '1-col',
+          layout: '1-col' as const,
           sections: [
             {
               id: 'traefik-integration',
@@ -233,7 +285,7 @@ export default function Health() {
               )
             }
           ]
-        }
+        }] : [])
       ]}
     />
   )

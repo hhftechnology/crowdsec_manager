@@ -29,6 +29,8 @@ import { Badge } from '@/components/ui/badge'
 import { useTheme } from '@/components/ThemeProvider'
 import { useBreakpoints } from '@/hooks/useMediaQuery'
 import { ProxyType, Feature } from '@/lib/proxy-types'
+import { useFeatures, useProxyType } from '@/contexts/DeploymentContext'
+import { FeatureAvailability } from '@/lib/deployment-types'
 import {
   Tooltip,
   TooltipContent,
@@ -40,6 +42,7 @@ interface AppSidebarProps {
   isCollapsed?: boolean
   onCollapsedChange?: (collapsed: boolean) => void
   className?: string
+  // Optional overrides
   proxyType?: ProxyType
   supportedFeatures?: Feature[]
 }
@@ -105,24 +108,26 @@ const baseNavigation: NavigationSection[] = [
   }
 ]
 
-// Feature availability mapping for different proxy types
-const getFeatureAvailability = (proxyType?: ProxyType, supportedFeatures?: Feature[]): Record<string, boolean> => {
-  if (!proxyType || !supportedFeatures) {
-    return {} // All features available by default
-  }
-
+// Feature availability mapping
+const getFeatureAvailability = (features: FeatureAvailability): Record<string, boolean> => {
   const availability: Record<string, boolean> = {}
   
-  // Map features to navigation items
-  const featureMap: Record<string, Feature> = {
+  // Map routes to features.
+  // Routes not listed here are considered available (available: true in baseNavigation) 
+  // unless explicitly mapped to a feature that is false.
+  const routeMap: Record<string, keyof FeatureAvailability> = {
     '/captcha': 'captcha',
-    '/whitelist': 'whitelist',
-    '/allowlist': 'allowlist',
-    '/ip-management': 'ip-management',
+    '/whitelist': 'whitelistProxy',
+    '/proxy-logs': 'logs', // Assuming standard log route
+    '/logs': 'logs',
+    '/backup': 'backup',
+    '/cron': 'cronJobs',
+    '/bouncers': 'bouncer',
+    '/appsec': 'appsec'
   }
 
-  Object.entries(featureMap).forEach(([path, feature]) => {
-    availability[path] = supportedFeatures.includes(feature)
+  Object.entries(routeMap).forEach(([path, featureKey]) => {
+    availability[path] = features[featureKey]
   })
 
   return availability
@@ -137,14 +142,48 @@ export function AppSidebar({
   isCollapsed = false, 
   onCollapsedChange,
   className,
-  proxyType,
-  supportedFeatures
+  proxyType: propProxyType,         // Optional override
+  supportedFeatures: propFeatures   // Optional override (legacy/testing)
 }: AppSidebarProps) {
   const location = useLocation()
   const { theme, setTheme } = useTheme()
   const { isMobile, needsTouchOptimization } = useBreakpoints()
 
-  const featureAvailability = getFeatureAvailability(proxyType, supportedFeatures)
+  // Get context values
+  const ctxFeatures = useFeatures()
+  const ctxProxyType = useProxyType()
+
+  // Determine effective proxy type description
+  const displayProxyType = propProxyType || ctxProxyType
+
+  // Determine effective feature availability map
+  // If propFeatures provided, use that (backward compat/testing)
+  // Else use context features
+  let routeAvailability: Record<string, boolean> = {}
+  
+  if (propFeatures) {
+     const featureMap: Record<string, string> = {
+        'captcha': '/captcha',
+        'whitelist': '/whitelist',
+        'logs': '/logs',
+        'backup': '/backup',
+        'cron': '/cron',
+        'bouncer': '/bouncers',
+        'appsec': '/appsec'
+     }
+     // Default all false if utilizing props
+     // Actually the old logic was: if prop missing, {} -> true.
+     // But here we want to respect props.
+     // Let's rely on getFeatureAvailability if we use context.
+     // If props, we map manually.
+     propFeatures.forEach(f => {
+        if (featureMap[f]) routeAvailability[featureMap[f]] = true
+        // Also map aliases
+        if (f === 'whitelist') routeAvailability['/allowlist'] = true // assumpted
+     })
+  } else {
+     routeAvailability = getFeatureAvailability(ctxFeatures)
+  }
 
   const toggleTheme = () => {
     setTheme(theme === "dark" ? "light" : "dark")
@@ -165,10 +204,18 @@ export function AppSidebar({
   // Get navigation with feature availability
   const navigation = baseNavigation.map(section => ({
     ...section,
-    items: section.items.map(item => ({
-      ...item,
-      available: featureAvailability[item.href] !== false
-    }))
+    items: section.items.map(item => {
+      // If routeAvailability has an entry, use it.
+      // If not, fall back to item.available (default true)
+      const isAvailable = routeAvailability[item.href] !== undefined 
+          ? routeAvailability[item.href] 
+          : item.available !== false
+      
+      return {
+        ...item,
+        available: isAvailable
+      }
+    })
   }))
 
   return (
@@ -201,9 +248,9 @@ export function AppSidebar({
                 <Badge variant="secondary" className="text-[10px] px-1 py-0 h-5 w-fit whitespace-nowrap">
                   Beta-v0.0.6
                 </Badge>
-                {proxyType && (
+                {displayProxyType && (
                   <Badge variant="outline" className="text-[10px] px-1 py-0 h-5 w-fit whitespace-nowrap">
-                    {proxyType.charAt(0).toUpperCase() + proxyType.slice(1)}
+                    {displayProxyType.charAt(0).toUpperCase() + displayProxyType.slice(1)}
                   </Badge>
                 )}
               </div>
@@ -289,7 +336,7 @@ export function AppSidebar({
                               )}
                               {!isAvailable && !item.tooltip && (
                                 <span className="text-xs text-muted-foreground">
-                                  Not available for {proxyType} proxy
+                                  Not available for {displayProxyType} proxy
                                 </span>
                               )}
                             </div>

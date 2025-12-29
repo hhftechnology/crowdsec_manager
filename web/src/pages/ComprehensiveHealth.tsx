@@ -17,8 +17,14 @@ import { ProxyType } from '@/lib/proxy-types'
 import { StatusDashboard } from '@/components/health/StatusDashboard'
 import { ProxyHealthIndicator } from '@/components/health/ProxyHealthIndicator'
 import { BouncerStatusMonitor } from '@/components/health/BouncerStatusMonitor'
+import { useDeployment, useRunningContainers, useContainers, useProxyType } from '@/contexts/DeploymentContext'
 
 export default function ComprehensiveHealth() {
+  const { deployment, isLoading: deploymentLoading } = useDeployment()
+  const runningContainers = useRunningContainers()
+  const allContainers = useContainers()
+  const proxyType = useProxyType()
+
   const { data: proxyInfo, isLoading: proxyLoading } = useQuery({
     queryKey: ['proxy-current'],
     queryFn: async () => {
@@ -45,7 +51,12 @@ export default function ComprehensiveHealth() {
     refetchInterval: 5000,
   })
 
-  const isLoading = proxyLoading || healthLoading || crowdsecLoading
+  const isLoading = proxyLoading || healthLoading || crowdsecLoading || deploymentLoading
+
+  // Use deployment-aware container counts
+  const runningContainerCount = runningContainers.length
+  const totalContainerCount = allContainers.length
+  const allRunning = runningContainerCount === totalContainerCount && totalContainerCount > 0
 
   // Calculate overall system health
   const getOverallSystemHealth = () => {
@@ -64,8 +75,8 @@ export default function ComprehensiveHealth() {
     }
 
     // Check container health
-    if (!healthData?.allRunning) {
-      const stoppedContainers = healthData?.containers?.filter(c => !c.running).length || 0
+    if (!allRunning) {
+      const stoppedContainers = totalContainerCount - runningContainerCount
       issues.push(`${stoppedContainers} container(s) not running`)
       if (status !== 'critical') status = 'warning'
     }
@@ -258,29 +269,29 @@ export default function ComprehensiveHealth() {
 
               {healthData && (
                 <div className="p-4 border rounded-lg space-y-3">
-                  <h4 className="font-medium">Container Status</h4>
+                  <h4 className="font-medium">Deployment Container Status</h4>
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Total Containers:</span>
-                      <span className="font-medium">{healthData.containers?.length || 0}</span>
+                      <span className="font-medium">{totalContainerCount}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Running:</span>
-                      <span className="font-medium text-green-600">
-                        {healthData.containers?.filter(c => c.running).length || 0}
-                      </span>
+                      <span className="font-medium text-green-600">{runningContainerCount}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Stopped:</span>
-                      <span className="font-medium text-red-600">
-                        {healthData.containers?.filter(c => !c.running).length || 0}
-                      </span>
+                      <span className="font-medium text-red-600">{totalContainerCount - runningContainerCount}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Last Check:</span>
                       <span className="font-medium">
-                        {healthData.timestamp ? new Date(healthData.timestamp).toLocaleTimeString() : 'Never'}
+                        {deployment?.detectedAt ? new Date(deployment.detectedAt).toLocaleTimeString() : 'Never'}
                       </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Deployment Type:</span>
+                      <span className="font-medium capitalize">{proxyType || 'Unknown'}</span>
                     </div>
                   </div>
                 </div>

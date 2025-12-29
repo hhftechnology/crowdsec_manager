@@ -19,6 +19,7 @@ import {
 } from 'lucide-react'
 import api from '@/lib/api'
 import { ProxyType } from '@/lib/proxy-types'
+import { useDeployment, useRunningContainers, useContainers, useProxyType } from '@/contexts/DeploymentContext'
 import ProxyHealthIndicator from './ProxyHealthIndicator'
 
 interface StatusDashboardProps {
@@ -26,6 +27,11 @@ interface StatusDashboardProps {
 }
 
 export const StatusDashboard: React.FC<StatusDashboardProps> = ({ className }) => {
+  const { isLoading: deploymentLoading } = useDeployment()
+  const runningContainers = useRunningContainers()
+  const allContainers = useContainers()
+  const proxyType = useProxyType()
+
   // Fetch comprehensive health data
   const { data: healthData, isLoading: healthLoading } = useQuery({
     queryKey: ['health-stack'],
@@ -62,14 +68,23 @@ export const StatusDashboard: React.FC<StatusDashboardProps> = ({ className }) =
     },
   })
 
-  const isLoading = healthLoading || crowdsecLoading || diagnosticsLoading
+  const isLoading = healthLoading || crowdsecLoading || diagnosticsLoading || deploymentLoading
 
-  // Calculate metrics
-  const runningContainers = healthData?.containers?.filter(c => c.running).length || 0
-  const totalContainers = healthData?.containers?.length || 0
-  const allRunning = healthData?.allRunning || false
+  // Use deployment-aware container counts
+  const runningContainerCount = runningContainers.length
+  const totalContainerCount = allContainers.length
+  const allRunning = runningContainerCount === totalContainerCount && totalContainerCount > 0
   const activeBouncer = diagnostics?.bouncers?.length || 0
   const totalDecisions = diagnostics?.decisions?.length || 0
+
+  // Group containers by role for better organization
+  const containersByRole = allContainers.reduce((acc, container) => {
+    if (!acc[container.role]) {
+      acc[container.role] = []
+    }
+    acc[container.role].push(container)
+    return acc
+  }, {} as Record<string, typeof allContainers>)
 
   // Determine overall system health
   const getOverallHealth = () => {
@@ -120,11 +135,11 @@ export const StatusDashboard: React.FC<StatusDashboardProps> = ({ className }) =
           
           <StatusCard
             title="Containers"
-            value={`${runningContainers}/${totalContainers}`}
+            value={`${runningContainerCount}/${totalContainerCount}`}
             icon={Network}
-            status={allRunning ? 'success' : runningContainers > 0 ? 'warning' : 'error'}
-            description="Running containers"
-            loading={healthLoading}
+            status={allRunning ? 'success' : runningContainerCount > 0 ? 'warning' : 'error'}
+            description="Running containers in deployment"
+            loading={isLoading}
           />
           
           <StatusCard
@@ -164,7 +179,7 @@ export const StatusDashboard: React.FC<StatusDashboardProps> = ({ className }) =
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Activity className="h-5 w-5" />
-                  System Health Summary
+                  Deployment Health Summary
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
@@ -195,6 +210,12 @@ export const StatusDashboard: React.FC<StatusDashboardProps> = ({ className }) =
                         </Badge>
                       </div>
                     )}
+                    <div className="flex items-center justify-between">
+                      <span>Deployment Type</span>
+                      <Badge variant="outline">
+                        {(proxyType?.charAt(0).toUpperCase() || '') + (proxyType?.slice(1) || 'Unknown')}
+                      </Badge>
+                    </div>
                   </>
                 )}
               </CardContent>
@@ -244,43 +265,73 @@ export const StatusDashboard: React.FC<StatusDashboardProps> = ({ className }) =
         <TabsContent value="containers" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Container Status</CardTitle>
+              <CardTitle>Deployment Container Status</CardTitle>
               <CardDescription>
-                Status of all Docker containers in the stack
+                Status of containers in current deployment grouped by role
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {healthLoading ? (
+              {isLoading ? (
                 <div className="space-y-2">
                   <div className="h-16 bg-muted animate-pulse rounded" />
                   <div className="h-16 bg-muted animate-pulse rounded" />
                 </div>
-              ) : healthData?.containers && healthData.containers.length > 0 ? (
-                <div className="space-y-3">
-                  {healthData.containers.map((container) => (
-                    <div key={container.id} className="flex items-center justify-between p-3 border rounded-lg">
-                      <div className="flex items-center gap-3">
-                        {container.running ? (
-                          <CheckCircle2 className="h-5 w-5 text-green-500" />
-                        ) : (
-                          <XCircle className="h-5 w-5 text-red-500" />
-                        )}
-                        <div>
-                          <p className="font-medium">{container.name}</p>
-                          <p className="text-sm text-muted-foreground font-mono">
-                            {container.id.substring(0, 12)}
-                          </p>
+              ) : allContainers.length > 0 ? (
+                <div className="space-y-6">
+                  {Object.entries(containersByRole).map(([role, containers]) => (
+                    containers.length > 0 && (
+                      <div key={role} className="space-y-3">
+                        <div className="flex items-center gap-2">
+                          <div className="h-2 w-2 rounded-full bg-primary" />
+                          <h4 className="text-sm font-medium capitalize">
+                            {role} Containers ({containers.length})
+                          </h4>
+                        </div>
+                        <div className="space-y-2">
+                          {containers.map((container) => (
+                            <div key={container.id} className="flex items-center justify-between p-3 border rounded-lg">
+                              <div className="flex items-center gap-3">
+                                {container.running ? (
+                                  <CheckCircle2 className="h-5 w-5 text-green-500" />
+                                ) : (
+                                  <XCircle className="h-5 w-5 text-red-500" />
+                                )}
+                                <div>
+                                  <p className="font-medium">{container.name}</p>
+                                  <p className="text-sm text-muted-foreground font-mono">
+                                    {container.id.substring(0, 12)}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Badge variant={container.running ? 'default' : 'destructive'}>
+                                  {container.status}
+                                </Badge>
+                                {container.capabilities.length > 0 && (
+                                  <div className="flex flex-wrap gap-1">
+                                    {container.capabilities.slice(0, 3).map((capability) => (
+                                      <Badge key={capability} variant="outline" className="text-xs">
+                                        {capability}
+                                      </Badge>
+                                    ))}
+                                    {container.capabilities.length > 3 && (
+                                      <Badge variant="outline" className="text-xs">
+                                        +{container.capabilities.length - 3}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       </div>
-                      <Badge variant={container.running ? 'default' : 'destructive'}>
-                        {container.status}
-                      </Badge>
-                    </div>
+                    )
                   ))}
                 </div>
               ) : (
                 <p className="text-muted-foreground text-center py-8">
-                  No container information available
+                  No containers detected in current deployment
                 </p>
               )}
             </CardContent>
