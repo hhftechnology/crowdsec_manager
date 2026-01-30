@@ -98,6 +98,8 @@ TRAEFIK_API_INSECURE=true
 TRAEFIK_LOG_LEVEL=INFO
 ```
 
+**Dynamic config must be writable for whitelist/captcha:** mount the Traefik config volume without `:ro` so `/etc/traefik/dynamic_config.yml` can be edited (e.g., `./config/traefik:/etc/traefik`). If you store the dynamic file elsewhere, set `TRAEFIK_DYNAMIC_CONFIG` to that writable path inside the Traefik container.
+
 #### Nginx Proxy Manager Configuration
 ```bash
 PROXY_TYPE=nginx

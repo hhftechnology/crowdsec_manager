@@ -49,7 +49,7 @@ interface AddonsResponse {
 
 export default function Addons() {
   const queryClient = useQueryClient()
-  const { currentProxy, isLoading: proxyLoading } = useProxy()
+  const { proxyType, proxyStatus, isLoading: proxyLoading } = useProxy()
   const [enablingAddon, setEnablingAddon] = useState<string | null>(null)
 
   const { data: addonsData, isLoading, error, refetch } = useQuery({
@@ -131,8 +131,10 @@ export default function Addons() {
     }
   }
 
+  const resolvedProxyType = proxyStatus?.type || proxyType || 'unknown'
+
   // Show warning if not using Traefik
-  if (!proxyLoading && currentProxy?.type !== 'traefik') {
+  if (!proxyLoading && resolvedProxyType !== 'traefik') {
     return (
       <div className="space-y-6">
         <div>
@@ -146,7 +148,7 @@ export default function Addons() {
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription>
             Addons are currently only available for Traefik proxy deployments.
-            Your current proxy type is: <strong>{currentProxy?.type || 'unknown'}</strong>
+            Your current proxy type is: <strong>{resolvedProxyType}</strong>
           </AlertDescription>
         </Alert>
       </div>
@@ -215,7 +217,8 @@ export default function Addons() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Addons</h1>
           <p className="text-muted-foreground">
-            Extend your {addonsData?.proxy_type || 'proxy'} with additional features
+            Extend your {addonsData?.proxy_type || resolvedProxyType || 'proxy'} with additional
+            features
           </p>
         </div>
         <Button onClick={() => refetch()} variant="outline" size="sm">

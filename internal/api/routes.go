@@ -203,11 +203,11 @@ func RegisterProfileRoutes(router *gin.RouterGroup, db *database.Database, cfg *
 }
 
 // RegisterProxyRoutes configures endpoints for proxy management and information
-func RegisterProxyRoutes(router *gin.RouterGroup, proxyManager *proxy.ProxyManager, proxyAdapter proxy.ProxyAdapter) {
+func RegisterProxyRoutes(router *gin.RouterGroup, proxyManager *proxy.ProxyManager, proxyAdapter proxy.ProxyAdapter, cfg *config.Config) {
 	proxyRoutes := router.Group("/proxy")
 	{
 		proxyRoutes.GET("/types", handlers.GetProxyTypes())
-		proxyRoutes.GET("/current", handlers.GetCurrentProxy(proxyAdapter))
+		proxyRoutes.GET("/current", handlers.GetCurrentProxy(proxyAdapter, cfg))
 		proxyRoutes.GET("/features", handlers.GetProxyFeatures(proxyAdapter))
 		proxyRoutes.POST("/configure", handlers.ConfigureProxy(proxyManager))
 		proxyRoutes.GET("/health", handlers.CheckProxyHealth(proxyAdapter))

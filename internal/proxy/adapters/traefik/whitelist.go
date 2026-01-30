@@ -5,6 +5,7 @@ import (
 	"crowdsec-manager/internal/config"
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
+	"crowdsec-manager/internal/validation"
 	"fmt"
 	"regexp"
 	"strings"
@@ -22,6 +23,28 @@ func NewTraefikWhitelistManager(dockerClient *docker.Client, cfg *config.Config)
 		dockerClient: dockerClient,
 		cfg:          cfg,
 	}
+}
+
+// ensureDynamicConfigWritable verifies that the dynamic config file can be edited inside the Traefik container.
+// This protects against read-only mounts (e.g., volume mounted with :ro) which would cause sed -i to fail.
+func (t *TraefikWhitelistManager) ensureDynamicConfigWritable() error {
+	if t.cfg.Paths.TraefikDynamicConfig == "" {
+		return fmt.Errorf("traefik dynamic config path is empty; set TRAEFIK_DYNAMIC_CONFIG")
+	}
+
+	_, err := t.dockerClient.ExecCommand(t.cfg.TraefikContainerName, []string{
+		"sh", "-c", fmt.Sprintf("test -w %q", t.cfg.Paths.TraefikDynamicConfig),
+	})
+	if err != nil {
+		return fmt.Errorf(
+			"traefik dynamic config %s is not writable inside container %s: %w. Ensure the file/volume is mounted read-write (remove :ro) or point TRAEFIK_DYNAMIC_CONFIG to a writable path.",
+			t.cfg.Paths.TraefikDynamicConfig,
+			t.cfg.TraefikContainerName,
+			err,
+		)
+	}
+
+	return nil
 }
 
 // ViewWhitelist returns all whitelisted IPs from Traefik dynamic configuration
@@ -43,10 +66,19 @@ func (t *TraefikWhitelistManager) ViewWhitelist(ctx context.Context) ([]string, 
 func (t *TraefikWhitelistManager) AddIP(ctx context.Context, ip string) error {
 	logger.Info("Adding IP to Traefik whitelist", "ip", ip, "config_path", t.cfg.Paths.TraefikDynamicConfig)
 
+	if err := t.ensureDynamicConfigWritable(); err != nil {
+		return err
+	}
+
+	sanitizedIP := validation.SanitizeForShell(ip)
+	if sanitizedIP == "" {
+		return fmt.Errorf("invalid IP address provided")
+	}
+
 	// Update Traefik dynamic config using sed to add IP to sourceRange
 	// Uses configured path instead of hardcoded path
 	_, err := t.dockerClient.ExecCommand(t.cfg.TraefikContainerName, []string{
-		"sh", "-c", fmt.Sprintf(`sed -i '/sourceRange:/a\        - %s' %s`, ip, t.cfg.Paths.TraefikDynamicConfig),
+		"sh", "-c", fmt.Sprintf(`sed -i '/sourceRange:/a\        - %s' %q`, sanitizedIP, t.cfg.Paths.TraefikDynamicConfig),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to add IP to Traefik whitelist at %s: %w", t.cfg.Paths.TraefikDynamicConfig, err)
@@ -60,10 +92,19 @@ func (t *TraefikWhitelistManager) AddIP(ctx context.Context, ip string) error {
 func (t *TraefikWhitelistManager) RemoveIP(ctx context.Context, ip string) error {
 	logger.Info("Removing IP from Traefik whitelist", "ip", ip, "config_path", t.cfg.Paths.TraefikDynamicConfig)
 
+	if err := t.ensureDynamicConfigWritable(); err != nil {
+		return err
+	}
+
+	sanitizedIP := validation.SanitizeForShell(ip)
+	if sanitizedIP == "" {
+		return fmt.Errorf("invalid IP address provided")
+	}
+
 	// Use sed to remove the specific IP from the dynamic config
 	// Uses configured path instead of hardcoded path
 	_, err := t.dockerClient.ExecCommand(t.cfg.TraefikContainerName, []string{
-		"sh", "-c", fmt.Sprintf(`sed -i '/^\s*-\s*%s\s*$/d' %s`, regexp.QuoteMeta(ip), t.cfg.Paths.TraefikDynamicConfig),
+		"sh", "-c", fmt.Sprintf(`sed -i '/^\s*-\s*%s\s*$/d' %q`, regexp.QuoteMeta(sanitizedIP), t.cfg.Paths.TraefikDynamicConfig),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to remove IP from Traefik whitelist at %s: %w", t.cfg.Paths.TraefikDynamicConfig, err)
@@ -77,10 +118,19 @@ func (t *TraefikWhitelistManager) RemoveIP(ctx context.Context, ip string) error
 func (t *TraefikWhitelistManager) AddCIDR(ctx context.Context, cidr string) error {
 	logger.Info("Adding CIDR to Traefik whitelist", "cidr", cidr, "config_path", t.cfg.Paths.TraefikDynamicConfig)
 
+	if err := t.ensureDynamicConfigWritable(); err != nil {
+		return err
+	}
+
+	sanitizedCIDR := validation.SanitizeForShell(cidr)
+	if sanitizedCIDR == "" {
+		return fmt.Errorf("invalid CIDR value provided")
+	}
+
 	// Update Traefik dynamic config using sed to add CIDR to sourceRange
 	// Uses configured path instead of hardcoded path
 	_, err := t.dockerClient.ExecCommand(t.cfg.TraefikContainerName, []string{
-		"sh", "-c", fmt.Sprintf(`sed -i '/sourceRange:/a\        - %s' %s`, cidr, t.cfg.Paths.TraefikDynamicConfig),
+		"sh", "-c", fmt.Sprintf(`sed -i '/sourceRange:/a\        - %s' %q`, sanitizedCIDR, t.cfg.Paths.TraefikDynamicConfig),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to add CIDR to Traefik whitelist at %s: %w", t.cfg.Paths.TraefikDynamicConfig, err)
@@ -94,10 +144,19 @@ func (t *TraefikWhitelistManager) AddCIDR(ctx context.Context, cidr string) erro
 func (t *TraefikWhitelistManager) RemoveCIDR(ctx context.Context, cidr string) error {
 	logger.Info("Removing CIDR from Traefik whitelist", "cidr", cidr, "config_path", t.cfg.Paths.TraefikDynamicConfig)
 
+	if err := t.ensureDynamicConfigWritable(); err != nil {
+		return err
+	}
+
+	sanitizedCIDR := validation.SanitizeForShell(cidr)
+	if sanitizedCIDR == "" {
+		return fmt.Errorf("invalid CIDR value provided")
+	}
+
 	// Use sed to remove the specific CIDR from the dynamic config
 	// Uses configured path instead of hardcoded path
 	_, err := t.dockerClient.ExecCommand(t.cfg.TraefikContainerName, []string{
-		"sh", "-c", fmt.Sprintf(`sed -i '/^\s*-\s*%s\s*$/d' %s`, regexp.QuoteMeta(cidr), t.cfg.Paths.TraefikDynamicConfig),
+		"sh", "-c", fmt.Sprintf(`sed -i '/^\s*-\s*%s\s*$/d' %q`, regexp.QuoteMeta(sanitizedCIDR), t.cfg.Paths.TraefikDynamicConfig),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to remove CIDR from Traefik whitelist at %s: %w", t.cfg.Paths.TraefikDynamicConfig, err)

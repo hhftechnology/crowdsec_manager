@@ -168,7 +168,7 @@ func main() {
 		api.RegisterServicesRoutes(apiGroup, dockerClient, db, cfg, proxyAdapter)
 		api.RegisterNotificationRoutes(apiGroup, dockerClient, db, cfg)
 		api.RegisterProfileRoutes(apiGroup, db, cfg, dockerClient)
-		api.RegisterProxyRoutes(apiGroup, proxyManager, proxyAdapter) // New proxy management routes
+		api.RegisterProxyRoutes(apiGroup, proxyManager, proxyAdapter, cfg) // New proxy management routes
 		api.RegisterValidationRoutes(apiGroup, dockerClient, cfg)
 	}
 

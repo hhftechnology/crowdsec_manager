@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 
+	"crowdsec-manager/internal/config"
 	"crowdsec-manager/internal/logger"
 	"crowdsec-manager/internal/models"
 	"crowdsec-manager/internal/proxy"
@@ -54,11 +55,35 @@ func GetProxyTypes() gin.HandlerFunc {
 }
 
 // GetCurrentProxy returns information about the current proxy configuration
-func GetCurrentProxy(proxyAdapter proxy.ProxyAdapter) gin.HandlerFunc {
+func GetCurrentProxy(proxyAdapter proxy.ProxyAdapter, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		logger.Info("Getting current proxy information")
 
 		ctx := context.Background()
+
+		// Use the configured proxy type if provided, otherwise fall back to the adapter type
+		configuredType := cfg.ProxyType
+		if configuredType == "" {
+			configuredType = string(proxyAdapter.Type())
+		}
+
+		containerName := cfg.ProxyContainerName
+		if containerName == "" {
+			switch configuredType {
+			case string(proxy.ProxyTypeTraefik):
+				containerName = cfg.TraefikContainerName
+			case string(proxy.ProxyTypeNginx):
+				containerName = "nginx-proxy-manager"
+			case string(proxy.ProxyTypeCaddy):
+				containerName = "caddy"
+			case string(proxy.ProxyTypeHAProxy):
+				containerName = "haproxy"
+			case string(proxy.ProxyTypeZoraxy):
+				containerName = "zoraxy"
+			}
+		}
+
+		configPaths := cfg.Paths.GetProxyPaths(configuredType)
 
 		// Get health status
 		healthItem, err := proxyAdapter.HealthCheck(ctx)
@@ -75,12 +100,15 @@ func GetCurrentProxy(proxyAdapter proxy.ProxyAdapter) gin.HandlerFunc {
 		}
 
 		response := models.ProxyCurrentResponse{
-			Type:              string(proxyAdapter.Type()),
-			Enabled:           true, // Adapter exists, so it's enabled
-			ContainerName:     "", // Would need to extract from adapter config
+			Type:              configuredType,
+			ConfiguredType:    configuredType,
+			AdapterType:       string(proxyAdapter.Type()),
+			Enabled:           cfg.ProxyEnabled, // Adapter exists, so it's enabled
+			ContainerName:     containerName,
 			Running:           healthStatus == "healthy",
 			SupportedFeatures: featureStrings,
-			ConfigFiles:       []string{}, // Would need to extract from adapter config
+			ConfigFiles:       collectConfigFiles(configPaths),
+			ConfigPaths:       configPaths,
 			Health:            healthStatus,
 		}
 
@@ -217,7 +245,7 @@ func GetBouncerStatus(proxyAdapter proxy.ProxyAdapter) gin.HandlerFunc {
 
 		ctx := context.Background()
 		bouncerManager := proxyAdapter.BouncerManager()
-		
+
 		if bouncerManager == nil {
 			c.JSON(http.StatusOK, models.Response{
 				Success: true,
@@ -269,7 +297,7 @@ func ValidateBouncerConfiguration(proxyAdapter proxy.ProxyAdapter) gin.HandlerFu
 
 		ctx := context.Background()
 		bouncerManager := proxyAdapter.BouncerManager()
-		
+
 		if bouncerManager == nil {
 			c.JSON(http.StatusBadRequest, models.Response{
 				Success: false,
@@ -292,6 +320,16 @@ func ValidateBouncerConfiguration(proxyAdapter proxy.ProxyAdapter) gin.HandlerFu
 			Message: "Bouncer configuration is valid",
 		})
 	}
+}
+
+func collectConfigFiles(configPaths map[string]string) []string {
+	files := []string{}
+	for _, path := range configPaths {
+		if path != "" {
+			files = append(files, path)
+		}
+	}
+	return files
 }
 
 // getFeatureDescription returns a human-readable description for a proxy feature
