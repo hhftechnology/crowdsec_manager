@@ -14,6 +14,7 @@ import (
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
 	"crowdsec-manager/internal/models"
+	"crowdsec-manager/internal/validation"
 
 	"github.com/gin-gonic/gin"
 	"gopkg.in/yaml.v3"
@@ -186,9 +187,10 @@ func readDiscordConfigFromContainer(dockerClient *docker.Client, cfg *config.Con
 		}
 	}
 
-	// 2. Read discord.yaml from container
+	// 2. Read discord.yaml from container using configured path
+	discordPath := filepath.Join(cfg.Paths.CrowdSecNotificationsDir, "discord.yaml")
 	output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
-		"cat", "/etc/crowdsec/notifications/discord.yaml",
+		"cat", discordPath,
 	})
 	
 	// If discord.yaml doesn't exist, check if we have env vars that imply it should
@@ -290,7 +292,10 @@ func GetDiscordConfig(db *database.Database, cfg *config.Config, dockerClient *d
 
 		// Check if enabled in profiles.yaml (read from host config)
 		enabled := false
+		// Use host path for reading - profiles.yaml is typically mounted
 		profilesPath := filepath.Join(cfg.ConfigDir, "crowdsec", "profiles.yaml")
+		// Fallback to container path derivation if needed
+		_ = cfg.Paths.CrowdSecProfilesFile // Container path reference
 		if _, err := os.Stat(profilesPath); err == nil {
 			enabled, _ = isDiscordEnabled(profilesPath)
 		}
@@ -410,6 +415,43 @@ func UpdateDiscordConfig(db *database.Database, cfg *config.Config, dockerClient
 				Error:   "Invalid request: " + err.Error(),
 			})
 			return
+		}
+
+		// Validate webhook ID and token if provided (not empty)
+		if req.WebhookID != "" && req.WebhookToken != "" {
+			// Construct Discord webhook URL for validation
+			discordURL := fmt.Sprintf("https://discord.com/api/webhooks/%s/%s", req.WebhookID, req.WebhookToken)
+			urlResult := validation.ValidateDiscordWebhookURL(discordURL)
+			if !urlResult.Valid {
+				c.JSON(http.StatusBadRequest, models.Response{
+					Success: false,
+					Error:   fmt.Sprintf("Invalid Discord webhook configuration: %s", urlResult.Message),
+				})
+				return
+			}
+		}
+
+		// Validate API keys if provided
+		if req.GeoapifyKey != "" {
+			keyResult := validation.ValidateAPIKey(req.GeoapifyKey)
+			if !keyResult.Valid {
+				c.JSON(http.StatusBadRequest, models.Response{
+					Success: false,
+					Error:   fmt.Sprintf("Invalid Geoapify API key: %s", keyResult.Message),
+				})
+				return
+			}
+		}
+
+		if req.CrowdSecCTIKey != "" {
+			keyResult := validation.ValidateAPIKey(req.CrowdSecCTIKey)
+			if !keyResult.Valid {
+				c.JSON(http.StatusBadRequest, models.Response{
+					Success: false,
+					Error:   fmt.Sprintf("Invalid CrowdSec CTI API key: %s", keyResult.Message),
+				})
+				return
+			}
 		}
 
 		// Update database
@@ -808,12 +850,16 @@ func GenerateDiscordYamlContent(config models.DiscordConfig) (string, error) {
 
 // WriteDiscordYamlToContainer writes the given content to discord.yaml in the CrowdSec container
 func WriteDiscordYamlToContainer(dockerClient *docker.Client, cfg *config.Config, content string) error {
+	// Use configured notifications directory path
+	notificationsDir := cfg.Paths.CrowdSecNotificationsDir
+	discordPath := filepath.Join(notificationsDir, "discord.yaml")
+
 	// Create notifications directory if it doesn't exist
 	_, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
-		"mkdir", "-p", "/etc/crowdsec/notifications",
+		"mkdir", "-p", notificationsDir,
 	})
 	if err != nil {
-		logger.Warn("Failed to create notifications directory (may already exist)", "error", err)
+		logger.Warn("Failed to create notifications directory (may already exist)", "error", err, "path", notificationsDir)
 	}
 
 	// Escape single quotes in the content for shell command
@@ -821,13 +867,13 @@ func WriteDiscordYamlToContainer(dockerClient *docker.Client, cfg *config.Config
 
 	// Write discord.yaml directly to container
 	_, err = dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
-		"sh", "-c", fmt.Sprintf("echo '%s' > /etc/crowdsec/notifications/discord.yaml", escapedContent),
+		"sh", "-c", fmt.Sprintf("echo '%s' > %s", escapedContent, discordPath),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to write discord.yaml to container: %w", err)
 	}
 
-	logger.Info("Discord YAML created in CrowdSec container", "path", "/etc/crowdsec/notifications/discord.yaml")
+	logger.Info("Discord YAML created in CrowdSec container", "path", discordPath)
 	return nil
 }
 

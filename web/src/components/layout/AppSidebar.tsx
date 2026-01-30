@@ -22,6 +22,7 @@ import {
   PanelLeftOpen,
   Moon,
   Sun,
+  Puzzle,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -86,6 +87,12 @@ const baseNavigation: NavigationSection[] = [
     ]
   },
   {
+    title: "Extensions",
+    items: [
+      { name: 'Addons', href: '/addons', icon: Puzzle, available: true, tooltip: 'Traefik addons (Pangolin, Gerbil)' },
+    ]
+  },
+  {
     title: "Configuration",
     items: [
       { name: 'Service API', href: '/services', icon: Settings, available: true },
@@ -123,7 +130,8 @@ const getFeatureAvailability = (features: FeatureAvailability): Record<string, b
     '/backup': 'backup',
     '/cron': 'cronJobs',
     '/bouncers': 'bouncer',
-    '/appsec': 'appsec'
+    '/appsec': 'appsec',
+    '/addons': 'addons'
   }
 
   Object.entries(routeMap).forEach(([path, featureKey]) => {

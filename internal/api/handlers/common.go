@@ -93,9 +93,11 @@ func activeFilters(c *gin.Context) map[string]string {
 }
 
 // GetConsoleStatusHelper executes the console status command and parses the result
+// It also checks for enrollment credentials to properly detect enrollment state
 func GetConsoleStatusHelper(dockerClient interface {
 	ExecCommand(containerName string, cmd []string) (string, error)
 }, containerName string) (models.ConsoleStatus, error) {
+	// Step 1: Get console status flags
 	output, err := dockerClient.ExecCommand(containerName, []string{
 		"cscli", "console", "status", "-o", "json",
 	})
@@ -109,20 +111,20 @@ func GetConsoleStatusHelper(dockerClient interface {
 	var status models.ConsoleStatus
 	if err := json.Unmarshal([]byte(output), &status); err != nil {
 		logger.Warn("Failed to parse console status JSON, attempting fallback", "error", err)
-		
+
 		// Fallback to simple string check if JSON parsing fails
 		// This handles cases where older versions might not output valid JSON or other issues
 		// We check for various formats (YAML-like, JSON with/without spaces)
-		status.Enrolled = strings.Contains(output, "enrolled: true") || 
-			strings.Contains(output, `"enrolled":true`) || 
+		status.Enrolled = strings.Contains(output, "enrolled: true") ||
+			strings.Contains(output, `"enrolled":true`) ||
 			strings.Contains(output, `"enrolled": true`)
-			
-		status.Validated = strings.Contains(output, "validated: true") || 
-			strings.Contains(output, `"validated":true`) || 
+
+		status.Validated = strings.Contains(output, "validated: true") ||
+			strings.Contains(output, `"validated":true`) ||
 			strings.Contains(output, `"validated": true`)
-			
-		status.Manual = strings.Contains(output, "manual: true") || 
-			strings.Contains(output, `"manual":true`) || 
+
+		status.Manual = strings.Contains(output, "manual: true") ||
+			strings.Contains(output, `"manual":true`) ||
 			strings.Contains(output, `"manual": true`)
 
 		status.ConsoleManagement = strings.Contains(output, "console_management: true") ||
@@ -130,18 +132,27 @@ func GetConsoleStatusHelper(dockerClient interface {
 			strings.Contains(output, `"console_management": true`)
 	}
 
-	// Map fields if Enrolled/Validated are missing but other indicators are present
-	// We DO NOT map status.Manual to status.Enrolled because 'manual' can be true even if not enrolled (default state).
-	// User feedback indicates manual: true causes false positives.
-
-	// If console management is enabled, it implies validation/connection
-	if !status.Validated && status.ConsoleManagement {
-		status.Validated = true
-	}
-	
-	// If ConsoleManagement is true, it definitely means it is enrolled too
-	if !status.Enrolled && status.ConsoleManagement {
+	// Step 2: Check if enrolled (has credentials file) - the actual source of truth
+	// The console status command doesn't reliably report enrollment status
+	credContent, credErr := dockerClient.ExecCommand(containerName, []string{
+		"cat", "/etc/crowdsec/online_api_credentials.yaml",
+	})
+	if credErr == nil && strings.Contains(credContent, "login:") {
+		// Credentials file exists with login - instance is enrolled
 		status.Enrolled = true
+		logger.Info("Detected enrollment via credentials file")
+	}
+
+	// Step 3: Determine validation status
+	// console_management true = fully validated and enabled
+	if status.ConsoleManagement {
+		status.Validated = true
+		status.Enrolled = true
+	} else if status.Enrolled {
+		// Enrolled but console_management is false
+		// This could mean: approved but feature not enabled, or pending approval
+		// We leave Validated as-is (false) to indicate this state
+		logger.Info("Instance is enrolled but console_management is disabled")
 	}
 
 	return status, nil

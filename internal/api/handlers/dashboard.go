@@ -207,9 +207,46 @@ func EnrollCrowdSec(dockerClient *docker.Client, cfg *config.Config) gin.Handler
 			return
 		}
 
+		// After successful enrollment, automatically enable console_management
+		enableOutput, enableErr := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
+			"cscli", "console", "enable", "console_management",
+		})
+		if enableErr != nil {
+			logger.Warn("Failed to enable console_management after enrollment", "error", enableErr)
+		} else {
+			logger.Info("Console management enabled after enrollment", "output", enableOutput)
+		}
+
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
-			Message: "Enrollment key submitted. Please approve the request in your CrowdSec Console at https://app.crowdsec.net/",
+			Message: "Enrollment key submitted. Please approve the request in your CrowdSec Console at https://app.crowdsec.net/, then restart CrowdSec to apply changes.",
+			Data:    gin.H{"output": output, "console_management_enabled": enableErr == nil},
+		})
+	}
+}
+
+// EnableConsoleManagement enables the console_management feature in CrowdSec
+func EnableConsoleManagement(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		logger.Info("Enabling console management")
+
+		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
+			"cscli", "console", "enable", "console_management",
+		})
+		if err != nil {
+			logger.Error("Failed to enable console management", "error", err, "output", output)
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to enable console management: %v", err),
+			})
+			return
+		}
+
+		logger.Info("Console management enabled", "output", output)
+
+		c.JSON(http.StatusOK, models.Response{
+			Success: true,
+			Message: "Console management enabled. Restart CrowdSec to apply changes.",
 			Data:    gin.H{"output": output},
 		})
 	}

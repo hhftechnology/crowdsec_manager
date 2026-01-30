@@ -23,10 +23,13 @@ type PathConfig struct {
 	TraefikConfDir       string // Directory for configuration files in Traefik container
 
 	// CrowdSec Paths (container-internal paths)
-	CrowdSecAcquisFile string // Path to acquis.yaml in CrowdSec container
-	CrowdSecAcquisDir  string // Path to acquis.d directory in CrowdSec container
-	CrowdSecConfigDir  string // Path to config directory in CrowdSec container
-	CrowdSecDataDir    string // Path to data directory in CrowdSec container
+	CrowdSecAcquisFile       string // Path to acquis.yaml in CrowdSec container
+	CrowdSecAcquisDir        string // Path to acquis.d directory in CrowdSec container
+	CrowdSecConfigDir        string // Path to config directory in CrowdSec container
+	CrowdSecDataDir          string // Path to data directory in CrowdSec container
+	CrowdSecWhitelistFile    string // Path to custom whitelist file in CrowdSec container
+	CrowdSecNotificationsDir string // Path to notifications directory in CrowdSec container
+	CrowdSecProfilesFile     string // Path to profiles.yaml in CrowdSec container
 
 	// Manager Paths (container-internal paths)
 	ManagerConfigDir string // Path to config directory in Manager container
@@ -58,10 +61,13 @@ func NewPathConfig() *PathConfig {
 		TraefikConfDir:       "/etc/traefik/conf",
 
 		// CrowdSec defaults (standard CrowdSec container paths)
-		CrowdSecAcquisFile: "/etc/crowdsec/acquis.yaml",
-		CrowdSecAcquisDir:  "/etc/crowdsec/acquis.d",
-		CrowdSecConfigDir:  "/etc/crowdsec",
-		CrowdSecDataDir:    "/var/lib/crowdsec/data",
+		CrowdSecAcquisFile:       "/etc/crowdsec/acquis.yaml",
+		CrowdSecAcquisDir:        "/etc/crowdsec/acquis.d",
+		CrowdSecConfigDir:        "/etc/crowdsec",
+		CrowdSecDataDir:          "/var/lib/crowdsec/data",
+		CrowdSecWhitelistFile:    "/etc/crowdsec/parsers/s02-enrich/mywhitelists.yaml",
+		CrowdSecNotificationsDir: "/etc/crowdsec/notifications",
+		CrowdSecProfilesFile:     "/etc/crowdsec/profiles.yaml",
 
 		// Manager defaults (standard Manager container paths)
 		ManagerConfigDir: "/app/config",
@@ -120,6 +126,15 @@ func (p *PathConfig) LoadFromEnv() {
 	}
 	if val := os.Getenv("CROWDSEC_DATA_DIR"); val != "" {
 		p.CrowdSecDataDir = val
+	}
+	if val := os.Getenv("CROWDSEC_WHITELIST_FILE"); val != "" {
+		p.CrowdSecWhitelistFile = val
+	}
+	if val := os.Getenv("CROWDSEC_NOTIFICATIONS_DIR"); val != "" {
+		p.CrowdSecNotificationsDir = val
+	}
+	if val := os.Getenv("CROWDSEC_PROFILES_FILE"); val != "" {
+		p.CrowdSecProfilesFile = val
 	}
 
 	// Manager paths
@@ -245,10 +260,13 @@ func (p *PathConfig) ToMap() map[string]interface{} {
 		"traefik_rules_dir":      p.TraefikRulesDir,
 		"traefik_conf_dir":       p.TraefikConfDir,
 		// CrowdSec
-		"crowdsec_acquis_file": p.CrowdSecAcquisFile,
-		"crowdsec_acquis_dir":  p.CrowdSecAcquisDir,
-		"crowdsec_config_dir":  p.CrowdSecConfigDir,
-		"crowdsec_data_dir":    p.CrowdSecDataDir,
+		"crowdsec_acquis_file":       p.CrowdSecAcquisFile,
+		"crowdsec_acquis_dir":        p.CrowdSecAcquisDir,
+		"crowdsec_config_dir":        p.CrowdSecConfigDir,
+		"crowdsec_data_dir":          p.CrowdSecDataDir,
+		"crowdsec_whitelist_file":    p.CrowdSecWhitelistFile,
+		"crowdsec_notifications_dir": p.CrowdSecNotificationsDir,
+		"crowdsec_profiles_file":     p.CrowdSecProfilesFile,
 		// Manager
 		"manager_config_dir": p.ManagerConfigDir,
 		"manager_data_dir":   p.ManagerDataDir,

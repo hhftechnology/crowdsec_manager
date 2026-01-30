@@ -36,35 +36,42 @@ export class FeatureDetector {
       const securityContainers = runningContainers.filter(c => c.role === ContainerRole.SECURITY)
       const addonContainers = runningContainers.filter(c => c.role === ContainerRole.ADDON)
 
+      // Check if proxy is Traefik (addons are only available for Traefik)
+      const isTraefik = environment.proxyType === 'traefik' ||
+                       proxyContainers.some(c => c.name.toLowerCase().includes('traefik'))
+
       const features: FeatureAvailability = {
         // Captcha requires proxy container with captcha capability
         captcha: proxyContainers.some(c => c.capabilities.includes('captcha')),
-        
+
         // Backup depends on environment flag
         backup: environment.backupEnabled,
-        
+
         // Cron jobs depend on environment flag
         cronJobs: environment.cronEnabled,
-        
+
         // Proxy whitelist requires proxy container with whitelist capability
         whitelistProxy: proxyContainers.some(c => c.capabilities.includes('whitelist')),
-        
+
         // Logs available if any container supports logs
         logs: runningContainers.some(c => c.capabilities.includes('logs')),
-        
+
         // Pangolin availability
-        pangolin: environment.pangolinEnabled && 
+        pangolin: environment.pangolinEnabled &&
                  addonContainers.some(c => c.name.toLowerCase().includes('pangolin')),
-        
+
         // Gerbil availability
-        gerbil: environment.gerbilEnabled && 
+        gerbil: environment.gerbilEnabled &&
                addonContainers.some(c => c.name.toLowerCase().includes('gerbil')),
-        
+
         // AppSec requires container with appsec capability
         appsec: runningContainers.some(c => c.capabilities.includes('appsec')),
-        
+
         // Bouncer requires container with bouncer capability
-        bouncer: runningContainers.some(c => c.capabilities.includes('bouncer'))
+        bouncer: runningContainers.some(c => c.capabilities.includes('bouncer')),
+
+        // Addons are only available for Traefik proxy (Pangolin, Gerbil)
+        addons: isTraefik
       }
 
       this.lastDetection = {
@@ -86,7 +93,8 @@ export class FeatureDetector {
         pangolin: false,
         gerbil: false,
         appsec: false,
-        bouncer: false
+        bouncer: false,
+        addons: false
       }
 
       this.lastDetection = {
@@ -149,6 +157,8 @@ export class FeatureDetector {
         return features.appsec
       case 'bouncer':
         return features.bouncer
+      case 'addons':
+        return features.addons
       default:
         return false
     }
@@ -192,7 +202,8 @@ export class FeatureDetector {
       whitelistProxy: ['traefik', 'nginx', 'caddy', 'haproxy'], // Any proxy can do whitelist
       appsec: ['traefik'], // Only Traefik supports AppSec
       bouncer: ['traefik', 'nginx', 'caddy', 'haproxy', 'crowdsec'], // Most containers support bouncer
-      logs: ['traefik', 'nginx', 'caddy', 'haproxy', 'crowdsec', 'pangolin', 'gerbil'] // Most containers have logs
+      logs: ['traefik', 'nginx', 'caddy', 'haproxy', 'crowdsec', 'pangolin', 'gerbil'], // Most containers have logs
+      addons: ['traefik'] // Addons (Pangolin, Gerbil) are only available for Traefik
     }
   }
 

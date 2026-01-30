@@ -47,16 +47,25 @@ func GetBouncers(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFun
 			return
 		}
 
-		// Compute status for each bouncer
+		// Compute status for each bouncer using configurable thresholds
+		staleThreshold := time.Duration(cfg.BouncerStaleThresholdMinutes) * time.Minute
+		connectedThreshold := time.Duration(cfg.BouncerConnectedThresholdMinutes) * time.Minute
+
 		for i := range bouncers {
 			// Ensure Valid is set correctly based on Revoked status from cscli
 			bouncers[i].Valid = !bouncers[i].Revoked
 
-			// Primary indicator: if last pull was recent (within 5 minutes), bouncer is connected
-			if time.Since(bouncers[i].LastPull) <= 5*time.Minute {
+			// Check for never_connected status first (zero time means never pulled)
+			if bouncers[i].LastPull.IsZero() && bouncers[i].Valid {
+				bouncers[i].Status = "never_connected"
+			} else if time.Since(bouncers[i].LastPull) <= connectedThreshold {
+				// Primary indicator: if last pull was recent, bouncer is connected
+				bouncers[i].Status = "connected"
+			} else if time.Since(bouncers[i].LastPull) <= staleThreshold && bouncers[i].Valid {
+				// Between connected and stale threshold - still considered connected
 				bouncers[i].Status = "connected"
 			} else if bouncers[i].Valid {
-				// Last pull is old but key is valid - bouncer exists but inactive
+				// Last pull is beyond stale threshold but key is valid - bouncer exists but inactive
 				bouncers[i].Status = "stale"
 			} else {
 				// Key is invalid - bouncer is disconnected

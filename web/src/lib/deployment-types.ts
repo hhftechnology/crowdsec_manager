@@ -40,6 +40,7 @@ export interface FeatureAvailability {
   gerbil: boolean
   appsec: boolean
   bouncer: boolean
+  addons: boolean
 }
 
 export interface EnvironmentFlags {

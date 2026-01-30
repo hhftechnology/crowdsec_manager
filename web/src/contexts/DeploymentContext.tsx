@@ -235,7 +235,8 @@ export function useFeatures(): FeatureAvailability {
     pangolin: false,
     gerbil: false,
     appsec: false,
-    bouncer: false
+    bouncer: false,
+    addons: false
   }
 }
 

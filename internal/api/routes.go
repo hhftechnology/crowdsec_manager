@@ -146,6 +146,7 @@ func RegisterServicesRoutes(router *gin.RouterGroup, dockerClient *docker.Client
 		crowdsec.GET("/metrics", handlers.GetMetrics(dockerClient, cfg))
 		crowdsec.POST("/enroll", handlers.EnrollCrowdSec(dockerClient, cfg))
 		crowdsec.GET("/status", handlers.GetCrowdSecEnrollmentStatus(dockerClient, cfg))
+		crowdsec.POST("/console/enable", handlers.EnableConsoleManagement(dockerClient, cfg))
 	}
 
 	// Traefik specific

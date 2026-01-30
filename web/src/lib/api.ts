@@ -519,7 +519,10 @@ export const crowdsecAPI = {
     api.post<ApiResponse<{ output: string }>>('/crowdsec/enroll', data),
 
   getStatus: () =>
-    api.get<ApiResponse<{ enrolled: boolean; validated: boolean }>>('/crowdsec/status'),
+    api.get<ApiResponse<{ enrolled: boolean; validated: boolean; console_management: boolean }>>('/crowdsec/status'),
+
+  enableConsoleManagement: () =>
+    api.post<ApiResponse<{ output: string }>>('/crowdsec/console/enable'),
 
   getAlertsAnalysis: (filters: AlertFilters) =>
     api.get<ApiResponse<{ alerts: any[]; count: number }>>('/crowdsec/alerts/analysis', { params: filters }),

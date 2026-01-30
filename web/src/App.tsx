@@ -35,6 +35,7 @@ const AlertAnalysis = lazy(() => import('./pages/AlertAnalysis'))
 const Notifications = lazy(() => import('./pages/Notifications'))
 const Profiles = lazy(() => import('./pages/Profiles'))
 const Bouncers = lazy(() => import('./pages/Bouncers'))
+const Addons = lazy(() => import('./pages/Addons'))
 
 function App() {
   return (
@@ -94,6 +95,7 @@ function App() {
                               <Route path="/notifications" element={<Notifications />} />
                               <Route path="/profiles" element={<Profiles />} />
                               <Route path="/bouncers" element={<Bouncers />} />
+                              <Route path="/addons" element={<Addons />} />
                             </Routes>
                           </main>
                         </Suspense>

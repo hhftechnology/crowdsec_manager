@@ -69,6 +69,10 @@ type Config struct {
 	PangolinEnabled bool
 	GerbilEnabled   bool
 
+	// Bouncer status thresholds (in minutes)
+	BouncerStaleThresholdMinutes     int // Default: 5 - bouncer considered stale after this many minutes without pull
+	BouncerConnectedThresholdMinutes int // Default: 1 - bouncer considered connected if last pull within this many minutes
+
 	// Timeouts
 	ShutdownTimeout time.Duration
 	ReadTimeout     time.Duration
@@ -126,6 +130,11 @@ func Load() (*Config, error) {
 		// Add-on configuration
 		PangolinEnabled:       getEnvAsBool("PANGOLIN_ENABLED", false),
 		GerbilEnabled:         getEnvAsBool("GERBIL_ENABLED", false),
+
+		// Bouncer status thresholds
+		BouncerStaleThresholdMinutes:     getEnvAsInt("BOUNCER_STALE_THRESHOLD_MINUTES", 5),
+		BouncerConnectedThresholdMinutes: getEnvAsInt("BOUNCER_CONNECTED_THRESHOLD_MINUTES", 1),
+
 		ShutdownTimeout:       time.Duration(getEnvAsInt("SHUTDOWN_TIMEOUT", 30)) * time.Second,
 		ReadTimeout:           time.Duration(getEnvAsInt("READ_TIMEOUT", 15)) * time.Second,
 		WriteTimeout:          time.Duration(getEnvAsInt("WRITE_TIMEOUT", 15)) * time.Second,

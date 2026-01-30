@@ -6,13 +6,15 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { CheckCircle2 } from 'lucide-react'
+import { CheckCircle2, AlertCircle } from 'lucide-react'
 
 interface EnrollDialogProps {
   trigger?: React.ReactNode
   open?: boolean
   onOpenChange?: (open: boolean) => void
 }
+
+type EnrollmentStatusType = 'idle' | 'enrolling' | 'waiting_approval' | 'needs_enable' | 'success'
 
 export default function EnrollDialog({ trigger, open: controlledOpen, onOpenChange: setControlledOpen }: EnrollDialogProps) {
   const [internalOpen, setInternalOpen] = useState(false)
@@ -28,7 +30,7 @@ export default function EnrollDialog({ trigger, open: controlledOpen, onOpenChan
   }
 
   const [enrollmentKey, setEnrollmentKey] = useState('')
-  const [enrollmentStatus, setEnrollmentStatus] = useState<'idle' | 'enrolling' | 'waiting_approval' | 'success'>('idle')
+  const [enrollmentStatus, setEnrollmentStatus] = useState<EnrollmentStatusType>('idle')
 
   const queryClient = useQueryClient()
 
@@ -41,8 +43,8 @@ export default function EnrollDialog({ trigger, open: controlledOpen, onOpenChan
     },
     refetchInterval: (query) => {
       const data = query.state.data
-      // Poll faster if waiting for approval
-      if (data?.enrolled && !data.validated) return 2000
+      // Poll faster if waiting for approval or needs enable
+      if (data?.enrolled && !data.console_management) return 2000
       return 5000
     },
     enabled: isOpen, // Only poll when dialog is open
@@ -52,12 +54,13 @@ export default function EnrollDialog({ trigger, open: controlledOpen, onOpenChan
   useEffect(() => {
     if (!enrollmentData) return
 
-    if (enrollmentData.enrolled && enrollmentData.validated) {
-      // Successfully enrolled and validated
+    // console_management true = fully validated and enabled
+    if (enrollmentData.console_management) {
+      // Successfully enrolled and console management is enabled
       if (enrollmentStatus !== 'success') {
         setEnrollmentStatus('success')
         // Only show toast if we were previously enrolling or waiting
-        if (enrollmentStatus === 'enrolling' || enrollmentStatus === 'waiting_approval') {
+        if (enrollmentStatus === 'enrolling' || enrollmentStatus === 'waiting_approval' || enrollmentStatus === 'needs_enable') {
           toast.success('CrowdSec instance successfully enrolled and validated!')
           setTimeout(() => {
             setIsOpen(false)
@@ -66,20 +69,23 @@ export default function EnrollDialog({ trigger, open: controlledOpen, onOpenChan
           }, 2000)
         }
       }
-    } else if (enrollmentData.enrolled && !enrollmentData.validated) {
-      // Enrolled but not yet validated - keep waiting
-      if (enrollmentStatus === 'idle') {
-        setEnrollmentStatus('waiting_approval')
+    } else if (enrollmentData.enrolled && !enrollmentData.console_management) {
+      // Enrolled but console_management is false - needs to enable it
+      if (enrollmentStatus === 'idle' || enrollmentStatus === 'waiting_approval') {
+        setEnrollmentStatus('needs_enable')
+      }
+    } else if (!enrollmentData.enrolled) {
+      // Not enrolled at all
+      if (enrollmentStatus !== 'enrolling') {
+        setEnrollmentStatus('idle')
       }
     }
-    // Don't reset to idle automatically - only when user cancels or closes dialog
-    // This prevents race conditions where status query returns enrolled=false
-    // right after submitting the enrollment key
+    // Don't reset to idle automatically during enrolling state
   }, [enrollmentData, enrollmentStatus])
 
   const enrollMutation = useMutation({
     mutationFn: (data: EnrollRequest) => api.crowdsec.enroll(data),
-    onSuccess: (response: { data: { data?: { output?: string } } }) => {
+    onSuccess: (response: { data: { data?: { output?: string; console_management_enabled?: boolean } } }) => {
       toast.success('Enrollment key submitted. Please approve in CrowdSec Console.')
       setEnrollmentStatus('waiting_approval')
       if (response.data.data?.output) {
@@ -93,6 +99,18 @@ export default function EnrollDialog({ trigger, open: controlledOpen, onOpenChan
     },
   })
 
+  const enableConsoleMutation = useMutation({
+    mutationFn: () => api.crowdsec.enableConsoleManagement(),
+    onSuccess: () => {
+      toast.success('Console management enabled. Restarting CrowdSec may be required.')
+      queryClient.invalidateQueries({ queryKey: ['crowdsec-enrollment-status'] })
+      // After enabling, the next poll should show console_management: true
+    },
+    onError: () => {
+      toast.error('Failed to enable console management')
+    },
+  })
+
   const handleEnroll = (e: React.FormEvent) => {
     e.preventDefault()
     if (!enrollmentKey.trim()) {
@@ -101,6 +119,10 @@ export default function EnrollDialog({ trigger, open: controlledOpen, onOpenChan
     }
     enrollMutation.mutate({ enrollment_key: enrollmentKey.trim() })
     setEnrollmentStatus('enrolling')
+  }
+
+  const handleEnableConsoleManagement = () => {
+    enableConsoleMutation.mutate()
   }
 
   const handleCancelEnrollment = () => {
@@ -112,13 +134,13 @@ export default function EnrollDialog({ trigger, open: controlledOpen, onOpenChan
   // Check status when dialog first opens
   useEffect(() => {
     if (isOpen && enrollmentData && enrollmentStatus === 'idle') {
-      // If already enrolled and validated, show success immediately
-      if (enrollmentData.enrolled && enrollmentData.validated) {
+      // If console_management is enabled, show success immediately
+      if (enrollmentData.console_management) {
         setEnrollmentStatus('success')
       }
-      // If enrolled but not validated, show waiting state
-      else if (enrollmentData.enrolled && !enrollmentData.validated) {
-        setEnrollmentStatus('waiting_approval')
+      // If enrolled but console_management is false, show needs_enable state
+      else if (enrollmentData.enrolled && !enrollmentData.console_management) {
+        setEnrollmentStatus('needs_enable')
       }
     }
   }, [isOpen, enrollmentData, enrollmentStatus])
@@ -183,6 +205,35 @@ export default function EnrollDialog({ trigger, open: controlledOpen, onOpenChan
                   Please go to the CrowdSec Console and approve this instance.
                 </p>
               </div>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleCancelEnrollment}
+                className="w-full"
+              >
+                Cancel
+              </Button>
+            </div>
+          ) : enrollmentStatus === 'needs_enable' ? (
+            <div className="text-center space-y-4 py-4">
+              <div className="flex justify-center">
+                <AlertCircle className="h-12 w-12 text-yellow-500" />
+              </div>
+              <div>
+                <h3 className="font-medium text-lg">Almost There!</h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Your instance is enrolled. Click below to enable Console Management,
+                  then restart CrowdSec to complete the connection.
+                </p>
+              </div>
+              <Button
+                type="button"
+                onClick={handleEnableConsoleManagement}
+                className="w-full"
+                disabled={enableConsoleMutation.isPending}
+              >
+                {enableConsoleMutation.isPending ? 'Enabling...' : 'Enable Console Management'}
+              </Button>
               <Button
                 type="button"
                 variant="outline"

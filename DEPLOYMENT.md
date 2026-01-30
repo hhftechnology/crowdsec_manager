@@ -150,6 +150,52 @@ PROXY_TYPE=standalone
 PROXY_ENABLED=false
 ```
 
+## Advanced Configuration
+
+### CrowdSec Path Configuration
+
+For deployments with custom CrowdSec path configurations or external mounts, you can override the default paths:
+
+```bash
+# CrowdSec Internal Container Paths
+CROWDSEC_WHITELIST_FILE=/etc/crowdsec/parsers/s02-enrich/mywhitelists.yaml
+CROWDSEC_NOTIFICATIONS_DIR=/etc/crowdsec/notifications
+CROWDSEC_PROFILES_FILE=/etc/crowdsec/profiles.yaml
+```
+
+These paths reference locations **inside the CrowdSec container**. Use these when:
+- Your CrowdSec instance uses non-standard paths
+- You have external volume mounts that place configs differently
+- You're running multiple CrowdSec instances with different configurations
+
+### Bouncer Status Thresholds
+
+Configure how bouncer status is determined:
+
+```bash
+# Bouncer is considered "stale" if no activity for this many minutes
+BOUNCER_STALE_THRESHOLD_MINUTES=5
+
+# Bouncer is considered "connected" if seen within this many minutes
+BOUNCER_CONNECTED_THRESHOLD_MINUTES=1
+```
+
+**Status Types:**
+- `connected` - Bouncer has been active within the connected threshold
+- `stale` - Bouncer hasn't been seen within the stale threshold
+- `never_connected` - Bouncer exists but has never connected (newly created)
+
+Increase `BOUNCER_STALE_THRESHOLD_MINUTES` if you have bouncers with infrequent check-ins.
+
+### Input Validation
+
+The manager includes comprehensive input validation for security:
+
+- **IP/CIDR validation**: All IP addresses and CIDR ranges are validated before use
+- **URL validation**: Webhook URLs are validated (scheme, hostname, format)
+- **Shell injection prevention**: All inputs to shell commands are sanitized
+- **Provider validation**: Captcha providers are validated against supported options
+
 ## Directory Structure
 
 Ensure the following directories exist:

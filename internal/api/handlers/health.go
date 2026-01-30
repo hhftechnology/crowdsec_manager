@@ -161,16 +161,41 @@ func CheckCrowdSecHealth(dockerClient *docker.Client, cfg *config.Config) gin.Ha
 				})
 
 				if err == nil {
+					// Use configurable threshold for bouncer status
+					staleThreshold := time.Duration(cfg.BouncerStaleThresholdMinutes) * time.Minute
 					activeBouncers := 0
+					staleBouncers := 0
+					neverConnectedBouncers := 0
+
 					for _, b := range bouncers {
-						if time.Since(b.LastPull) <= 5*time.Minute {
+						if b.LastPull.IsZero() && b.Valid {
+							neverConnectedBouncers++
+						} else if time.Since(b.LastPull) <= staleThreshold {
 							activeBouncers++
+						} else if b.Valid {
+							staleBouncers++
 						}
 					}
+
+					status := "healthy"
+					message := fmt.Sprintf("%d active bouncer(s) out of %d total", activeBouncers, len(bouncers))
+
+					// Add warnings for stale/never_connected bouncers
+					if staleBouncers > 0 {
+						status = "warning"
+						message = fmt.Sprintf("%d active, %d stale bouncer(s) out of %d total", activeBouncers, staleBouncers, len(bouncers))
+					}
+					if neverConnectedBouncers > 0 {
+						if status == "healthy" {
+							status = "warning"
+						}
+						message += fmt.Sprintf(" (%d never connected)", neverConnectedBouncers)
+					}
+
 					healthCheck.Checks["bouncers"] = models.HealthCheckItem{
-						Status:  "healthy",
-						Message: fmt.Sprintf("%d active bouncer(s) out of %d total", activeBouncers, len(bouncers)),
-						Details: fmt.Sprintf("Active: %d, Total: %d", activeBouncers, len(bouncers)),
+						Status:  status,
+						Message: message,
+						Details: fmt.Sprintf("Active: %d, Stale: %d, Never Connected: %d, Total: %d, Stale Threshold: %dm", activeBouncers, staleBouncers, neverConnectedBouncers, len(bouncers), cfg.BouncerStaleThresholdMinutes),
 					}
 				} else {
 					healthCheck.Checks["bouncers"] = models.HealthCheckItem{
@@ -359,8 +384,12 @@ func RunCompleteDiagnostics(dockerClient *docker.Client, db *database.Database, 
 					bouncer.Version = version
 				}
 
-				// Compute status for each bouncer
-				if time.Since(bouncer.LastPull) <= 5*time.Minute {
+				// Compute status for each bouncer using configurable thresholds
+				staleThreshold := time.Duration(cfg.BouncerStaleThresholdMinutes) * time.Minute
+
+				if bouncer.LastPull.IsZero() && bouncer.Valid {
+					bouncer.Status = "never_connected"
+				} else if time.Since(bouncer.LastPull) <= staleThreshold {
 					bouncer.Status = "connected"
 				} else if bouncer.Valid {
 					bouncer.Status = "stale"

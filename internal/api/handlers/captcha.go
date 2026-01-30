@@ -7,6 +7,7 @@ import (
 	"crowdsec-manager/internal/logger"
 	"crowdsec-manager/internal/models"
 	"crowdsec-manager/internal/proxy"
+	"crowdsec-manager/internal/validation"
 	"fmt"
 	"net/http"
 	"os"
@@ -93,16 +94,55 @@ func SetupCaptcha(dockerClient *docker.Client, cfg *config.Config, proxyAdapter 
 			return
 		}
 
-		// Validate inputs
-		if req.SiteKey == "" || req.SecretKey == "" {
+		// Validate provider
+		if req.Provider != "" {
+			providerResult := validation.ValidateCaptchaProvider(req.Provider)
+			if !providerResult.Valid {
+				c.JSON(http.StatusBadRequest, models.Response{
+					Success: false,
+					Error:   providerResult.Message,
+				})
+				return
+			}
+			req.Provider = providerResult.Value // Use normalized value
+		}
+
+		// Validate required inputs
+		siteKeyResult := validation.ValidateNonEmpty(req.SiteKey, "Site Key")
+		if !siteKeyResult.Valid {
 			c.JSON(http.StatusBadRequest, models.Response{
 				Success: false,
-				Error:   "Site Key and Secret Key are required",
+				Error:   siteKeyResult.Message,
 			})
 			return
 		}
 
-		logger.Info("Setting up captcha", "site_key", req.SiteKey)
+		secretKeyResult := validation.ValidateNonEmpty(req.SecretKey, "Secret Key")
+		if !secretKeyResult.Valid {
+			c.JSON(http.StatusBadRequest, models.Response{
+				Success: false,
+				Error:   secretKeyResult.Message,
+			})
+			return
+		}
+
+		// Check for dangerous characters in keys (prevent injection)
+		if !validation.IsSafeForShell(req.SiteKey) {
+			c.JSON(http.StatusBadRequest, models.Response{
+				Success: false,
+				Error:   "Site Key contains invalid characters",
+			})
+			return
+		}
+		if !validation.IsSafeForShell(req.SecretKey) {
+			c.JSON(http.StatusBadRequest, models.Response{
+				Success: false,
+				Error:   "Secret Key contains invalid characters",
+			})
+			return
+		}
+
+		logger.Info("Setting up captcha", "site_key", req.SiteKey, "provider", req.Provider)
 
 		// STEP 1: Create captcha.html file on host
 		logger.Info("Creating captcha.html file")
@@ -644,8 +684,8 @@ func updateTraefikCaptchaConfig(dockerClient *docker.Client, cfg *config.Config,
 
 // updateCrowdSecProfiles updates CrowdSec profiles.yaml to include captcha remediation
 func updateCrowdSecProfiles(dockerClient *docker.Client, cfg *config.Config) error {
-	// Read current profiles.yaml
-	profilesPath := "/etc/crowdsec/profiles.yaml" // Standard CrowdSec path
+	// Read current profiles.yaml using configured path
+	profilesPath := cfg.Paths.CrowdSecProfilesFile
 	logger.Info("Reading CrowdSec profiles configuration", "path", profilesPath)
 	output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
 		"cat", profilesPath,
@@ -867,7 +907,7 @@ func verifyCaptchaSetup(dockerClient *docker.Client, cfg *config.Config) bool {
 	logger.Info("Dynamic config references correct captcha.html path", "path", captchaHTMLPath)
 
 	// Check 4: CrowdSec profiles contain captcha decision
-	profilesPath := "/etc/crowdsec/profiles.yaml" // Standard CrowdSec path
+	profilesPath := cfg.Paths.CrowdSecProfilesFile
 	logger.Info("Verifying captcha decision in CrowdSec profiles", "path", profilesPath)
 	profilesContent, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
 		"cat", profilesPath,
