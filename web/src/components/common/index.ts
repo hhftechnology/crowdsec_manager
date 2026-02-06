@@ -14,6 +14,7 @@ export * from './StatusCard'
 export * from './FormComponents'
 export * from './NotificationComponents'
 export * from './DashboardGrid'
+export * from './PageHeader'
 
 // Contexts
 export * from '../../contexts/ErrorContext'
