@@ -6,6 +6,7 @@ import {
   FeatureAvailability, EnvironmentFlags, DeploymentConfiguration 
 } from '@/lib/deployment-types'
 import { detectFeatures } from '@/lib/feature-detector'
+import { useProxy } from './ProxyContext'
 
 
 
@@ -25,6 +26,9 @@ interface DeploymentProviderProps {
 export function DeploymentProvider({ children }: DeploymentProviderProps) {
   const [deployment, setDeployment] = useState<DeploymentConfiguration | null>(null)
 
+  // Use ProxyContext as the canonical source for proxy type (avoids duplicate API call)
+  const { proxyType: canonicalProxyType } = useProxy()
+
   // Query deployment information from the API
   const { 
     data: deploymentData, 
@@ -32,7 +36,7 @@ export function DeploymentProvider({ children }: DeploymentProviderProps) {
     error, 
     refetch: refreshDeployment 
   } = useQuery({
-    queryKey: ['deployment-info'],
+    queryKey: ['deployment-info', canonicalProxyType],
     queryFn: async () => {
       try {
         // Get container information from health endpoint
@@ -54,17 +58,8 @@ export function DeploymentProvider({ children }: DeploymentProviderProps) {
           }
         }
 
-        // Get proxy information
-        let proxyType: string | null = null
-        try {
-          const proxyResponse = await api.proxy.getCurrent()
-          if (proxyResponse.data.success && proxyResponse.data.data) {
-            proxyType = proxyResponse.data.data.type
-          }
-        } catch (proxyError) {
-          // Fallback to detecting from containers
-          proxyType = detectProxyTypeFromContainers(containers)
-        }
+        // Use proxy type from ProxyContext (canonical source) instead of making a separate API call
+        const proxyType: string = canonicalProxyType || detectProxyTypeFromContainers(containers) || 'standalone'
 
         // Get environment flags (simulated for now - would need backend endpoint)
         const environmentFlags: EnvironmentFlags = {
@@ -72,7 +67,7 @@ export function DeploymentProvider({ children }: DeploymentProviderProps) {
           cronEnabled: true,   // Default assumption
           pangolinEnabled: containers.some(c => c.name.includes('pangolin') && c.running),
           gerbilEnabled: containers.some(c => c.name.includes('gerbil') && c.running),
-          proxyType: proxyType || 'standalone',
+          proxyType: proxyType,
           customFlags: {}
         }
 

@@ -30,8 +30,8 @@ import (
 	_ "crowdsec-manager/internal/proxy/adapters/zoraxy"
 )
 
-// Main entry point for the CrowdSec Manager server
-// Initializes all components and starts the HTTP server with graceful shutdown
+// Main entry point for the CrowdSec Manager server.
+// Initializes all components and starts the HTTP server with graceful shutdown.
 
 func main() {
 	// Load configuration from environment variables
@@ -58,69 +58,31 @@ func main() {
 	}
 	defer dockerClient.Close()
 
-
 	// Initialize proxy manager with adapter registry
 	proxy.MustInitializeAdapters()
 	proxyManager := proxy.NewProxyManager(nil) // Use global registry
-	
-	// Determine proxy type from configuration (default to traefik for backward compatibility)
-	proxyType := proxy.ProxyTypeTraefik
-	if cfg.ProxyType != "" {
-		if err := proxy.ValidateProxyType(cfg.ProxyType); err != nil {
-			logger.Warn("Invalid proxy type in config, defaulting to traefik", "proxy_type", cfg.ProxyType, "error", err)
-		} else {
-			proxyType = proxy.ProxyType(cfg.ProxyType)
-		}
-	}
-	
-	// Create proxy configuration
-	proxyConfig := &proxy.ProxyConfig{
-		Type:          proxyType,
-		Enabled:       true,
-		ContainerName: cfg.TraefikContainerName, // Will be updated based on proxy type
-		ConfigPaths: map[string]string{
-			"dynamic":    cfg.TraefikDynamicConfig,
-			"static":     cfg.TraefikStaticConfig,
-			"access_log": cfg.TraefikAccessLog,
-			"error_log":  cfg.TraefikErrorLog,
-		},
-		CustomSettings: make(map[string]string),
-		DockerClient:   dockerClient,
-	}
-	
-	// Update container name based on proxy type
-	switch proxyType {
-	case proxy.ProxyTypeTraefik:
-		proxyConfig.ContainerName = cfg.TraefikContainerName
-	case proxy.ProxyTypeNginx:
-		proxyConfig.ContainerName = "nginx-proxy-manager"
-	case proxy.ProxyTypeCaddy:
-		proxyConfig.ContainerName = "caddy"
-	case proxy.ProxyTypeHAProxy:
-		proxyConfig.ContainerName = "haproxy"
-	case proxy.ProxyTypeZoraxy:
-		proxyConfig.ContainerName = "zoraxy"
-	case proxy.ProxyTypeStandalone:
-		proxyConfig.ContainerName = ""
-	}
-	
+
+	// Resolve proxy type and configuration using centralized logic
+	proxyType := proxy.ResolveProxyType(cfg.ProxyType)
+	proxyConfig := proxy.ResolveConfig(cfg, proxyType, dockerClient)
+
 	// Get or create proxy adapter
 	ctx := context.Background()
 	proxyAdapter, err := proxyManager.GetAdapter(ctx, proxyType, proxyConfig)
 	if err != nil {
-		logger.Warn("Failed to initialize proxy adapter, falling back to standalone mode", "proxy_type", proxyType, "error", err)
+		logger.Warn("Failed to initialize proxy adapter, falling back to standalone mode",
+			"proxy_type", proxyType, "error", err)
 		// Fallback to standalone mode
-		proxyAdapter, err = proxyManager.GetAdapter(ctx, proxy.ProxyTypeStandalone, &proxy.ProxyConfig{
-			Type:         proxy.ProxyTypeStandalone,
-			Enabled:      true,
-			DockerClient: dockerClient,
-		})
+		standaloneConfig := proxy.ResolveConfig(cfg, proxy.ProxyTypeStandalone, dockerClient)
+		proxyAdapter, err = proxyManager.GetAdapter(ctx, proxy.ProxyTypeStandalone, standaloneConfig)
 		if err != nil {
 			logger.Fatal("Failed to initialize standalone proxy adapter", "error", err)
 		}
 	}
-	
-	logger.Info("Proxy adapter initialized", "type", proxyAdapter.Type(), "features", proxyAdapter.SupportedFeatures())
+
+	logger.Info("Proxy adapter initialized",
+		"type", proxyAdapter.Type(),
+		"features", proxyAdapter.SupportedFeatures())
 
 	dataDir := cfg.ConfigDir
 
@@ -152,26 +114,20 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
-	// Register all API route groups under /api prefix
-	apiGroup := router.Group("/api")
-	{
-		api.RegisterHealthRoutes(apiGroup, dockerClient, db, cfg, proxyAdapter)
-		api.RegisterIPRoutes(apiGroup, dockerClient, cfg)
-		api.RegisterWhitelistRoutes(apiGroup, dockerClient, cfg, proxyAdapter)
-		api.RegisterAllowlistRoutes(apiGroup, dockerClient, cfg)
-		api.RegisterScenarioRoutes(apiGroup, dockerClient, cfg.ConfigDir, cfg)
-		api.RegisterCaptchaRoutes(apiGroup, dockerClient, db, cfg, proxyAdapter)
-		api.RegisterLogRoutes(apiGroup, dockerClient, db, cfg, proxyAdapter)
-		api.RegisterBackupRoutes(apiGroup, backupManager, dockerClient)
-		api.RegisterUpdateRoutes(apiGroup, dockerClient, cfg)
-		api.RegisterCronRoutes(apiGroup, cronScheduler)
-		api.RegisterServicesRoutes(apiGroup, dockerClient, db, cfg, proxyAdapter)
-		api.RegisterNotificationRoutes(apiGroup, dockerClient, db, cfg)
-		api.RegisterProfileRoutes(apiGroup, db, cfg, dockerClient)
-		api.RegisterProxyRoutes(apiGroup, proxyManager, proxyAdapter, cfg) // New proxy management routes
-		api.RegisterValidationRoutes(apiGroup, dockerClient, cfg)
+	// Build shared dependencies struct for all API routes
+	deps := &api.Dependencies{
+		Docker:        dockerClient,
+		DB:            db,
+		Config:        cfg,
+		ProxyAdapter:  proxyAdapter,
+		ProxyManager:  proxyManager,
+		BackupManager: backupManager,
+		CronScheduler: cronScheduler,
 	}
 
+	// Register all API route groups under /api prefix
+	apiGroup := router.Group("/api")
+	api.RegisterAll(apiGroup, deps)
 
 	// Serve React frontend static assets and handle client-side routing
 	router.Static("/assets", "./web/dist/assets")
@@ -215,8 +171,8 @@ func main() {
 	logger.Info("Server exited")
 }
 
-// checkPrerequisites verifies that Docker daemon is running and required containers exist
-// This function is defined but not currently called in main - consider adding prerequisite checks if needed
+// checkPrerequisites verifies that Docker daemon is running and required containers exist.
+// This function is defined but not currently called in main - consider adding prerequisite checks if needed.
 func checkPrerequisites(client *docker.Client, cfg *config.Config) error {
 	logger.Info("Checking prerequisites...")
 

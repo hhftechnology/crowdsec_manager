@@ -913,6 +913,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **[DEPLOYMENT.md](DEPLOYMENT.md)** - Docker Compose deployment strategies
 - **[VOLUMES_AND_PATHS.md](VOLUMES_AND_PATHS.md)** - Volume mappings and directory structure
 - **[USAGE.md](USAGE.md)** - Detailed usage instructions and examples
+- **[docs/architecture.md](docs/architecture.md)** - Backend and frontend architecture, package structure, and how to extend
+- **[docs/api-migration.md](docs/api-migration.md)** - Deprecated API endpoints, replacements, and sunset timeline
 
 ### Quick Reference
 

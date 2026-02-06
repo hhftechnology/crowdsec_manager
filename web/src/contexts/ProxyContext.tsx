@@ -53,24 +53,8 @@ export function ProxyProvider({ children }: ProxyProviderProps) {
           connected: false,
           features: ['health'] as Feature[]
         }
-      } catch (error) {
-        // If API fails, try legacy Traefik detection as fallback
-        try {
-          const response = await api.traefik.checkIntegration()
-          
-          if (response.data.success && response.data.data) {
-            return {
-              type: 'traefik' as ProxyType,
-              running: true,
-              connected: true,
-              features: ['whitelist', 'captcha', 'logs', 'bouncer', 'health', 'appsec'] as Feature[]
-            }
-          }
-        } catch {
-          // Ignore legacy API errors
-        }
-        
-        // Final fallback to standalone mode
+      } catch {
+        // If proxy API fails, fall back to standalone mode
         return {
           type: 'standalone' as ProxyType,
           running: false,

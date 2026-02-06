@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import { PageHeader } from '@/components/common'
 import api, { BackupRequest, RestoreRequest, type Backup } from '@/lib/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -102,59 +103,57 @@ export default function Backup() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Backup Management</h1>
-          <p className="text-muted-foreground mt-2">
-            Create, restore, and manage system backups
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={handleCleanup}
-            disabled={cleanupMutation.isPending}
-          >
-            <Trash2 className="mr-2 h-4 w-4" />
-            Cleanup Old
-          </Button>
-          <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                Create Backup
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Create New Backup</DialogTitle>
-                <DialogDescription>
-                  Create a backup of all CrowdSec configurations and data
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div className="p-4 bg-muted rounded-lg space-y-2">
-                  <p className="text-sm font-medium">Backup will include:</p>
-                  <ul className="text-sm text-muted-foreground space-y-1 ml-4">
-                    <li>" CrowdSec configurations</li>
-                    <li>" Decision database</li>
-                    <li>" Whitelists and parsers</li>
-                    <li>" Custom scenarios</li>
-                    <li>" Bouncer configurations</li>
-                  </ul>
-                </div>
-                <Button
-                  onClick={handleCreateBackup}
-                  disabled={createMutation.isPending}
-                  className="w-full"
-                >
-                  {createMutation.isPending ? 'Creating...' : 'Create Backup'}
+      <PageHeader
+        title="Backup Management"
+        description="Create, restore, and manage system backups"
+        actions={
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={handleCleanup}
+              disabled={cleanupMutation.isPending}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Cleanup Old
+            </Button>
+            <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Create Backup
                 </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
-        </div>
-      </div>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Create New Backup</DialogTitle>
+                  <DialogDescription>
+                    Create a backup of all CrowdSec configurations and data
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div className="p-4 bg-muted rounded-lg space-y-2">
+                    <p className="text-sm font-medium">Backup will include:</p>
+                    <ul className="text-sm text-muted-foreground space-y-1 ml-4">
+                      <li>" CrowdSec configurations</li>
+                      <li>" Decision database</li>
+                      <li>" Whitelists and parsers</li>
+                      <li>" Custom scenarios</li>
+                      <li>" Bouncer configurations</li>
+                    </ul>
+                  </div>
+                  <Button
+                    onClick={handleCreateBackup}
+                    disabled={createMutation.isPending}
+                    className="w-full"
+                  >
+                    {createMutation.isPending ? 'Creating...' : 'Create Backup'}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+        }
+      />
 
       {/* Backups Table */}
       <Card>

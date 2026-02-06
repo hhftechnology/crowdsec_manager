@@ -120,88 +120,86 @@ export default function Bouncers() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Bouncers</h1>
-          <p className="text-muted-foreground mt-2">
-            Manage CrowdSec enforcement agents
-          </p>
-        </div>
-        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Bouncer
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Add New Bouncer</DialogTitle>
-              <DialogDescription>
-                Create a new bouncer API key. The key will be shown only once.
-              </DialogDescription>
-            </DialogHeader>
+      <PageHeader
+        title="Bouncers"
+        description="Manage CrowdSec enforcement agents"
+        actions={
+          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="mr-2 h-4 w-4" />
+                Add Bouncer
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Add New Bouncer</DialogTitle>
+                <DialogDescription>
+                  Create a new bouncer API key. The key will be shown only once.
+                </DialogDescription>
+              </DialogHeader>
 
-            {!createdBouncer ? (
-              <form onSubmit={handleAddBouncer} className="space-y-4">
-                <div className="space-y-2">
-                  <label htmlFor="name" className="text-sm font-medium">
-                    Bouncer Name
-                  </label>
-                  <Input
-                    id="name"
-                    placeholder="e.g., nginx-bouncer"
-                    value={newBouncerName}
-                    onChange={(e) => setNewBouncerName(e.target.value)}
-                    disabled={addBouncerMutation.isPending}
-                  />
-                </div>
-                <DialogFooter>
-                  <Button type="submit" disabled={addBouncerMutation.isPending || !newBouncerName.trim()}>
-                    {addBouncerMutation.isPending ? (
-                      <>
-                        <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                        Creating...
-                      </>
-                    ) : (
-                      'Create Bouncer'
-                    )}
-                  </Button>
-                </DialogFooter>
-              </form>
-            ) : (
-              <div className="space-y-4">
-                <div className="p-4 bg-muted rounded-lg space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium text-sm">API Key</span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => copyToClipboard(createdBouncer.api_key)}
-                    >
-                      {copied ? (
-                        <Check className="h-4 w-4 text-green-500" />
+              {!createdBouncer ? (
+                <form onSubmit={handleAddBouncer} className="space-y-4">
+                  <div className="space-y-2">
+                    <label htmlFor="name" className="text-sm font-medium">
+                      Bouncer Name
+                    </label>
+                    <Input
+                      id="name"
+                      placeholder="e.g., nginx-bouncer"
+                      value={newBouncerName}
+                      onChange={(e) => setNewBouncerName(e.target.value)}
+                      disabled={addBouncerMutation.isPending}
+                    />
+                  </div>
+                  <DialogFooter>
+                    <Button type="submit" disabled={addBouncerMutation.isPending || !newBouncerName.trim()}>
+                      {addBouncerMutation.isPending ? (
+                        <>
+                          <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                          Creating...
+                        </>
                       ) : (
-                        <Copy className="h-4 w-4" />
+                        'Create Bouncer'
                       )}
                     </Button>
+                  </DialogFooter>
+                </form>
+              ) : (
+                <div className="space-y-4">
+                  <div className="p-4 bg-muted rounded-lg space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-sm">API Key</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => copyToClipboard(createdBouncer.api_key)}
+                      >
+                        {copied ? (
+                          <Check className="h-4 w-4 text-green-500" />
+                        ) : (
+                          <Copy className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                    <code className="block p-2 bg-background rounded border font-mono text-sm break-all">
+                      {createdBouncer.api_key}
+                    </code>
+                    <p className="text-xs text-yellow-600 flex items-center gap-1">
+                      <AlertCircle className="h-3 w-3" />
+                      Copy this key now. It won't be shown again.
+                    </p>
                   </div>
-                  <code className="block p-2 bg-background rounded border font-mono text-sm break-all">
-                    {createdBouncer.api_key}
-                  </code>
-                  <p className="text-xs text-yellow-600 flex items-center gap-1">
-                    <AlertCircle className="h-3 w-3" />
-                    Copy this key now. It won't be shown again.
-                  </p>
+                  <DialogFooter>
+                    <Button onClick={closeAddDialog}>Done</Button>
+                  </DialogFooter>
                 </div>
-                <DialogFooter>
-                  <Button onClick={closeAddDialog}>Done</Button>
-                </DialogFooter>
-              </div>
-            )}
-          </DialogContent>
-        </Dialog>
-      </div>
+              )}
+            </DialogContent>
+          </Dialog>
+        }
+      />
 
       <Card>
         <CardHeader>

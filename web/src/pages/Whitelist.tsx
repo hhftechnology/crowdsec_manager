@@ -18,7 +18,7 @@ export default function Whitelist() {
   const [manualIP, setManualIP] = useState('')
   const [cidr, setCidr] = useState('')
   const [addToCrowdSec, setAddToCrowdSec] = useState(true)
-  const [addToTraefik, setAddToTraefik] = useState(true)
+  const [addToProxy, setAddToProxy] = useState(true)
 
   // Get deployment information
   const runningContainers = useRunningContainers()
@@ -137,7 +137,8 @@ export default function Whitelist() {
     whitelistManualMutation.mutate({
       ip: manualIP,
       add_to_crowdsec: addToCrowdSec,
-      add_to_traefik: showProxyOptions ? addToTraefik : false,
+      add_to_traefik: showProxyOptions ? addToProxy : false,
+      add_to_proxy: showProxyOptions ? addToProxy : false,
     })
   }
 
@@ -151,7 +152,8 @@ export default function Whitelist() {
       ip: '',
       cidr: cidr,
       add_to_crowdsec: addToCrowdSec,
-      add_to_traefik: showProxyOptions ? addToTraefik : false,
+      add_to_traefik: showProxyOptions ? addToProxy : false,
+      add_to_proxy: showProxyOptions ? addToProxy : false,
     })
   }
 
@@ -276,8 +278,8 @@ export default function Whitelist() {
                         </p>
                       </div>
                       <Switch
-                        checked={addToTraefik}
-                        onCheckedChange={setAddToTraefik}
+                        checked={addToProxy}
+                        onCheckedChange={setAddToProxy}
                       />
                     </div>
                   )}
@@ -342,8 +344,8 @@ export default function Whitelist() {
                         </p>
                       </div>
                       <Switch
-                        checked={addToTraefik}
-                        onCheckedChange={setAddToTraefik}
+                        checked={addToProxy}
+                        onCheckedChange={setAddToProxy}
                       />
                     </div>
                   )}

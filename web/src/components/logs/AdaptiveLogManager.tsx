@@ -98,9 +98,9 @@ export function AdaptiveLogManager({
           const response = await api.logs.getProxy(tailLines)
           return response.data.data
         } catch (error) {
-          // Fallback to specific proxy endpoints for backward compatibility
+          // Fallback to generic proxy log endpoint
           if (proxyType === 'traefik') {
-            const response = await api.logs.getTraefik(tailLines)
+            const response = await api.logs.getProxy(tailLines)
             return response.data.data
           } else if (proxyType === 'nginx') {
             const response = await api.logs.getService('nginx', tailLines)
@@ -130,9 +130,9 @@ export function AdaptiveLogManager({
           const response = await api.logs.analyzeProxy(tailLines)
           return response.data.data
         } catch (error) {
-          // Fallback to Traefik-specific endpoint for backward compatibility
+          // Fallback to generic proxy log analysis endpoint
           if (proxyType === 'traefik') {
-            const response = await api.logs.analyzeTraefikAdvanced(tailLines)
+            const response = await api.logs.analyzeProxy(tailLines)
             return response.data.data
           }
         }

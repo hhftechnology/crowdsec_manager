@@ -1,10 +1,12 @@
 package handlers
 
 import (
+	"crowdsec-manager/internal/api/dto"
 	"crowdsec-manager/internal/config"
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
 	"fmt"
+	"net/http"
 	"os"
 
 	"github.com/gin-gonic/gin"
@@ -18,10 +20,7 @@ func ValidateComplete(cfg *config.Config, dockerClient *docker.Client) gin.Handl
 		defer func() {
 			if r := recover(); r != nil {
 				logger.Error("Panic in ValidateComplete", "error", r)
-				c.JSON(500, gin.H{
-					"success": false,
-					"error":   fmt.Sprintf("Internal Panic: %v", r),
-				})
+				c.JSON(http.StatusInternalServerError, dto.ErrMsg(fmt.Sprintf("Internal Panic: %v", r)))
 			}
 		}()
 
@@ -30,18 +29,12 @@ func ValidateComplete(cfg *config.Config, dockerClient *docker.Client) gin.Handl
 		result, err := validator.ValidateComplete()
 		if err != nil {
 			logger.Error("Validation failed", "error", err)
-			c.JSON(500, gin.H{
-				"success": false,
-				"error":   err.Error(),
-			})
+			c.JSON(http.StatusInternalServerError, dto.Err(err))
 			return
 		}
 
 		logger.Info("Validation completed successfully", "valid", result.Valid, "overall_status", result.Summary.OverallStatus)
-		c.JSON(200, gin.H{
-			"success": true,
-			"data":    result,
-		})
+		c.JSON(http.StatusOK, dto.Success(result))
 	}
 }
 
@@ -53,10 +46,7 @@ func ValidateEnv(cfg *config.Config, dockerClient *docker.Client) gin.HandlerFun
 		validator := config.NewValidator(cfg, dockerClient.GetClient())
 		envValidation := validator.ValidateEnvironmentVariables()
 
-		c.JSON(200, gin.H{
-			"success": true,
-			"data":    envValidation,
-		})
+		c.JSON(http.StatusOK, dto.Success(envValidation))
 	}
 }
 
@@ -73,11 +63,10 @@ func GetEnvVars(cfg *config.Config) gin.HandlerFunc {
 			envVars[envVar] = os.Getenv(envVar)
 		}
 
-		c.JSON(200, gin.H{
-			"success":    true,
+		c.JSON(http.StatusOK, dto.Success(gin.H{
 			"proxy_type": cfg.ProxyType,
-			"data":       envVars,
-		})
+			"env_vars":   envVars,
+		}))
 	}
 }
 
@@ -96,15 +85,12 @@ func GetRequiredEnvVars(cfg *config.Config) gin.HandlerFunc {
 		tempCfg.ProxyType = proxyType
 		requirements := config.GetProxyRequirementsFromConfig(&tempCfg)
 
-		c.JSON(200, gin.H{
-			"success": true,
-			"data": gin.H{
-				"proxy_type": proxyType,
-				"required":   requirements.RequiredEnvVars,
-				"optional":   requirements.OptionalEnvVars,
-				"features":   requirements.Features,
-			},
-		})
+		c.JSON(http.StatusOK, dto.Success(gin.H{
+			"proxy_type": proxyType,
+			"required":   requirements.RequiredEnvVars,
+			"optional":   requirements.OptionalEnvVars,
+			"features":   requirements.Features,
+		}))
 	}
 }
 
@@ -115,10 +101,7 @@ func ValidateHostPaths(cfg *config.Config, dockerClient *docker.Client) gin.Hand
 		validator := config.NewValidator(cfg, dockerClient.GetClient())
 		result := validator.ValidateHostPaths()
 
-		c.JSON(200, gin.H{
-			"success": true,
-			"data":    result,
-		})
+		c.JSON(http.StatusOK, dto.Success(result))
 	}
 }
 
@@ -129,10 +112,7 @@ func ValidateVolumeMappings(cfg *config.Config, dockerClient *docker.Client) gin
 		validator := config.NewValidator(cfg, dockerClient.GetClient())
 		result := validator.ValidateVolumeMappings()
 
-		c.JSON(200, gin.H{
-			"success": true,
-			"data":    result,
-		})
+		c.JSON(http.StatusOK, dto.Success(result))
 	}
 }
 
@@ -143,10 +123,7 @@ func ValidateContainerPaths(cfg *config.Config, dockerClient *docker.Client) gin
 		validator := config.NewValidator(cfg, dockerClient.GetClient())
 		result := validator.ValidateContainerPaths()
 
-		c.JSON(200, gin.H{
-			"success": true,
-			"data":    result,
-		})
+		c.JSON(http.StatusOK, dto.Success(result))
 	}
 }
 
@@ -159,20 +136,14 @@ func GetSuggestions(cfg *config.Config, dockerClient *docker.Client) gin.Handler
 		// Run complete validation first
 		result, err := validator.ValidateComplete()
 		if err != nil {
-			c.JSON(500, gin.H{
-				"success": false,
-				"error":   err.Error(),
-			})
+			c.JSON(http.StatusInternalServerError, dto.Err(err))
 			return
 		}
 
-		c.JSON(200, gin.H{
-			"success": true,
-			"data": gin.H{
-				"suggestions": result.Suggestions,
-				"summary":     result.Summary,
-			},
-		})
+		c.JSON(http.StatusOK, dto.Success(gin.H{
+			"suggestions": result.Suggestions,
+			"summary":     result.Summary,
+		}))
 	}
 }
 
@@ -186,10 +157,7 @@ func GetProxyRequirements(cfg *config.Config) gin.HandlerFunc {
 		if proxyType == "" {
 			// Return all proxy requirements
 			allReqs := config.GetAllProxyRequirements()
-			c.JSON(200, gin.H{
-				"success": true,
-				"data":    allReqs,
-			})
+			c.JSON(http.StatusOK, dto.Success(allReqs))
 			return
 		}
 
@@ -197,10 +165,7 @@ func GetProxyRequirements(cfg *config.Config) gin.HandlerFunc {
 		tempCfg := *cfg
 		tempCfg.ProxyType = proxyType
 		requirements := config.GetProxyRequirementsFromConfig(&tempCfg)
-		c.JSON(200, gin.H{
-			"success": true,
-			"data":    requirements,
-		})
+		c.JSON(http.StatusOK, dto.Success(requirements))
 	}
 }
 
@@ -213,10 +178,7 @@ func ExportEnvFile(cfg *config.Config, dockerClient *docker.Client) gin.HandlerF
 		// Run complete validation
 		result, err := validator.ValidateComplete()
 		if err != nil {
-			c.JSON(500, gin.H{
-				"success": false,
-				"error":   err.Error(),
-			})
+			c.JSON(http.StatusInternalServerError, dto.Err(err))
 			return
 		}
 
@@ -227,7 +189,7 @@ func ExportEnvFile(cfg *config.Config, dockerClient *docker.Client) gin.HandlerF
 		// Return as downloadable file
 		c.Header("Content-Type", "text/plain")
 		c.Header("Content-Disposition", "attachment; filename=\".env\"")
-		c.String(200, envContent)
+		c.String(http.StatusOK, envContent)
 	}
 }
 
@@ -241,18 +203,12 @@ func TestPath() gin.HandlerFunc {
 		}
 
 		if err := c.BindJSON(&request); err != nil {
-			c.JSON(400, gin.H{
-				"success": false,
-				"error":   "Invalid request body",
-			})
+			c.JSON(http.StatusBadRequest, dto.ErrMsg("Invalid request body"))
 			return
 		}
 
 		if request.Path == "" {
-			c.JSON(400, gin.H{
-				"success": false,
-				"error":   "Path is required",
-			})
+			c.JSON(http.StatusBadRequest, dto.ErrMsg("Path is required"))
 			return
 		}
 
@@ -277,10 +233,7 @@ func TestPath() gin.HandlerFunc {
 			}
 		}
 
-		c.JSON(200, gin.H{
-			"success": true,
-			"data":    result,
-		})
+		c.JSON(http.StatusOK, dto.Success(result))
 	}
 }
 
@@ -292,10 +245,7 @@ func GetValidationSummary(cfg *config.Config, dockerClient *docker.Client) gin.H
 
 		result, err := validator.ValidateComplete()
 		if err != nil {
-			c.JSON(500, gin.H{
-				"success": false,
-				"error":   err.Error(),
-			})
+			c.JSON(http.StatusInternalServerError, dto.Err(err))
 			return
 		}
 
@@ -311,9 +261,6 @@ func GetValidationSummary(cfg *config.Config, dockerClient *docker.Client) gin.H
 			"timestamp":         result.Timestamp,
 		}
 
-		c.JSON(200, gin.H{
-			"success": true,
-			"data":    summary,
-		})
+		c.JSON(http.StatusOK, dto.Success(summary))
 	}
 }

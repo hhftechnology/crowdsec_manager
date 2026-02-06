@@ -6,15 +6,17 @@ import (
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/models"
 	"crowdsec-manager/internal/proxy"
+	adapterscommon "crowdsec-manager/internal/proxy/adapters/common"
 	"fmt"
 )
 
 // HAProxyAdapter implements ProxyAdapter for HAProxy with SPOA bouncer integration
 type HAProxyAdapter struct {
-	config       *proxy.ProxyConfig
-	dockerClient *docker.Client
-	cfg          *config.Config
-	
+	config        *proxy.ProxyConfig
+	dockerClient  *docker.Client
+	cfg           *config.Config
+	containerName string
+
 	// Feature managers
 	bouncerMgr *HAProxyBouncerManager
 }
@@ -45,65 +47,29 @@ func (h *HAProxyAdapter) SupportedFeatures() []proxy.Feature {
 // Initialize initializes the HAProxy adapter
 func (h *HAProxyAdapter) Initialize(ctx context.Context, cfg *proxy.ProxyConfig) error {
 	h.config = cfg
-	
-	// Extract Docker client and config from the proxy config
-	if dockerClient, ok := cfg.DockerClient.(*docker.Client); ok {
-		h.dockerClient = dockerClient
-	} else {
-		return fmt.Errorf("invalid docker client type")
+
+	deps, err := adapterscommon.BuildAdapterDependencies(cfg, "haproxy")
+	if err != nil {
+		return err
 	}
-	
-	// Create a config.Config from proxy config for compatibility
-	h.cfg = &config.Config{
-		CrowdsecContainerName: "crowdsec", // Default, should be configurable
-	}
-	
-	// Set container name
-	if cfg.ContainerName != "" {
-		// Store HAProxy container name in a custom field since config.Config doesn't have it
-		h.cfg.TraefikContainerName = cfg.ContainerName // Reuse field for HAProxy container
-	} else {
-		h.cfg.TraefikContainerName = "haproxy"
-	}
-	
-	// Initialize feature managers
+
+	h.dockerClient = deps.Client
+	h.cfg = deps.Config
+	h.containerName = deps.ContainerName
+
 	h.bouncerMgr = NewHAProxyBouncerManager(h.dockerClient, h.cfg)
-	
+
 	return nil
 }
 
 // HealthCheck performs a health check for HAProxy
 func (h *HAProxyAdapter) HealthCheck(ctx context.Context) (*models.HealthCheckItem, error) {
-	if h.dockerClient == nil || h.cfg == nil {
-		return &models.HealthCheckItem{
-			Status:  "unhealthy",
-			Message: "HAProxy adapter not properly initialized",
-			Error:   "Docker client or config is nil",
-		}, nil
+	if item, err := adapterscommon.CheckContainerRunning(h.dockerClient, h.containerName, "HAProxy"); item != nil || err != nil {
+		return item, err
 	}
-	
-	containerName := h.cfg.TraefikContainerName // Reused field for HAProxy container
-	
-	// Check if HAProxy container is running
-	isRunning, err := h.dockerClient.IsContainerRunning(containerName)
-	if err != nil {
-		return &models.HealthCheckItem{
-			Status:  "unhealthy",
-			Message: "Failed to check HAProxy container status",
-			Error:   fmt.Sprintf("Container check error: %v", err),
-		}, nil
-	}
-	
-	if !isRunning {
-		return &models.HealthCheckItem{
-			Status:  "unhealthy",
-			Message: "HAProxy container is not running",
-			Details: fmt.Sprintf("Container '%s' is stopped or not found", containerName),
-		}, nil
-	}
-	
+
 	// Check if HAProxy stats socket is accessible (if configured)
-	_, err = h.dockerClient.ExecCommand(containerName, []string{
+	_, err := h.dockerClient.ExecCommand(h.containerName, []string{
 		"sh", "-c", "echo 'show info' | socat stdio /var/run/haproxy/admin.sock",
 	})
 	if err != nil {
@@ -114,17 +80,14 @@ func (h *HAProxyAdapter) HealthCheck(ctx context.Context) (*models.HealthCheckIt
 			Error:   fmt.Sprintf("Stats socket error: %v", err),
 		}, nil
 	}
-	
-	return &models.HealthCheckItem{
-		Status:  "healthy",
-		Message: "HAProxy container is running and stats socket is accessible",
-		Details: fmt.Sprintf("Container: %s", containerName),
-		Metrics: map[string]interface{}{
-			"proxy_type":         "haproxy",
-			"container_name":     containerName,
-			"supported_features": h.SupportedFeatures(),
-		},
-	}, nil
+
+	return adapterscommon.BuildHealthyStatus(
+		"HAProxy",
+		proxy.ProxyTypeHAProxy,
+		h.containerName,
+		h.SupportedFeatures(),
+		map[string]interface{}{},
+	), nil
 }
 
 // WhitelistManager returns nil - HAProxy doesn't support programmatic whitelist management through this adapter
