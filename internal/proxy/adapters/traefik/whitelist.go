@@ -2,192 +2,216 @@ package traefik
 
 import (
 	"context"
-	"crowdsec-manager/internal/config"
-	"crowdsec-manager/internal/docker"
-	"crowdsec-manager/internal/logger"
-	"crowdsec-manager/internal/validation"
 	"fmt"
-	"regexp"
-	"strings"
+	"time"
+
+	"github.com/crowdsecurity/crowdsec-manager/internal/config"
+	"github.com/crowdsecurity/crowdsec-manager/internal/docker"
+	"github.com/crowdsecurity/crowdsec-manager/internal/proxy"
+	"gopkg.in/yaml.v3"
 )
 
-// TraefikWhitelistManager implements WhitelistManager for Traefik
-type TraefikWhitelistManager struct {
-	dockerClient *docker.Client
-	cfg          *config.Config
+// WhitelistMgr manages the Traefik ipAllowList middleware configuration.
+type WhitelistMgr struct {
+	docker *docker.Client
+	cfg    *config.Config
+	paths  config.ProxyPaths
 }
 
-// NewTraefikWhitelistManager creates a new Traefik whitelist manager
-func NewTraefikWhitelistManager(dockerClient *docker.Client, cfg *config.Config) *TraefikWhitelistManager {
-	return &TraefikWhitelistManager{
-		dockerClient: dockerClient,
-		cfg:          cfg,
-	}
+// traefikDynamicConfig is used for reading/writing the dynamic YAML.
+type traefikDynamicConfig struct {
+	HTTP struct {
+		Middlewares map[string]interface{} `yaml:"middlewares,omitempty"`
+	} `yaml:"http"`
 }
 
-// ensureDynamicConfigWritable verifies that the dynamic config file can be edited inside the Traefik container.
-// This protects against read-only mounts (e.g., volume mounted with :ro) which would cause sed -i to fail.
-func (t *TraefikWhitelistManager) ensureDynamicConfigWritable() error {
-	if t.cfg.Paths.TraefikDynamicConfig == "" {
-		return fmt.Errorf("traefik dynamic config path is empty; set TRAEFIK_DYNAMIC_CONFIG")
-	}
-
-	_, err := t.dockerClient.ExecCommand(t.cfg.TraefikContainerName, []string{
-		"sh", "-c", fmt.Sprintf("test -w %q", t.cfg.Paths.TraefikDynamicConfig),
-	})
+func (m *WhitelistMgr) List(ctx context.Context) ([]proxy.WhitelistEntry, error) {
+	ips, err := m.readSourceRange(ctx)
 	if err != nil {
-		return fmt.Errorf(
-			"traefik dynamic config %s is not writable inside container %s: %w. Ensure the file/volume is mounted read-write (remove :ro) or point TRAEFIK_DYNAMIC_CONFIG to a writable path.",
-			t.cfg.Paths.TraefikDynamicConfig,
-			t.cfg.TraefikContainerName,
-			err,
-		)
+		return nil, err
 	}
 
-	return nil
+	entries := make([]proxy.WhitelistEntry, 0, len(ips))
+	for _, ip := range ips {
+		entries = append(entries, proxy.WhitelistEntry{
+			IP:     ip,
+			Source: "traefik",
+		})
+	}
+	return entries, nil
 }
 
-// ViewWhitelist returns all whitelisted IPs from Traefik dynamic configuration
-func (t *TraefikWhitelistManager) ViewWhitelist(ctx context.Context) ([]string, error) {
-	logger.Info("Viewing Traefik whitelist", "config_path", t.cfg.Paths.TraefikDynamicConfig)
-
-	// Get Traefik whitelist from dynamic config using configured path
-	traefikWL, err := t.dockerClient.ExecCommand(t.cfg.TraefikContainerName, []string{
-		"cat", t.cfg.Paths.TraefikDynamicConfig,
-	})
+func (m *WhitelistMgr) Add(ctx context.Context, entry proxy.WhitelistEntry) error {
+	ips, err := m.readSourceRange(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read Traefik dynamic config at %s: %w", t.cfg.Paths.TraefikDynamicConfig, err)
-	}
-
-	return t.parseTraefikWhitelist(traefikWL), nil
-}
-
-// AddIP adds an IP address to the Traefik whitelist
-func (t *TraefikWhitelistManager) AddIP(ctx context.Context, ip string) error {
-	logger.Info("Adding IP to Traefik whitelist", "ip", ip, "config_path", t.cfg.Paths.TraefikDynamicConfig)
-
-	if err := t.ensureDynamicConfigWritable(); err != nil {
 		return err
 	}
 
-	sanitizedIP := validation.SanitizeForShell(ip)
-	if sanitizedIP == "" {
-		return fmt.Errorf("invalid IP address provided")
-	}
-
-	// Update Traefik dynamic config using sed to add IP to sourceRange
-	// Uses configured path instead of hardcoded path
-	_, err := t.dockerClient.ExecCommand(t.cfg.TraefikContainerName, []string{
-		"sh", "-c", fmt.Sprintf(`sed -i '/sourceRange:/a\        - %s' %q`, sanitizedIP, t.cfg.Paths.TraefikDynamicConfig),
-	})
-	if err != nil {
-		return fmt.Errorf("failed to add IP to Traefik whitelist at %s: %w", t.cfg.Paths.TraefikDynamicConfig, err)
-	}
-
-	logger.Info("IP added to Traefik whitelist successfully", "ip", ip)
-	return nil
-}
-
-// RemoveIP removes an IP address from the Traefik whitelist
-func (t *TraefikWhitelistManager) RemoveIP(ctx context.Context, ip string) error {
-	logger.Info("Removing IP from Traefik whitelist", "ip", ip, "config_path", t.cfg.Paths.TraefikDynamicConfig)
-
-	if err := t.ensureDynamicConfigWritable(); err != nil {
-		return err
-	}
-
-	sanitizedIP := validation.SanitizeForShell(ip)
-	if sanitizedIP == "" {
-		return fmt.Errorf("invalid IP address provided")
-	}
-
-	// Use sed to remove the specific IP from the dynamic config
-	// Uses configured path instead of hardcoded path
-	_, err := t.dockerClient.ExecCommand(t.cfg.TraefikContainerName, []string{
-		"sh", "-c", fmt.Sprintf(`sed -i '/^\s*-\s*%s\s*$/d' %q`, regexp.QuoteMeta(sanitizedIP), t.cfg.Paths.TraefikDynamicConfig),
-	})
-	if err != nil {
-		return fmt.Errorf("failed to remove IP from Traefik whitelist at %s: %w", t.cfg.Paths.TraefikDynamicConfig, err)
-	}
-
-	logger.Info("IP removed from Traefik whitelist successfully", "ip", ip)
-	return nil
-}
-
-// AddCIDR adds a CIDR range to the Traefik whitelist
-func (t *TraefikWhitelistManager) AddCIDR(ctx context.Context, cidr string) error {
-	logger.Info("Adding CIDR to Traefik whitelist", "cidr", cidr, "config_path", t.cfg.Paths.TraefikDynamicConfig)
-
-	if err := t.ensureDynamicConfigWritable(); err != nil {
-		return err
-	}
-
-	sanitizedCIDR := validation.SanitizeForShell(cidr)
-	if sanitizedCIDR == "" {
-		return fmt.Errorf("invalid CIDR value provided")
-	}
-
-	// Update Traefik dynamic config using sed to add CIDR to sourceRange
-	// Uses configured path instead of hardcoded path
-	_, err := t.dockerClient.ExecCommand(t.cfg.TraefikContainerName, []string{
-		"sh", "-c", fmt.Sprintf(`sed -i '/sourceRange:/a\        - %s' %q`, sanitizedCIDR, t.cfg.Paths.TraefikDynamicConfig),
-	})
-	if err != nil {
-		return fmt.Errorf("failed to add CIDR to Traefik whitelist at %s: %w", t.cfg.Paths.TraefikDynamicConfig, err)
-	}
-
-	logger.Info("CIDR added to Traefik whitelist successfully", "cidr", cidr)
-	return nil
-}
-
-// RemoveCIDR removes a CIDR range from the Traefik whitelist
-func (t *TraefikWhitelistManager) RemoveCIDR(ctx context.Context, cidr string) error {
-	logger.Info("Removing CIDR from Traefik whitelist", "cidr", cidr, "config_path", t.cfg.Paths.TraefikDynamicConfig)
-
-	if err := t.ensureDynamicConfigWritable(); err != nil {
-		return err
-	}
-
-	sanitizedCIDR := validation.SanitizeForShell(cidr)
-	if sanitizedCIDR == "" {
-		return fmt.Errorf("invalid CIDR value provided")
-	}
-
-	// Use sed to remove the specific CIDR from the dynamic config
-	// Uses configured path instead of hardcoded path
-	_, err := t.dockerClient.ExecCommand(t.cfg.TraefikContainerName, []string{
-		"sh", "-c", fmt.Sprintf(`sed -i '/^\s*-\s*%s\s*$/d' %q`, regexp.QuoteMeta(sanitizedCIDR), t.cfg.Paths.TraefikDynamicConfig),
-	})
-	if err != nil {
-		return fmt.Errorf("failed to remove CIDR from Traefik whitelist at %s: %w", t.cfg.Paths.TraefikDynamicConfig, err)
-	}
-
-	logger.Info("CIDR removed from Traefik whitelist successfully", "cidr", cidr)
-	return nil
-}
-
-// parseTraefikWhitelist parses Traefik whitelist configuration and extracts IPs/CIDRs
-func (t *TraefikWhitelistManager) parseTraefikWhitelist(content string) []string {
-	ips := []string{}
-	lines := strings.Split(content, "\n")
-
-	ipRegex := regexp.MustCompile(`^\s*-\s+([0-9\.\/]+)`)
-	inSourceRange := false
-
-	for _, line := range lines {
-		if strings.Contains(line, "sourceRange:") {
-			inSourceRange = true
-			continue
-		}
-
-		if inSourceRange {
-			if matches := ipRegex.FindStringSubmatch(line); len(matches) > 1 {
-				ips = append(ips, matches[1])
-			} else if !strings.HasPrefix(strings.TrimSpace(line), "-") {
-				inSourceRange = false
-			}
+	// Check for duplicates.
+	for _, existing := range ips {
+		if existing == entry.IP {
+			return nil
 		}
 	}
 
-	return ips
+	entry.AddedAt = time.Now().UTC().Format(time.RFC3339)
+	ips = append(ips, entry.IP)
+	return m.writeSourceRange(ctx, ips)
+}
+
+func (m *WhitelistMgr) Remove(ctx context.Context, ip string) error {
+	ips, err := m.readSourceRange(ctx)
+	if err != nil {
+		return err
+	}
+
+	filtered := make([]string, 0, len(ips))
+	for _, existing := range ips {
+		if existing != ip {
+			filtered = append(filtered, existing)
+		}
+	}
+
+	return m.writeSourceRange(ctx, filtered)
+}
+
+func (m *WhitelistMgr) readSourceRange(ctx context.Context) ([]string, error) {
+	data, err := m.docker.ReadFileFromContainer(ctx, m.cfg.ProxyContainer, m.paths.DynamicConfig)
+	if err != nil {
+		return nil, fmt.Errorf("read dynamic config: %w", err)
+	}
+
+	var doc yaml.Node
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		return nil, fmt.Errorf("parse dynamic config YAML: %w", err)
+	}
+
+	// Navigate: http -> middlewares -> crowdsec-whitelist -> ipAllowList -> sourceRange
+	ips, _ := extractSourceRange(&doc)
+	return ips, nil
+}
+
+func (m *WhitelistMgr) writeSourceRange(ctx context.Context, ips []string) error {
+	data, err := m.docker.ReadFileFromContainer(ctx, m.cfg.ProxyContainer, m.paths.DynamicConfig)
+	if err != nil {
+		// If file doesn't exist, create a new one.
+		data = []byte("{}")
+	}
+
+	var doc yaml.Node
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		return fmt.Errorf("parse dynamic config: %w", err)
+	}
+
+	setSourceRange(&doc, ips)
+
+	out, err := yaml.Marshal(&doc)
+	if err != nil {
+		return fmt.Errorf("marshal dynamic config: %w", err)
+	}
+
+	return m.docker.WriteFileToContainer(ctx, m.cfg.ProxyContainer, m.paths.DynamicConfig, out)
+}
+
+// extractSourceRange walks the YAML node tree to find sourceRange values.
+func extractSourceRange(doc *yaml.Node) ([]string, bool) {
+	if doc == nil || len(doc.Content) == 0 {
+		return nil, false
+	}
+	root := doc.Content[0]
+
+	httpNode := findMapValue(root, "http")
+	if httpNode == nil {
+		return nil, false
+	}
+	mwNode := findMapValue(httpNode, "middlewares")
+	if mwNode == nil {
+		return nil, false
+	}
+	wlNode := findMapValue(mwNode, "crowdsec-whitelist")
+	if wlNode == nil {
+		return nil, false
+	}
+	allowNode := findMapValue(wlNode, "ipAllowList")
+	if allowNode == nil {
+		return nil, false
+	}
+	srNode := findMapValue(allowNode, "sourceRange")
+	if srNode == nil || srNode.Kind != yaml.SequenceNode {
+		return nil, false
+	}
+
+	ips := make([]string, 0, len(srNode.Content))
+	for _, n := range srNode.Content {
+		ips = append(ips, n.Value)
+	}
+	return ips, true
+}
+
+// setSourceRange updates or creates the sourceRange in the YAML tree.
+func setSourceRange(doc *yaml.Node, ips []string) {
+	if doc == nil || len(doc.Content) == 0 {
+		doc.Kind = yaml.DocumentNode
+		doc.Content = []*yaml.Node{{Kind: yaml.MappingNode}}
+	}
+	root := doc.Content[0]
+
+	httpNode := findOrCreateMap(root, "http")
+	mwNode := findOrCreateMap(httpNode, "middlewares")
+	wlNode := findOrCreateMap(mwNode, "crowdsec-whitelist")
+	allowNode := findOrCreateMap(wlNode, "ipAllowList")
+
+	// Build the sourceRange sequence.
+	seqNode := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
+	for _, ip := range ips {
+		seqNode.Content = append(seqNode.Content, &yaml.Node{
+			Kind:  yaml.ScalarNode,
+			Value: ip,
+			Tag:   "!!str",
+		})
+	}
+
+	setMapValue(allowNode, "sourceRange", seqNode)
+}
+
+func findMapValue(node *yaml.Node, key string) *yaml.Node {
+	if node == nil || node.Kind != yaml.MappingNode {
+		return nil
+	}
+	for i := 0; i < len(node.Content)-1; i += 2 {
+		if node.Content[i].Value == key {
+			return node.Content[i+1]
+		}
+	}
+	return nil
+}
+
+func findOrCreateMap(parent *yaml.Node, key string) *yaml.Node {
+	if parent.Kind != yaml.MappingNode {
+		parent.Kind = yaml.MappingNode
+		parent.Tag = "!!map"
+	}
+	for i := 0; i < len(parent.Content)-1; i += 2 {
+		if parent.Content[i].Value == key {
+			return parent.Content[i+1]
+		}
+	}
+	// Create the key and an empty mapping value.
+	keyNode := &yaml.Node{Kind: yaml.ScalarNode, Value: key, Tag: "!!str"}
+	valNode := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+	parent.Content = append(parent.Content, keyNode, valNode)
+	return valNode
+}
+
+func setMapValue(parent *yaml.Node, key string, value *yaml.Node) {
+	for i := 0; i < len(parent.Content)-1; i += 2 {
+		if parent.Content[i].Value == key {
+			parent.Content[i+1] = value
+			return
+		}
+	}
+	parent.Content = append(parent.Content,
+		&yaml.Node{Kind: yaml.ScalarNode, Value: key, Tag: "!!str"},
+		value,
+	)
 }

@@ -1,498 +1,251 @@
 package docker
 
 import (
+	"archive/tar"
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
-	"regexp"
+	"log/slog"
 	"strings"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/filters"
-	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
 )
 
-// Client wraps the Docker SDK client with convenience methods for container management
-type Client struct {
-	cli *client.Client
-	ctx context.Context
+// ContainerInfo holds summarized container state.
+type ContainerInfo struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Image  string `json:"image"`
+	State  string `json:"state"`
+	Status string `json:"status"`
+	Health string `json:"health"`
 }
 
-// NewClient creates a new Docker API client with automatic version negotiation
-// Uses environment variables (DOCKER_HOST, DOCKER_API_VERSION, etc.) if set
+// Client wraps the Docker SDK client.
+type Client struct {
+	cli *client.Client
+}
+
+// NewClient creates a Docker client from the default environment.
 func NewClient() (*Client, error) {
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
-		return nil, fmt.Errorf("failed to create docker client: %w", err)
+		return nil, fmt.Errorf("create docker client: %w", err)
 	}
-
-	return &Client{
-		cli: cli,
-		ctx: context.Background(),
-	}, nil
+	slog.Info("docker client initialized")
+	return &Client{cli: cli}, nil
 }
 
-// Close gracefully closes the Docker client connection
+// Close closes the underlying Docker client.
 func (c *Client) Close() error {
 	return c.cli.Close()
 }
 
-// GetClient returns the underlying Docker SDK client for direct API access
-func (c *Client) GetClient() *client.Client {
-	return c.cli
-}
-
-// Ping verifies connectivity to the Docker daemon
-func (c *Client) Ping() error {
-	_, err := c.cli.Ping(c.ctx)
-	return err
-}
-
-// ContainerExists checks if a container with the given name exists (running or stopped)
-func (c *Client) ContainerExists(name string) (bool, error) {
-	containers, err := c.cli.ContainerList(c.ctx, container.ListOptions{
-		All: true,
-		Filters: filters.NewArgs(
-			filters.Arg("name", "^/"+name+"$"),
-		),
-	})
+// ListContainers returns info for all running containers.
+func (c *Client) ListContainers(ctx context.Context) ([]ContainerInfo, error) {
+	containers, err := c.cli.ContainerList(ctx, container.ListOptions{All: true})
 	if err != nil {
-		return false, err
+		return nil, fmt.Errorf("list containers: %w", err)
 	}
-	return len(containers) > 0, nil
+
+	result := make([]ContainerInfo, 0, len(containers))
+	for _, ctr := range containers {
+		name := ""
+		if len(ctr.Names) > 0 {
+			name = strings.TrimPrefix(ctr.Names[0], "/")
+		}
+		health := ""
+		if ctr.Status != "" && strings.Contains(ctr.Status, "(") {
+			// Extract health from status like "Up 5 hours (healthy)"
+			if idx := strings.Index(ctr.Status, "("); idx != -1 {
+				end := strings.Index(ctr.Status[idx:], ")")
+				if end != -1 {
+					health = ctr.Status[idx+1 : idx+end]
+				}
+			}
+		}
+		result = append(result, ContainerInfo{
+			ID:     ctr.ID[:12],
+			Name:   name,
+			Image:  ctr.Image,
+			State:  ctr.State,
+			Status: ctr.Status,
+			Health: health,
+		})
+	}
+	return result, nil
 }
 
-// IsContainerRunning checks if a container is running
-func (c *Client) IsContainerRunning(name string) (bool, error) {
-	containers, err := c.cli.ContainerList(c.ctx, container.ListOptions{
-		Filters: filters.NewArgs(
-			filters.Arg("name", "^/"+name+"$"),
-			filters.Arg("status", "running"),
-		),
-	})
+// InspectContainer returns details for a single container by name.
+func (c *Client) InspectContainer(ctx context.Context, name string) (*ContainerInfo, error) {
+	ctr, err := c.cli.ContainerInspect(ctx, name)
 	if err != nil {
-		return false, err
+		return nil, fmt.Errorf("inspect container %q: %w", name, err)
 	}
-	return len(containers) > 0, nil
+
+	health := ""
+	if ctr.State.Health != nil {
+		health = string(ctr.State.Health.Status)
+	}
+
+	return &ContainerInfo{
+		ID:     ctr.ID[:12],
+		Name:   strings.TrimPrefix(ctr.Name, "/"),
+		Image:  ctr.Config.Image,
+		State:  ctr.State.Status,
+		Status: ctr.State.Status,
+		Health: health,
+	}, nil
 }
 
-// GetContainerID gets the container ID by name
-func (c *Client) GetContainerID(name string) (string, error) {
-	containers, err := c.cli.ContainerList(c.ctx, container.ListOptions{
-		All: true,
-		Filters: filters.NewArgs(
-			filters.Arg("name", "^/"+name+"$"),
-		),
-	})
-	if err != nil {
-		return "", err
-	}
-	if len(containers) == 0 {
-		return "", fmt.Errorf("container %s not found", name)
-	}
-	return containers[0].ID, nil
+// StartContainer starts a stopped container.
+func (c *Client) StartContainer(ctx context.Context, name string) error {
+	return c.cli.ContainerStart(ctx, name, container.StartOptions{})
 }
 
-// ExecCommand executes a command inside a running container and returns stdout
-// Critical for running CrowdSec CLI commands (cscli) for managing decisions, bouncers, etc.
-// Properly handles Docker stream protocol to avoid corrupted JSON output
-func (c *Client) ExecCommand(containerName string, cmd []string) (string, error) {
-	containerID, err := c.GetContainerID(containerName)
-	if err != nil {
-		return "", err
-	}
+// StopContainer stops a running container with a 30-second timeout.
+func (c *Client) StopContainer(ctx context.Context, name string) error {
+	timeout := 30
+	return c.cli.ContainerStop(ctx, name, container.StopOptions{Timeout: &timeout})
+}
 
-	// Configure exec without TTY to prevent control characters in output
-	// This is critical for commands that return JSON (like cscli)
-	execConfig := container.ExecOptions{
+// RestartContainer restarts a container with a 30-second timeout.
+func (c *Client) RestartContainer(ctx context.Context, name string) error {
+	timeout := 30
+	return c.cli.ContainerRestart(ctx, name, container.StopOptions{Timeout: &timeout})
+}
+
+// ExecInContainer executes a command inside a container and returns combined output.
+// CRITICAL: cmd is a string slice — no shell interpolation occurs.
+func (c *Client) ExecInContainer(ctx context.Context, containerName string, cmd []string) (string, error) {
+	execCfg := types.ExecConfig{
+		Cmd:          cmd,
 		AttachStdout: true,
 		AttachStderr: true,
-		Tty:          false,
-		Cmd:          cmd,
-		Env:          []string{"TERM=dumb", "NO_COLOR=1"},
 	}
 
-	execIDResp, err := c.cli.ContainerExecCreate(c.ctx, containerID, execConfig)
+	execID, err := c.cli.ContainerExecCreate(ctx, containerName, execCfg)
 	if err != nil {
-		return "", fmt.Errorf("failed to create exec: %w", err)
+		return "", fmt.Errorf("exec create in %q: %w", containerName, err)
 	}
 
-	// Attach to exec
-	attachResp, err := c.cli.ContainerExecAttach(c.ctx, execIDResp.ID, container.ExecStartOptions{})
+	resp, err := c.cli.ContainerExecAttach(ctx, execID.ID, types.ExecStartCheck{})
 	if err != nil {
-		return "", fmt.Errorf("failed to attach to exec: %w", err)
+		return "", fmt.Errorf("exec attach in %q: %w", containerName, err)
 	}
-	defer attachResp.Close()
+	defer resp.Close()
 
-	// Use stdcopy to properly demultiplex Docker's stream protocol
-	// This removes the 8-byte headers that Docker adds to stdout/stderr
 	var stdout, stderr bytes.Buffer
-	if _, err := stdcopy.StdCopy(&stdout, &stderr, attachResp.Reader); err != nil {
-		return "", fmt.Errorf("failed to demultiplex exec output: %w", err)
+	if _, err := stdcopy.StdCopy(&stdout, &stderr, resp.Reader); err != nil {
+		return "", fmt.Errorf("read exec output: %w", err)
 	}
 
-	// Inspect the exec instance to get the exit code
-	inspect, err := c.cli.ContainerExecInspect(c.ctx, execIDResp.ID)
+	// Check exit code.
+	inspect, err := c.cli.ContainerExecInspect(ctx, execID.ID)
 	if err != nil {
-		return stripControlCharacters(stdout.String()), fmt.Errorf("failed to inspect exec: %w", err)
+		return stdout.String(), fmt.Errorf("exec inspect: %w", err)
 	}
-
-	// Return stdout output, log stderr if present but exit code is 0
 	if inspect.ExitCode != 0 {
-		errMsg := stderr.String()
-		if errMsg == "" {
-			errMsg = fmt.Sprintf("command failed with exit code %d", inspect.ExitCode)
-		}
-		return stripControlCharacters(stdout.String()), fmt.Errorf("command failed (exit code %d): %s", inspect.ExitCode, errMsg)
+		return stdout.String(), fmt.Errorf("command exited with code %d: %s", inspect.ExitCode, stderr.String())
 	}
 
-	return stripControlCharacters(stdout.String()), nil
+	return stdout.String(), nil
 }
 
-// Regex to match ANSI escape codes
-var ansiRegex = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
-
-// stripControlCharacters removes ANSI escape codes and control characters from command output
-// Essential for commands returning JSON to prevent parsing errors
-// Pre-allocates buffer for better performance
-func stripControlCharacters(s string) string {
-	// First strip ANSI codes
-	s = ansiRegex.ReplaceAllString(s, "")
-
-	var result strings.Builder
-	result.Grow(len(s))
-
-	for _, r := range s {
-		// Keep printable characters and whitespace (newline, carriage return, tab)
-		// Filter out control characters that can corrupt JSON/structured output
-		if r >= 32 || r == '\n' || r == '\r' || r == '\t' {
-			result.WriteRune(r)
-		}
-	}
-
-	return result.String()
-}
-
-// GetContainerLogs retrieves and returns container logs with optional tail limit
-func (c *Client) GetContainerLogs(containerName string, tail string) (string, error) {
-	containerID, err := c.GetContainerID(containerName)
+// ReadFileFromContainer copies a file out of a container and returns its contents.
+func (c *Client) ReadFileFromContainer(ctx context.Context, containerName, path string) ([]byte, error) {
+	reader, _, err := c.cli.CopyFromContainer(ctx, containerName, path)
 	if err != nil {
-		return "", err
-	}
-
-	options := container.LogsOptions{
-		ShowStdout: true,
-		ShowStderr: true,
-		Tail:       tail,
-	}
-
-	logs, err := c.cli.ContainerLogs(c.ctx, containerID, options)
-	if err != nil {
-		return "", fmt.Errorf("failed to get logs: %w", err)
-	}
-	defer logs.Close()
-
-	// Use stdcopy to properly demultiplex Docker's log stream protocol
-	// This removes the 8-byte headers that Docker adds to each log line
-	var stdout, stderr bytes.Buffer
-	_, err = stdcopy.StdCopy(&stdout, &stderr, logs)
-	if err != nil && err != io.EOF {
-		return "", fmt.Errorf("failed to demultiplex logs: %w", err)
-	}
-
-	// Combine stdout and stderr, marking stderr lines if needed
-	var result strings.Builder
-	stdoutStr := stdout.String()
-	stderrStr := stderr.String()
-
-	if len(stdoutStr) > 0 {
-		result.WriteString(stdoutStr)
-	}
-
-	if len(stderrStr) > 0 {
-		if len(stdoutStr) > 0 && !strings.HasSuffix(stdoutStr, "\n") {
-			result.WriteString("\n")
-		}
-		result.WriteString(stderrStr)
-	}
-
-	// Strip control characters and clean up the output
-	return stripControlCharacters(result.String()), nil
-}
-
-// RestartContainer restarts a container with default 30-second timeout
-func (c *Client) RestartContainer(name string) error {
-	return c.RestartContainerWithTimeout(name, 30)
-}
-
-// RestartContainerWithTimeout restarts a container with configurable graceful shutdown timeout
-func (c *Client) RestartContainerWithTimeout(name string, timeoutSecs int) error {
-	containerID, err := c.GetContainerID(name)
-	if err != nil {
-		return err
-	}
-
-	return c.cli.ContainerRestart(c.ctx, containerID, container.StopOptions{
-		Timeout: &timeoutSecs,
-	})
-}
-
-// StopContainer stops a container
-func (c *Client) StopContainer(name string) error {
-	return c.StopContainerWithTimeout(name, 30)
-}
-
-// StopContainerWithTimeout stops a container with a custom timeout
-func (c *Client) StopContainerWithTimeout(name string, timeoutSecs int) error {
-	containerID, err := c.GetContainerID(name)
-	if err != nil {
-		return err
-	}
-
-	return c.cli.ContainerStop(c.ctx, containerID, container.StopOptions{
-		Timeout: &timeoutSecs,
-	})
-}
-
-// StartContainer starts a container
-func (c *Client) StartContainer(name string) error {
-	containerID, err := c.GetContainerID(name)
-	if err != nil {
-		return err
-	}
-
-	return c.cli.ContainerStart(c.ctx, containerID, container.StartOptions{})
-}
-
-// ListContainers lists all containers
-func (c *Client) ListContainers(all bool) ([]types.Container, error) {
-	return c.cli.ContainerList(c.ctx, container.ListOptions{All: all})
-}
-
-// CopyFromContainer copies a file from a container
-func (c *Client) CopyFromContainer(containerName, srcPath string) (io.ReadCloser, error) {
-	containerID, err := c.GetContainerID(containerName)
-	if err != nil {
-		return nil, err
-	}
-
-	reader, _, err := c.cli.CopyFromContainer(c.ctx, containerID, srcPath)
-	return reader, err
-}
-
-// CopyToContainer copies a file to a container
-func (c *Client) CopyToContainer(containerName, dstPath string, content io.Reader) error {
-	containerID, err := c.GetContainerID(containerName)
-	if err != nil {
-		return err
-	}
-
-	return c.cli.CopyToContainer(c.ctx, containerID, dstPath, content, container.CopyToContainerOptions{})
-}
-
-// GetContainerStats gets container statistics
-func (c *Client) GetContainerStats(name string) (*container.StatsResponse, error) {
-	containerID, err := c.GetContainerID(name)
-	if err != nil {
-		return nil, err
-	}
-
-	stats, err := c.cli.ContainerStats(c.ctx, containerID, false)
-	if err != nil {
-		return nil, err
-	}
-	defer stats.Body.Close()
-
-	var statsJSON container.StatsResponse
-	if err := json.NewDecoder(stats.Body).Decode(&statsJSON); err != nil {
-		return nil, err
-	}
-
-	return &statsJSON, nil
-}
-
-// InspectContainer inspects a container
-func (c *Client) InspectContainer(name string) (*types.ContainerJSON, error) {
-	containerID, err := c.GetContainerID(name)
-	if err != nil {
-		return nil, err
-	}
-
-	inspect, err := c.cli.ContainerInspect(c.ctx, containerID)
-	if err != nil {
-		return nil, err
-	}
-
-	return &inspect, nil
-}
-
-// GetContext returns the context
-func (c *Client) GetContext() context.Context {
-	return c.ctx
-}
-
-// FileExists checks if a file or directory exists inside a container
-func (c *Client) FileExists(containerName, path string) (bool, error) {
-	containerID, err := c.GetContainerID(containerName)
-	if err != nil {
-		return false, err
-	}
-
-	_, _, err = c.cli.CopyFromContainer(c.ctx, containerID, path)
-	if err != nil {
-		if strings.Contains(err.Error(), "No such container:path") ||
-			strings.Contains(err.Error(), "not found") {
-			return false, nil
-		}
-		return false, err
-	}
-
-	return true, nil
-}
-
-// GetHostMountPath maps a container path to its corresponding host mount path
-// Useful for accessing container files from the host filesystem
-// Returns: (hostPath, found, error)
-func (c *Client) GetHostMountPath(containerName, containerPath string) (string, bool, error) {
-	inspect, err := c.InspectContainer(containerName)
-	if err != nil {
-		return "", false, err
-	}
-
-	// Check mounts for the container path
-	for _, mount := range inspect.Mounts {
-		// Check if the container path starts with or matches this mount destination
-		if strings.HasPrefix(containerPath, mount.Destination) {
-			// Calculate the relative path within the mount
-			relativePath := strings.TrimPrefix(containerPath, mount.Destination)
-			hostPath := mount.Source + relativePath
-			return hostPath, true, nil
-		}
-	}
-
-	return "", false, nil
-}
-
-// ValidateImageTag verifies that an image:tag exists locally or in the registry
-// Checks local cache first, then queries registry without pulling
-func (c *Client) ValidateImageTag(imageName, tag string) error {
-	// Construct full image reference
-	fullImage := imageName + ":" + tag
-
-	// Try to inspect the image from registry
-	// This will validate against Docker Hub or any configured registry
-	_, _, err := c.cli.ImageInspectWithRaw(c.ctx, fullImage)
-	if err == nil {
-		// Image exists locally, that's good enough
-		return nil
-	}
-
-	// Image doesn't exist locally, try to get info from registry
-	// Use DistributionInspect which queries the registry without pulling
-	_, err = c.cli.DistributionInspect(c.ctx, fullImage, "")
-	if err != nil {
-		return fmt.Errorf("tag '%s' not found for image '%s': %w", tag, imageName, err)
-	}
-
-	return nil
-}
-
-// PullImage downloads a Docker image from the registry
-// Blocks until pull completes or fails
-func (c *Client) PullImage(imageName, tag string) error {
-	fullImage := imageName + ":" + tag
-
-	reader, err := c.cli.ImagePull(c.ctx, fullImage, image.PullOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to pull image %s: %w", fullImage, err)
+		return nil, fmt.Errorf("copy from container %q path %q: %w", containerName, path, err)
 	}
 	defer reader.Close()
 
-	// Read the response to ensure the pull completes
-	_, err = io.Copy(io.Discard, reader)
-	if err != nil {
-		return fmt.Errorf("error reading pull response for %s: %w", fullImage, err)
+	tr := tar.NewReader(reader)
+	if _, err := tr.Next(); err != nil {
+		return nil, fmt.Errorf("read tar header: %w", err)
 	}
 
-	return nil
+	data, err := io.ReadAll(tr)
+	if err != nil {
+		return nil, fmt.Errorf("read file content: %w", err)
+	}
+	return data, nil
 }
 
-// RecreateContainer stops, removes, and recreates a container with a new image
-func (c *Client) RecreateContainer(name string) error {
-	containerID, err := c.GetContainerID(name)
-	if err != nil {
-		return err
+// WriteFileToContainer writes content to a file inside a container via tar archive.
+func (c *Client) WriteFileToContainer(ctx context.Context, containerName, path string, content []byte) error {
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+
+	// Determine the file name from the path.
+	parts := strings.Split(path, "/")
+	fileName := parts[len(parts)-1]
+	dir := strings.Join(parts[:len(parts)-1], "/")
+
+	if err := tw.WriteHeader(&tar.Header{
+		Name: fileName,
+		Mode: 0o644,
+		Size: int64(len(content)),
+	}); err != nil {
+		return fmt.Errorf("write tar header: %w", err)
 	}
 
-	// Get container configuration before stopping
-	inspect, err := c.cli.ContainerInspect(c.ctx, containerID)
-	if err != nil {
-		return fmt.Errorf("failed to inspect container: %w", err)
+	if _, err := tw.Write(content); err != nil {
+		return fmt.Errorf("write tar content: %w", err)
+	}
+	if err := tw.Close(); err != nil {
+		return fmt.Errorf("close tar writer: %w", err)
 	}
 
-	// Stop the container
-	timeout := 30
-	if err := c.cli.ContainerStop(c.ctx, containerID, container.StopOptions{Timeout: &timeout}); err != nil {
-		return fmt.Errorf("failed to stop container: %w", err)
-	}
-
-	// Remove the container
-	if err := c.cli.ContainerRemove(c.ctx, containerID, container.RemoveOptions{}); err != nil {
-		return fmt.Errorf("failed to remove container: %w", err)
-	}
-
-	// Create new container with same configuration but new image
-	resp, err := c.cli.ContainerCreate(
-		c.ctx,
-		inspect.Config,
-		inspect.HostConfig,
-		nil,
-		nil,
-		name,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to create container: %w", err)
-	}
-
-	// Start the new container
-	if err := c.cli.ContainerStart(c.ctx, resp.ID, container.StartOptions{}); err != nil {
-		return fmt.Errorf("failed to start container: %w", err)
-	}
-
-	return nil
+	return c.cli.CopyToContainer(ctx, containerName, dir, &buf, types.CopyToContainerOptions{})
 }
 
-// GetLocalImageDigest retrieves the digest of a local image
-func (c *Client) GetLocalImageDigest(imageName, tag string) (string, error) {
-	fullImage := imageName + ":" + tag
-	inspect, _, err := c.cli.ImageInspectWithRaw(c.ctx, fullImage)
+// GetContainerLogs returns the last N lines of a container's logs.
+func (c *Client) GetContainerLogs(ctx context.Context, containerName string, lines int) (string, error) {
+	opts := container.LogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+		Tail:       fmt.Sprintf("%d", lines),
+	}
+
+	reader, err := c.cli.ContainerLogs(ctx, containerName, opts)
 	if err != nil {
-		return "", fmt.Errorf("failed to inspect local image %s: %w", fullImage, err)
+		return "", fmt.Errorf("get logs for %q: %w", containerName, err)
+	}
+	defer reader.Close()
+
+	var stdout, stderr bytes.Buffer
+	if _, err := stdcopy.StdCopy(&stdout, &stderr, reader); err != nil {
+		// Some containers don't use multiplexed streams; fall back to raw read.
+		reader2, _ := c.cli.ContainerLogs(ctx, containerName, opts)
+		defer reader2.Close()
+		data, _ := io.ReadAll(reader2)
+		return string(data), nil
 	}
 
-	if len(inspect.RepoDigests) > 0 {
-		// RepoDigests format is "image@sha256:digest"
-		parts := strings.Split(inspect.RepoDigests[0], "@")
-		if len(parts) == 2 {
-			return parts[1], nil
-		}
+	combined := stdout.String()
+	if s := stderr.String(); s != "" {
+		combined += "\n" + s
 	}
-
-	return "", fmt.Errorf("no digest found for local image %s", fullImage)
+	return combined, nil
 }
 
-// GetRemoteImageDigest retrieves the digest of an image from the registry
-func (c *Client) GetRemoteImageDigest(imageName, tag string) (string, error) {
-	fullImage := imageName + ":" + tag
-	distributionInspect, err := c.cli.DistributionInspect(c.ctx, fullImage, "")
-	if err != nil {
-		return "", fmt.Errorf("failed to inspect remote image %s: %w", fullImage, err)
+// StreamContainerLogs returns a reader for following container logs in real time.
+func (c *Client) StreamContainerLogs(ctx context.Context, containerName string) (io.ReadCloser, error) {
+	opts := container.LogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+		Follow:     true,
+		Tail:       "50",
 	}
 
-	return string(distributionInspect.Descriptor.Digest), nil
+	reader, err := c.cli.ContainerLogs(ctx, containerName, opts)
+	if err != nil {
+		return nil, fmt.Errorf("stream logs for %q: %w", containerName, err)
+	}
+	return reader, nil
 }

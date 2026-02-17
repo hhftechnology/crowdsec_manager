@@ -2,99 +2,43 @@ package nginx
 
 import (
 	"context"
-	"crowdsec-manager/internal/config"
-	"crowdsec-manager/internal/docker"
-	"crowdsec-manager/internal/models"
-	"crowdsec-manager/internal/proxy"
-	adapterscommon "crowdsec-manager/internal/proxy/adapters/common"
+
+	"github.com/crowdsecurity/crowdsec-manager/internal/proxy"
 )
 
-// NginxAdapter implements ProxyAdapter for Nginx Proxy Manager
-type NginxAdapter struct {
-	config        *proxy.ProxyConfig
-	dockerClient  *docker.Client
-	cfg           *config.Config
-	containerName string
+// NginxAdapter is a skeleton adapter for Nginx reverse proxy.
+type NginxAdapter struct{}
 
-	// Feature managers
-	logMgr     *NginxLogManager
-	bouncerMgr *NginxBouncerManager
+func NewNginxAdapter() *NginxAdapter { return &NginxAdapter{} }
+
+func (a *NginxAdapter) Name() string                             { return "Nginx" }
+func (a *NginxAdapter) Type() proxy.ProxyType                    { return proxy.ProxyNginx }
+func (a *NginxAdapter) SupportedFeatures() []proxy.Feature       { return []proxy.Feature{proxy.FeatureHealth} }
+func (a *NginxAdapter) Initialize(_ context.Context, _ proxy.InitConfig) error { return nil }
+
+func (a *NginxAdapter) HealthCheck(_ context.Context) (*proxy.HealthResult, error) {
+	return &proxy.HealthResult{Healthy: false, Message: "nginx adapter not fully implemented"}, nil
 }
 
-// NewNginxAdapter creates a new Nginx Proxy Manager adapter
-func NewNginxAdapter() proxy.ProxyAdapter {
-	return &NginxAdapter{}
-}
+func (a *NginxAdapter) WhitelistManager() proxy.WhitelistManager { return &noop{} }
+func (a *NginxAdapter) CaptchaManager() proxy.CaptchaManager     { return &noopC{} }
+func (a *NginxAdapter) LogManager() proxy.LogManager              { return &noopL{} }
+func (a *NginxAdapter) BouncerManager() proxy.BouncerManager      { return &noopB{} }
 
-// Name returns the adapter name
-func (n *NginxAdapter) Name() string {
-	return "Nginx Proxy Manager"
-}
+type noop struct{}
+func (n *noop) List(_ context.Context) ([]proxy.WhitelistEntry, error) { return nil, nil }
+func (n *noop) Add(_ context.Context, _ proxy.WhitelistEntry) error    { return nil }
+func (n *noop) Remove(_ context.Context, _ string) error               { return nil }
 
-// Type returns the proxy type
-func (n *NginxAdapter) Type() proxy.ProxyType {
-	return proxy.ProxyTypeNginx
-}
+type noopC struct{}
+func (n *noopC) Status(_ context.Context) (*proxy.CaptchaStatus, error) { return &proxy.CaptchaStatus{}, nil }
+func (n *noopC) Setup(_ context.Context, _ proxy.CaptchaConfig) error   { return nil }
+func (n *noopC) Disable(_ context.Context) error                        { return nil }
 
-// SupportedFeatures returns the features supported by Nginx Proxy Manager
-func (n *NginxAdapter) SupportedFeatures() []proxy.Feature {
-	return []proxy.Feature{
-		proxy.FeatureLogs,
-		proxy.FeatureBouncer,
-		proxy.FeatureHealth,
-	}
-}
+type noopL struct{}
+func (n *noopL) GetLogs(_ context.Context, _ proxy.LogOptions) ([]proxy.LogEntry, error) { return nil, nil }
+func (n *noopL) StreamLogs(_ context.Context, _ proxy.LogOptions) (<-chan proxy.LogEntry, error) { return nil, nil }
 
-// Initialize initializes the Nginx adapter
-func (n *NginxAdapter) Initialize(ctx context.Context, cfg *proxy.ProxyConfig) error {
-	n.config = cfg
-
-	deps, err := adapterscommon.BuildAdapterDependencies(cfg, "nginx-proxy-manager")
-	if err != nil {
-		return err
-	}
-
-	n.dockerClient = deps.Client
-	n.cfg = deps.Config
-	n.containerName = deps.ContainerName
-
-	n.logMgr = NewNginxLogManager(n.dockerClient, n.cfg)
-	n.bouncerMgr = NewNginxBouncerManager(n.dockerClient, n.cfg)
-
-	return nil
-}
-
-// HealthCheck performs a health check for Nginx Proxy Manager
-func (n *NginxAdapter) HealthCheck(ctx context.Context) (*models.HealthCheckItem, error) {
-	if item, err := adapterscommon.CheckContainerRunning(n.dockerClient, n.containerName, "Nginx Proxy Manager"); item != nil || err != nil {
-		return item, err
-	}
-
-	return adapterscommon.BuildHealthyStatus(
-		"Nginx Proxy Manager",
-		proxy.ProxyTypeNginx,
-		n.containerName,
-		n.SupportedFeatures(),
-		map[string]interface{}{},
-	), nil
-}
-
-// WhitelistManager returns nil - NPM doesn't support programmatic whitelist management
-func (n *NginxAdapter) WhitelistManager() proxy.WhitelistManager {
-	return nil
-}
-
-// CaptchaManager returns nil - NPM doesn't support captcha integration
-func (n *NginxAdapter) CaptchaManager() proxy.CaptchaManager {
-	return nil
-}
-
-// LogManager returns the Nginx log manager
-func (n *NginxAdapter) LogManager() proxy.LogManager {
-	return n.logMgr
-}
-
-// BouncerManager returns the Nginx bouncer manager
-func (n *NginxAdapter) BouncerManager() proxy.BouncerManager {
-	return n.bouncerMgr
-}
+type noopB struct{}
+func (n *noopB) Status(_ context.Context) (*proxy.BouncerStatus, error) { return &proxy.BouncerStatus{}, nil }
+func (n *noopB) List(_ context.Context) ([]proxy.BouncerInfo, error)    { return nil, nil }

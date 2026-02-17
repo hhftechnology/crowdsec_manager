@@ -1,68 +1,38 @@
-# Multi-stage Dockerfile for CrowdSec Manager
-
 # Stage 1: Build frontend
-FROM node:20-alpine AS frontend-builder
+FROM node:22-alpine AS frontend-builder
+WORKDIR /app/ui
+RUN corepack enable && corepack prepare pnpm@latest --activate
+COPY ui/package.json ui/pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+COPY ui/ .
+RUN pnpm build
 
-WORKDIR /app/web
-
-# Copy package files
-COPY web/package*.json ./
-
-# Install dependencies
-RUN npm ci --legacy-peer-deps
-
-# Copy frontend source
-COPY web/ ./
-
-# Build frontend
-RUN npm run build
-
-# Stage 2: Build Go backend
+# Stage 2: Build backend
 FROM golang:1.24-alpine AS backend-builder
-
+RUN apk add --no-cache gcc musl-dev sqlite-dev
 WORKDIR /app
-
-# Install build dependencies (CGO required for go-sqlite3)
-RUN apk add --no-cache git gcc musl-dev sqlite-dev
-
-# Copy go mod files
 COPY go.mod go.sum ./
-
-# Download dependencies
 RUN go mod download
-
-# Copy source code
 COPY cmd/ cmd/
 COPY internal/ internal/
+COPY --from=frontend-builder /app/ui/dist ./ui/dist
+ENV CGO_ENABLED=1
+RUN go build -o bin/crowdsec-manager ./cmd/server
 
-# Build binary (CGO_ENABLED=1 required for go-sqlite3)
-RUN CGO_ENABLED=1 GOOS=linux go build -o crowdsec-manager ./cmd/server
-
-# Stage 3: Final runtime image
-FROM alpine:latest
-
-# Install runtime dependencies
-RUN apk --no-cache add ca-certificates tzdata curl
-
+# Stage 3: Runtime
+FROM alpine:3.21
+RUN apk add --no-cache ca-certificates sqlite-libs tzdata
 WORKDIR /app
+COPY --from=backend-builder /app/bin/crowdsec-manager .
+COPY --from=backend-builder /app/ui/dist ./ui/dist
 
-# Copy binary from builder
-COPY --from=backend-builder /app/crowdsec-manager .
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+RUN mkdir -p /app/data && chown -R appuser:appgroup /app/data
 
-# Copy frontend build from frontend-builder
-COPY --from=frontend-builder /app/web/dist ./web/dist
-
-# Create necessary directories
-RUN mkdir -p /app/backups /app/logs /app/config /app/data
-
-# Expose port
 EXPOSE 8080
 
-# Health check (uses PORT env var, defaults to 8080)
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:${PORT:-8080}/health || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD wget -qO- http://localhost:8080/api/health/containers || exit 1
 
-# Run as root user (no USER directive)
-# This allows write access to mounted volumes
-
-CMD ["./crowdsec-manager"]
+USER appuser
+ENTRYPOINT ["/app/crowdsec-manager"]

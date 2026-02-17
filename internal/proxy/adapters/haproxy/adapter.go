@@ -2,110 +2,43 @@ package haproxy
 
 import (
 	"context"
-	"crowdsec-manager/internal/config"
-	"crowdsec-manager/internal/docker"
-	"crowdsec-manager/internal/models"
-	"crowdsec-manager/internal/proxy"
-	adapterscommon "crowdsec-manager/internal/proxy/adapters/common"
-	"fmt"
+
+	"github.com/crowdsecurity/crowdsec-manager/internal/proxy"
 )
 
-// HAProxyAdapter implements ProxyAdapter for HAProxy with SPOA bouncer integration
-type HAProxyAdapter struct {
-	config        *proxy.ProxyConfig
-	dockerClient  *docker.Client
-	cfg           *config.Config
-	containerName string
+// HAProxyAdapter is a skeleton adapter for HAProxy.
+type HAProxyAdapter struct{}
 
-	// Feature managers
-	bouncerMgr *HAProxyBouncerManager
+func NewHAProxyAdapter() *HAProxyAdapter { return &HAProxyAdapter{} }
+
+func (a *HAProxyAdapter) Name() string                             { return "HAProxy" }
+func (a *HAProxyAdapter) Type() proxy.ProxyType                    { return proxy.ProxyHAProxy }
+func (a *HAProxyAdapter) SupportedFeatures() []proxy.Feature       { return []proxy.Feature{proxy.FeatureHealth} }
+func (a *HAProxyAdapter) Initialize(_ context.Context, _ proxy.InitConfig) error { return nil }
+
+func (a *HAProxyAdapter) HealthCheck(_ context.Context) (*proxy.HealthResult, error) {
+	return &proxy.HealthResult{Healthy: false, Message: "haproxy adapter not fully implemented"}, nil
 }
 
-// NewHAProxyAdapter creates a new HAProxy adapter
-func NewHAProxyAdapter() proxy.ProxyAdapter {
-	return &HAProxyAdapter{}
-}
+func (a *HAProxyAdapter) WhitelistManager() proxy.WhitelistManager { return &noop{} }
+func (a *HAProxyAdapter) CaptchaManager() proxy.CaptchaManager     { return &noopC{} }
+func (a *HAProxyAdapter) LogManager() proxy.LogManager              { return &noopL{} }
+func (a *HAProxyAdapter) BouncerManager() proxy.BouncerManager      { return &noopB{} }
 
-// Name returns the adapter name
-func (h *HAProxyAdapter) Name() string {
-	return "HAProxy Load Balancer"
-}
+type noop struct{}
+func (n *noop) List(_ context.Context) ([]proxy.WhitelistEntry, error) { return nil, nil }
+func (n *noop) Add(_ context.Context, _ proxy.WhitelistEntry) error    { return nil }
+func (n *noop) Remove(_ context.Context, _ string) error               { return nil }
 
-// Type returns the proxy type
-func (h *HAProxyAdapter) Type() proxy.ProxyType {
-	return proxy.ProxyTypeHAProxy
-}
+type noopC struct{}
+func (n *noopC) Status(_ context.Context) (*proxy.CaptchaStatus, error) { return &proxy.CaptchaStatus{}, nil }
+func (n *noopC) Setup(_ context.Context, _ proxy.CaptchaConfig) error   { return nil }
+func (n *noopC) Disable(_ context.Context) error                        { return nil }
 
-// SupportedFeatures returns the features supported by HAProxy
-func (h *HAProxyAdapter) SupportedFeatures() []proxy.Feature {
-	return []proxy.Feature{
-		proxy.FeatureBouncer,
-		proxy.FeatureHealth,
-	}
-}
+type noopL struct{}
+func (n *noopL) GetLogs(_ context.Context, _ proxy.LogOptions) ([]proxy.LogEntry, error) { return nil, nil }
+func (n *noopL) StreamLogs(_ context.Context, _ proxy.LogOptions) (<-chan proxy.LogEntry, error) { return nil, nil }
 
-// Initialize initializes the HAProxy adapter
-func (h *HAProxyAdapter) Initialize(ctx context.Context, cfg *proxy.ProxyConfig) error {
-	h.config = cfg
-
-	deps, err := adapterscommon.BuildAdapterDependencies(cfg, "haproxy")
-	if err != nil {
-		return err
-	}
-
-	h.dockerClient = deps.Client
-	h.cfg = deps.Config
-	h.containerName = deps.ContainerName
-
-	h.bouncerMgr = NewHAProxyBouncerManager(h.dockerClient, h.cfg)
-
-	return nil
-}
-
-// HealthCheck performs a health check for HAProxy
-func (h *HAProxyAdapter) HealthCheck(ctx context.Context) (*models.HealthCheckItem, error) {
-	if item, err := adapterscommon.CheckContainerRunning(h.dockerClient, h.containerName, "HAProxy"); item != nil || err != nil {
-		return item, err
-	}
-
-	// Check if HAProxy stats socket is accessible (if configured)
-	_, err := h.dockerClient.ExecCommand(h.containerName, []string{
-		"sh", "-c", "echo 'show info' | socat stdio /var/run/haproxy/admin.sock",
-	})
-	if err != nil {
-		return &models.HealthCheckItem{
-			Status:  "degraded",
-			Message: "HAProxy container running but stats socket may be inaccessible",
-			Details: "Stats socket check failed",
-			Error:   fmt.Sprintf("Stats socket error: %v", err),
-		}, nil
-	}
-
-	return adapterscommon.BuildHealthyStatus(
-		"HAProxy",
-		proxy.ProxyTypeHAProxy,
-		h.containerName,
-		h.SupportedFeatures(),
-		map[string]interface{}{},
-	), nil
-}
-
-// WhitelistManager returns nil - HAProxy doesn't support programmatic whitelist management through this adapter
-func (h *HAProxyAdapter) WhitelistManager() proxy.WhitelistManager {
-	return nil
-}
-
-// CaptchaManager returns nil - HAProxy doesn't support captcha integration through this adapter
-func (h *HAProxyAdapter) CaptchaManager() proxy.CaptchaManager {
-	return nil
-}
-
-// LogManager returns nil - HAProxy log management not implemented in this adapter
-func (h *HAProxyAdapter) LogManager() proxy.LogManager {
-	return nil
-}
-
-// BouncerManager returns the HAProxy bouncer manager
-func (h *HAProxyAdapter) BouncerManager() proxy.BouncerManager {
-	return h.bouncerMgr
-}
+type noopB struct{}
+func (n *noopB) Status(_ context.Context) (*proxy.BouncerStatus, error) { return &proxy.BouncerStatus{}, nil }
+func (n *noopB) List(_ context.Context) ([]proxy.BouncerInfo, error)    { return nil, nil }

@@ -1,25 +1,18 @@
 package api
 
 import (
-	"crowdsec-manager/internal/backup"
-	"crowdsec-manager/internal/compose"
-	"crowdsec-manager/internal/config"
-	"crowdsec-manager/internal/cron"
-	"crowdsec-manager/internal/database"
-	"crowdsec-manager/internal/docker"
-	"crowdsec-manager/internal/proxy"
+	"github.com/crowdsecurity/crowdsec-manager/internal/backup"
+	"github.com/crowdsecurity/crowdsec-manager/internal/config"
+	"github.com/crowdsecurity/crowdsec-manager/internal/database"
+	"github.com/crowdsecurity/crowdsec-manager/internal/docker"
+	"github.com/crowdsecurity/crowdsec-manager/internal/proxy"
 )
 
-// Dependencies holds all shared dependencies for API route handlers.
-// This struct reduces parameter sprawl in route registration functions
-// and makes it easy to add new dependencies without changing signatures.
+// Dependencies holds all shared resources available to API handlers.
 type Dependencies struct {
-	Docker         *docker.Client
-	DB             *database.Database
-	Config         *config.Config
-	ProxyAdapter   proxy.ProxyAdapter
-	ProxyManager   *proxy.ProxyManager
-	BackupManager  *backup.Manager
-	CronScheduler  *cron.Scheduler
-	ComposeManager *compose.ComposeManager
+	Docker        *docker.Client
+	DB            *database.Database
+	Config        *config.Config
+	ProxyManager  *proxy.Manager
+	BackupManager *backup.Manager
 }

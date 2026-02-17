@@ -3,524 +3,251 @@ package backup
 import (
 	"archive/tar"
 	"compress/gzip"
+	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
-	"crowdsec-manager/internal/logger"
-	"crowdsec-manager/internal/models"
+	"github.com/crowdsecurity/crowdsec-manager/internal/config"
+	"github.com/crowdsecurity/crowdsec-manager/internal/database"
+	"github.com/crowdsecurity/crowdsec-manager/internal/docker"
 )
 
-// Manager handles backup creation, restoration, and retention management
+// BackupInfo describes a backup archive.
+type BackupInfo struct {
+	Name      string `json:"name"`
+	CreatedAt string `json:"created_at"`
+	Size      int64  `json:"size"`
+	Path      string `json:"-"`
+}
+
+// Manager handles backup creation, restoration, and cleanup.
 type Manager struct {
-	backupDir     string
-	retentionDays int
-	backupItems   []string
+	config *config.Config
+	docker *docker.Client
+	db     *database.Database
 }
 
-// NewManager creates a backup manager with automatic retention cleanup
-func NewManager(backupDir string, retentionDays int) *Manager {
+// NewManager creates a backup manager.
+func NewManager(cfg *config.Config, dockerClient *docker.Client, db *database.Database) *Manager {
 	return &Manager{
-		backupDir:     backupDir,
-		retentionDays: retentionDays,
-		backupItems:   []string{"docker-compose.yml", "config"},
+		config: cfg,
+		docker: dockerClient,
+		db:     db,
 	}
 }
 
-// Create creates a timestamped tar.gz backup archive of configured items
-// Automatically cleans up old backups based on retention policy
-func (m *Manager) Create(dryRun bool) (*models.Backup, error) {
-	timestamp := time.Now().Format("20060102_150405")
-	backupName := fmt.Sprintf("pangolin_backup_%s", timestamp)
-	backupPath := filepath.Join(m.backupDir, backupName)
-	archivePath := backupPath + ".tar.gz"
+func (m *Manager) backupDir() string {
+	return filepath.Join(m.config.DataDir, "backups")
+}
 
-	logger.Info("Starting backup process", "name", backupName, "dryRun", dryRun)
-
-	// Ensure backup directory exists
-	if err := os.MkdirAll(m.backupDir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create backup directory: %w", err)
+// Create generates a tar.gz backup containing the database and CrowdSec config.
+func (m *Manager) Create(ctx context.Context) (*BackupInfo, error) {
+	dir := m.backupDir()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil, fmt.Errorf("create backup dir: %w", err)
 	}
 
-	if dryRun {
-		logger.Info("DRY-RUN: Would create backup", "path", archivePath)
-		return &models.Backup{
-			ID:        backupName,
-			Filename:  filepath.Base(archivePath),
-			Path:      archivePath,
-			CreatedAt: time.Now(),
-		}, nil
-	}
+	timestamp := time.Now().UTC().Format("20060102-150405")
+	name := fmt.Sprintf("backup-%s.tar.gz", timestamp)
+	path := filepath.Join(dir, name)
 
-	// Create temporary directory for backup staging
-	tempDir, err := os.MkdirTemp("", "crowdsec-backup-*")
+	f, err := os.Create(path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create temp directory: %w", err)
+		return nil, fmt.Errorf("create backup file: %w", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer f.Close()
 
-	// Copy items to temp directory
-	copiedItems := 0
-	for _, item := range m.backupItems {
-		sourcePath := filepath.Join(".", item)
-		if _, err := os.Stat(sourcePath); os.IsNotExist(err) {
-			logger.Warn("Source path does not exist, skipping", "path", sourcePath, "item", item)
+	gw := gzip.NewWriter(f)
+	defer gw.Close()
+	tw := tar.NewWriter(gw)
+	defer tw.Close()
+
+	// Back up the database file.
+	dbPath := filepath.Join(m.config.DataDir, "crowdsec-manager.db")
+	if err := addFileToTar(tw, dbPath, "crowdsec-manager.db"); err != nil {
+		slog.Warn("failed to add database to backup", "error", err)
+	}
+
+	// Back up CrowdSec config from container.
+	configFiles := []string{
+		"/etc/crowdsec/config.yaml",
+		"/etc/crowdsec/profiles.yaml",
+		"/etc/crowdsec/acquis.yaml",
+	}
+	for _, cf := range configFiles {
+		data, err := m.docker.ReadFileFromContainer(ctx, m.config.CrowdSecContainer, cf)
+		if err != nil {
+			slog.Warn("failed to read container file for backup", "file", cf, "error", err)
 			continue
 		}
-
-		destPath := filepath.Join(tempDir, item)
-		if err := m.copyPath(sourcePath, destPath); err != nil {
-			logger.Warn("Failed to copy item, skipping", "item", item, "error", err)
-			continue
+		tarName := "crowdsec" + strings.ReplaceAll(cf, "/", "_")
+		if err := addBytesToTar(tw, data, tarName); err != nil {
+			slog.Warn("failed to add to backup", "file", cf, "error", err)
 		}
-		logger.Info("Copied item", "item", item)
-		copiedItems++
 	}
 
-	// Ensure at least one item was successfully copied
-	if copiedItems == 0 {
-		return nil, fmt.Errorf("no backup items were successfully copied")
-	}
-
-	// Create backup info file
-	infoPath := filepath.Join(tempDir, "BACKUP_INFO.txt")
-	infoContent := fmt.Sprintf(`Backup created: %s
-Pangolin directory: %s
-Items included:
-%s
-`, time.Now().Format(time.RFC3339), ".", strings.Join(m.backupItems, "\n"))
-
-	if err := os.WriteFile(infoPath, []byte(infoContent), 0644); err != nil {
-		return nil, fmt.Errorf("failed to write backup info: %w", err)
-	}
-
-	// Create tar.gz archive
-	if err := m.createArchive(tempDir, archivePath); err != nil {
-		return nil, fmt.Errorf("failed to create archive: %w", err)
-	}
-
-	// Get archive size
-	info, err := os.Stat(archivePath)
+	info, err := f.Stat()
 	if err != nil {
-		return nil, fmt.Errorf("failed to stat archive: %w", err)
+		return nil, fmt.Errorf("stat backup: %w", err)
 	}
 
-	logger.Info("Backup created successfully", "path", archivePath, "size", info.Size())
-
-	// Cleanup old backups
-	if err := m.CleanupOld(); err != nil {
-		logger.Warn("Failed to cleanup old backups", "error", err)
-	}
-
-	return &models.Backup{
-		ID:        backupName,
-		Filename:  filepath.Base(archivePath),
-		Path:      archivePath,
+	return &BackupInfo{
+		Name:      name,
+		CreatedAt: time.Now().UTC().Format(time.RFC3339),
 		Size:      info.Size(),
-		CreatedAt: time.Now(),
+		Path:      path,
 	}, nil
 }
 
-// List returns all backup archives sorted by creation time (newest first)
-func (m *Manager) List() ([]models.Backup, error) {
-	pattern := filepath.Join(m.backupDir, "pangolin_backup_*.tar.gz")
-	files, err := filepath.Glob(pattern)
+// Restore extracts a backup archive to the data directory.
+func (m *Manager) Restore(_ context.Context, name string) error {
+	path := filepath.Join(m.backupDir(), name)
+	f, err := os.Open(path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list backups: %w", err)
+		return fmt.Errorf("open backup %q: %w", name, err)
 	}
+	defer f.Close()
 
-	var backups []models.Backup
-	for _, file := range files {
-		info, err := os.Stat(file)
-		if err != nil {
-			logger.Warn("Failed to stat backup file", "file", file, "error", err)
-			continue
-		}
-
-		filename := filepath.Base(file)
-		backupID := strings.TrimSuffix(filename, ".tar.gz")
-
-		backups = append(backups, models.Backup{
-			ID:        backupID,
-			Filename:  filename,
-			Path:      file,
-			Size:      info.Size(),
-			CreatedAt: info.ModTime(),
-		})
-	}
-
-	// Sort by creation time (newest first)
-	sort.Slice(backups, func(i, j int) bool {
-		return backups[i].CreatedAt.After(backups[j].CreatedAt)
-	})
-
-	return backups, nil
-}
-
-// Delete deletes a backup by ID
-func (m *Manager) Delete(backupID string) error {
-	backupPath := filepath.Join(m.backupDir, backupID+".tar.gz")
-
-	if _, err := os.Stat(backupPath); os.IsNotExist(err) {
-		return fmt.Errorf("backup not found: %s", backupID)
-	}
-
-	if err := os.Remove(backupPath); err != nil {
-		return fmt.Errorf("failed to delete backup: %w", err)
-	}
-
-	logger.Info("Backup deleted", "id", backupID)
-	return nil
-}
-
-// Restore extracts and applies a backup archive, creating a safety backup of current state first
-// Uses retry logic for reliability on file system operations
-func (m *Manager) Restore(backupID string) error {
-	backupPath := filepath.Join(m.backupDir, backupID+".tar.gz")
-
-	if _, err := os.Stat(backupPath); os.IsNotExist(err) {
-		return fmt.Errorf("backup not found: %s", backupID)
-	}
-
-	logger.Info("Starting restore", "backup", backupID)
-
-	// Create pre-restore backup
-	timestamp := time.Now().Format("20060102_150405")
-	preRestoreBackup := fmt.Sprintf("pre_restore_%s", timestamp)
-	preRestorePath := filepath.Join(m.backupDir, preRestoreBackup)
-
-	tempDir, err := os.MkdirTemp("", "crowdsec-restore-*")
+	gr, err := gzip.NewReader(f)
 	if err != nil {
-		return fmt.Errorf("failed to create temp directory: %w", err)
+		return fmt.Errorf("gzip reader: %w", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer gr.Close()
 
-	// Backup current state
-	for _, item := range m.backupItems {
-		sourcePath := filepath.Join(".", item)
-		if _, err := os.Stat(sourcePath); os.IsNotExist(err) {
-			continue
-		}
-
-		destPath := filepath.Join(preRestorePath, item)
-		if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
-			return fmt.Errorf("failed to create directory: %w", err)
-		}
-
-		if err := m.copyPath(sourcePath, destPath); err != nil {
-			logger.Warn("Failed to backup current state", "item", item, "error", err)
-		}
+	tr := tar.NewReader(gr)
+	restoreDir := filepath.Join(m.config.DataDir, "restore")
+	if err := os.MkdirAll(restoreDir, 0o755); err != nil {
+		return fmt.Errorf("create restore dir: %w", err)
 	}
-
-	// Extract backup
-	extractDir := filepath.Join(tempDir, "extract")
-	if err := m.extractArchive(backupPath, extractDir); err != nil {
-		return fmt.Errorf("failed to extract backup: %w", err)
-	}
-
-	// Find the extracted directory
-	entries, err := os.ReadDir(extractDir)
-	if err != nil {
-		return fmt.Errorf("failed to read extracted directory: %w", err)
-	}
-
-	var extractedDir string
-	for _, entry := range entries {
-		if entry.IsDir() {
-			extractedDir = filepath.Join(extractDir, entry.Name())
-			break
-		}
-	}
-
-	if extractedDir == "" {
-		// Fallback: check if files are in root of extractDir
-		extractedDir = extractDir
-	}
-
-	// Restore items
-	for _, item := range m.backupItems {
-		sourcePath := filepath.Join(extractedDir, item)
-		if _, err := os.Stat(sourcePath); os.IsNotExist(err) {
-			logger.Warn("Item not found in backup", "item", item)
-			continue
-		}
-
-		destPath := filepath.Join(".", item)
-
-		// Remove existing item with retry
-		if err := m.retryOperation(func() error {
-			return os.RemoveAll(destPath)
-		}, 3, time.Second); err != nil {
-			return fmt.Errorf("failed to remove existing item %s: %w", item, err)
-		}
-
-		// Copy from backup with retry
-		if err := m.retryOperation(func() error {
-			return m.copyPath(sourcePath, destPath)
-		}, 3, time.Second); err != nil {
-			return fmt.Errorf("failed to restore item %s: %w", item, err)
-		}
-
-		logger.Info("Restored item", "item", item)
-	}
-
-	logger.Info("Restore completed successfully")
-	return nil
-}
-
-// retryOperation retries failed operations with exponential backoff for reliability
-// Useful for handling temporary file system locks or network issues
-func (m *Manager) retryOperation(op func() error, attempts int, delay time.Duration) error {
-	var err error
-	for i := 0; i < attempts; i++ {
-		if err = op(); err == nil {
-			return nil
-		}
-		time.Sleep(delay)
-		delay *= 2
-	}
-	return fmt.Errorf("operation failed after %d attempts: %w", attempts, err)
-}
-
-// CleanupOld removes backup archives older than configured retention period
-// Called automatically after each backup creation
-func (m *Manager) CleanupOld() error {
-	if m.retentionDays <= 0 {
-		return nil
-	}
-
-	logger.Info("Checking for old backups to remove", "retentionDays", m.retentionDays)
-
-	cutoffDate := time.Now().AddDate(0, 0, -m.retentionDays)
-	pattern := filepath.Join(m.backupDir, "pangolin_backup_*.tar.gz")
-	files, err := filepath.Glob(pattern)
-	if err != nil {
-		return fmt.Errorf("failed to list backups: %w", err)
-	}
-
-	deletedCount := 0
-	for _, file := range files {
-		info, err := os.Stat(file)
-		if err != nil {
-			logger.Warn("Failed to stat backup file", "file", file, "error", err)
-			continue
-		}
-
-		if info.ModTime().Before(cutoffDate) {
-			if err := os.Remove(file); err != nil {
-				logger.Warn("Failed to remove old backup", "file", file, "error", err)
-				continue
-			}
-			logger.Info("Removed old backup", "file", filepath.Base(file))
-			deletedCount++
-		}
-	}
-
-	if deletedCount > 0 {
-		logger.Info("Cleaned up old backups", "count", deletedCount)
-	} else {
-		logger.Info("No old backups to remove")
-	}
-
-	return nil
-}
-
-// FindLatest finds the latest backup
-func (m *Manager) FindLatest() (*models.Backup, error) {
-	backups, err := m.List()
-	if err != nil {
-		return nil, err
-	}
-
-	if len(backups) == 0 {
-		return nil, fmt.Errorf("no backups found")
-	}
-
-	return &backups[0], nil
-}
-
-// Helper methods
-
-func (m *Manager) copyPath(src, dst string) error {
-	srcInfo, err := os.Stat(src)
-	if err != nil {
-		return err
-	}
-
-	if srcInfo.IsDir() {
-		return m.copyDir(src, dst)
-	}
-	return m.copyFile(src, dst)
-}
-
-func (m *Manager) copyFile(src, dst string) error {
-	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
-		return err
-	}
-
-	srcFile, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer srcFile.Close()
-
-	dstFile, err := os.Create(dst)
-	if err != nil {
-		return err
-	}
-	defer dstFile.Close()
-
-	if _, err := io.Copy(dstFile, srcFile); err != nil {
-		return err
-	}
-
-	srcInfo, err := os.Stat(src)
-	if err != nil {
-		return err
-	}
-
-	return os.Chmod(dst, srcInfo.Mode())
-}
-
-func (m *Manager) copyDir(src, dst string) error {
-	if err := os.MkdirAll(dst, 0755); err != nil {
-		return err
-	}
-
-	entries, err := os.ReadDir(src)
-	if err != nil {
-		return err
-	}
-
-	for _, entry := range entries {
-		srcPath := filepath.Join(src, entry.Name())
-		dstPath := filepath.Join(dst, entry.Name())
-
-		if err := m.copyPath(srcPath, dstPath); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (m *Manager) createArchive(sourceDir, archivePath string) error {
-	archiveFile, err := os.Create(archivePath)
-	if err != nil {
-		return err
-	}
-	defer archiveFile.Close()
-
-	gzipWriter := gzip.NewWriter(archiveFile)
-	defer gzipWriter.Close()
-
-	tarWriter := tar.NewWriter(gzipWriter)
-	defer tarWriter.Close()
-
-	// Get the base name of the source directory to use as archive root
-	baseName := filepath.Base(sourceDir)
-
-	return filepath.Walk(sourceDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
-		// Create tar header from file info
-		header, err := tar.FileInfoHeader(info, "")
-		if err != nil {
-			return err
-		}
-
-		// Calculate relative path from source directory
-		relPath, err := filepath.Rel(sourceDir, path)
-		if err != nil {
-			return err
-		}
-
-		// Preserve the directory structure with base name as root
-		if relPath == "." {
-			header.Name = baseName
-		} else {
-			header.Name = filepath.ToSlash(filepath.Join(baseName, relPath))
-		}
-
-		if err := tarWriter.WriteHeader(header); err != nil {
-			return err
-		}
-
-		// Copy file contents if it's a regular file
-		if !info.IsDir() {
-			file, err := os.Open(path)
-			if err != nil {
-				return err
-			}
-			defer file.Close()
-
-			if _, err := io.Copy(tarWriter, file); err != nil {
-				return err
-			}
-		}
-
-		return nil
-	})
-}
-
-func (m *Manager) extractArchive(archivePath, destDir string) error {
-	archiveFile, err := os.Open(archivePath)
-	if err != nil {
-		return err
-	}
-	defer archiveFile.Close()
-
-	gzipReader, err := gzip.NewReader(archiveFile)
-	if err != nil {
-		return err
-	}
-	defer gzipReader.Close()
-
-	tarReader := tar.NewReader(gzipReader)
 
 	for {
-		header, err := tarReader.Next()
+		hdr, err := tr.Next()
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
-			return err
+			return fmt.Errorf("read tar: %w", err)
 		}
 
-		target := filepath.Join(destDir, header.Name)
-
-		switch header.Typeflag {
-		case tar.TypeDir:
-			if err := os.MkdirAll(target, 0755); err != nil {
-				return err
-			}
-		case tar.TypeReg:
-			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
-				return err
-			}
-
-			file, err := os.Create(target)
-			if err != nil {
-				return err
-			}
-
-			if _, err := io.Copy(file, tarReader); err != nil {
-				file.Close()
-				return err
-			}
-			file.Close()
-
-			if err := os.Chmod(target, os.FileMode(header.Mode)); err != nil {
-				return err
-			}
+		target := filepath.Join(restoreDir, filepath.Base(hdr.Name))
+		outFile, err := os.Create(target)
+		if err != nil {
+			return fmt.Errorf("create %q: %w", target, err)
 		}
+		if _, err := io.Copy(outFile, tr); err != nil {
+			outFile.Close()
+			return fmt.Errorf("extract %q: %w", target, err)
+		}
+		outFile.Close()
 	}
 
+	slog.Info("backup restored", "name", name, "restore_dir", restoreDir)
 	return nil
+}
+
+// List returns all available backups sorted by creation time (newest first).
+func (m *Manager) List() ([]BackupInfo, error) {
+	dir := m.backupDir()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil, err
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, fmt.Errorf("read backup dir: %w", err)
+	}
+
+	backups := make([]BackupInfo, 0, len(entries))
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".tar.gz") {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		backups = append(backups, BackupInfo{
+			Name:      e.Name(),
+			CreatedAt: info.ModTime().UTC().Format(time.RFC3339),
+			Size:      info.Size(),
+			Path:      filepath.Join(dir, e.Name()),
+		})
+	}
+
+	sort.Slice(backups, func(i, j int) bool {
+		return backups[i].CreatedAt > backups[j].CreatedAt
+	})
+	return backups, nil
+}
+
+// Delete removes a single backup by name.
+func (m *Manager) Delete(name string) error {
+	path := filepath.Join(m.backupDir(), name)
+	if err := os.Remove(path); err != nil {
+		return fmt.Errorf("delete backup %q: %w", name, err)
+	}
+	return nil
+}
+
+// Cleanup removes the oldest backups beyond the retention count.
+func (m *Manager) Cleanup(retention int) error {
+	backups, err := m.List()
+	if err != nil {
+		return err
+	}
+	if len(backups) <= retention {
+		return nil
+	}
+
+	for _, b := range backups[retention:] {
+		if err := os.Remove(b.Path); err != nil {
+			slog.Warn("failed to remove old backup", "name", b.Name, "error", err)
+			continue
+		}
+		slog.Info("removed old backup", "name", b.Name)
+	}
+	return nil
+}
+
+func addFileToTar(tw *tar.Writer, filePath, tarName string) error {
+	f, err := os.Open(filePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	info, err := f.Stat()
+	if err != nil {
+		return err
+	}
+
+	hdr := &tar.Header{
+		Name: tarName,
+		Size: info.Size(),
+		Mode: 0o644,
+	}
+	if err := tw.WriteHeader(hdr); err != nil {
+		return err
+	}
+	_, err = io.Copy(tw, f)
+	return err
+}
+
+func addBytesToTar(tw *tar.Writer, data []byte, tarName string) error {
+	hdr := &tar.Header{
+		Name: tarName,
+		Size: int64(len(data)),
+		Mode: 0o644,
+	}
+	if err := tw.WriteHeader(hdr); err != nil {
+		return err
+	}
+	_, err := tw.Write(data)
+	return err
 }

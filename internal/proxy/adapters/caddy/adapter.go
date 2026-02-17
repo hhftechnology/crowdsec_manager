@@ -2,110 +2,43 @@ package caddy
 
 import (
 	"context"
-	"crowdsec-manager/internal/config"
-	"crowdsec-manager/internal/docker"
-	"crowdsec-manager/internal/models"
-	"crowdsec-manager/internal/proxy"
-	adapterscommon "crowdsec-manager/internal/proxy/adapters/common"
-	"fmt"
+
+	"github.com/crowdsecurity/crowdsec-manager/internal/proxy"
 )
 
-// CaddyAdapter implements ProxyAdapter for Caddy web server
-type CaddyAdapter struct {
-	config        *proxy.ProxyConfig
-	dockerClient  *docker.Client
-	cfg           *config.Config
-	containerName string
+// CaddyAdapter is a skeleton adapter for Caddy reverse proxy.
+type CaddyAdapter struct{}
 
-	// Feature managers
-	bouncerMgr *CaddyBouncerManager
+func NewCaddyAdapter() *CaddyAdapter { return &CaddyAdapter{} }
+
+func (a *CaddyAdapter) Name() string                             { return "Caddy" }
+func (a *CaddyAdapter) Type() proxy.ProxyType                    { return proxy.ProxyCaddy }
+func (a *CaddyAdapter) SupportedFeatures() []proxy.Feature       { return []proxy.Feature{proxy.FeatureHealth} }
+func (a *CaddyAdapter) Initialize(_ context.Context, _ proxy.InitConfig) error { return nil }
+
+func (a *CaddyAdapter) HealthCheck(_ context.Context) (*proxy.HealthResult, error) {
+	return &proxy.HealthResult{Healthy: false, Message: "caddy adapter not fully implemented"}, nil
 }
 
-// NewCaddyAdapter creates a new Caddy adapter
-func NewCaddyAdapter() proxy.ProxyAdapter {
-	return &CaddyAdapter{}
-}
+func (a *CaddyAdapter) WhitelistManager() proxy.WhitelistManager { return &noop{} }
+func (a *CaddyAdapter) CaptchaManager() proxy.CaptchaManager     { return &noopC{} }
+func (a *CaddyAdapter) LogManager() proxy.LogManager              { return &noopL{} }
+func (a *CaddyAdapter) BouncerManager() proxy.BouncerManager      { return &noopB{} }
 
-// Name returns the adapter name
-func (c *CaddyAdapter) Name() string {
-	return "Caddy Web Server"
-}
+type noop struct{}
+func (n *noop) List(_ context.Context) ([]proxy.WhitelistEntry, error) { return nil, nil }
+func (n *noop) Add(_ context.Context, _ proxy.WhitelistEntry) error    { return nil }
+func (n *noop) Remove(_ context.Context, _ string) error               { return nil }
 
-// Type returns the proxy type
-func (c *CaddyAdapter) Type() proxy.ProxyType {
-	return proxy.ProxyTypeCaddy
-}
+type noopC struct{}
+func (n *noopC) Status(_ context.Context) (*proxy.CaptchaStatus, error) { return &proxy.CaptchaStatus{}, nil }
+func (n *noopC) Setup(_ context.Context, _ proxy.CaptchaConfig) error   { return nil }
+func (n *noopC) Disable(_ context.Context) error                        { return nil }
 
-// SupportedFeatures returns the features supported by Caddy
-func (c *CaddyAdapter) SupportedFeatures() []proxy.Feature {
-	return []proxy.Feature{
-		proxy.FeatureBouncer,
-		proxy.FeatureHealth,
-	}
-}
+type noopL struct{}
+func (n *noopL) GetLogs(_ context.Context, _ proxy.LogOptions) ([]proxy.LogEntry, error) { return nil, nil }
+func (n *noopL) StreamLogs(_ context.Context, _ proxy.LogOptions) (<-chan proxy.LogEntry, error) { return nil, nil }
 
-// Initialize initializes the Caddy adapter
-func (c *CaddyAdapter) Initialize(ctx context.Context, cfg *proxy.ProxyConfig) error {
-	c.config = cfg
-
-	deps, err := adapterscommon.BuildAdapterDependencies(cfg, "caddy")
-	if err != nil {
-		return err
-	}
-
-	c.dockerClient = deps.Client
-	c.cfg = deps.Config
-	c.containerName = deps.ContainerName
-
-	c.bouncerMgr = NewCaddyBouncerManager(c.dockerClient, c.cfg)
-
-	return nil
-}
-
-// HealthCheck performs a health check for Caddy
-func (c *CaddyAdapter) HealthCheck(ctx context.Context) (*models.HealthCheckItem, error) {
-	if item, err := adapterscommon.CheckContainerRunning(c.dockerClient, c.containerName, "Caddy"); item != nil || err != nil {
-		return item, err
-	}
-
-	// Check if Caddy is responding (try to access the admin API)
-	_, err := c.dockerClient.ExecCommand(c.containerName, []string{
-		"curl", "-f", "http://localhost:2019/config/",
-	})
-	if err != nil {
-		return &models.HealthCheckItem{
-			Status:  "degraded",
-			Message: "Caddy container running but admin API may be inaccessible",
-			Details: "Admin API check failed",
-			Error:   fmt.Sprintf("Admin API error: %v", err),
-		}, nil
-	}
-
-	return adapterscommon.BuildHealthyStatus(
-		"Caddy",
-		proxy.ProxyTypeCaddy,
-		c.containerName,
-		c.SupportedFeatures(),
-		map[string]interface{}{},
-	), nil
-}
-
-// WhitelistManager returns nil - Caddy doesn't support programmatic whitelist management through this adapter
-func (c *CaddyAdapter) WhitelistManager() proxy.WhitelistManager {
-	return nil
-}
-
-// CaptchaManager returns nil - Caddy doesn't support captcha integration through this adapter
-func (c *CaddyAdapter) CaptchaManager() proxy.CaptchaManager {
-	return nil
-}
-
-// LogManager returns nil - Caddy log management not implemented in this adapter
-func (c *CaddyAdapter) LogManager() proxy.LogManager {
-	return nil
-}
-
-// BouncerManager returns the Caddy bouncer manager
-func (c *CaddyAdapter) BouncerManager() proxy.BouncerManager {
-	return c.bouncerMgr
-}
+type noopB struct{}
+func (n *noopB) Status(_ context.Context) (*proxy.BouncerStatus, error) { return &proxy.BouncerStatus{}, nil }
+func (n *noopB) List(_ context.Context) ([]proxy.BouncerInfo, error)    { return nil, nil }

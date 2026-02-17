@@ -1,168 +1,100 @@
 package traefik
 
 import (
+	"bufio"
 	"context"
-	"crowdsec-manager/internal/config"
-	"crowdsec-manager/internal/docker"
-	"crowdsec-manager/internal/logger"
-	"crowdsec-manager/internal/models"
 	"fmt"
-	"regexp"
-	"sort"
 	"strings"
 	"time"
+
+	"github.com/crowdsecurity/crowdsec-manager/internal/config"
+	"github.com/crowdsecurity/crowdsec-manager/internal/docker"
+	"github.com/crowdsecurity/crowdsec-manager/internal/proxy"
 )
 
-// TraefikLogManager implements LogManager for Traefik
-type TraefikLogManager struct {
-	dockerClient *docker.Client
-	cfg          *config.Config
+// LogMgr retrieves and parses Traefik access logs.
+type LogMgr struct {
+	docker *docker.Client
+	cfg    *config.Config
+	paths  config.ProxyPaths
 }
 
-// NewTraefikLogManager creates a new Traefik log manager
-func NewTraefikLogManager(dockerClient *docker.Client, cfg *config.Config) *TraefikLogManager {
-	return &TraefikLogManager{
-		dockerClient: dockerClient,
-		cfg:          cfg,
+func (m *LogMgr) GetLogs(ctx context.Context, opts proxy.LogOptions) ([]proxy.LogEntry, error) {
+	lines := opts.Lines
+	if lines <= 0 {
+		lines = 100
 	}
+
+	service := opts.Service
+	if service == "" {
+		service = m.cfg.ProxyContainer
+	}
+
+	raw, err := m.docker.GetContainerLogs(ctx, service, lines)
+	if err != nil {
+		return nil, fmt.Errorf("get traefik logs: %w", err)
+	}
+
+	return parseLogLines(raw, "traefik"), nil
 }
 
-// GetAccessLogs retrieves Traefik access logs
-func (t *TraefikLogManager) GetAccessLogs(ctx context.Context, tail int) (string, error) {
-	accessLogPath := t.cfg.Paths.TraefikAccessLog
-	logger.Info("Getting Traefik access logs", "tail", tail, "path", accessLogPath)
+func (m *LogMgr) StreamLogs(ctx context.Context, opts proxy.LogOptions) (<-chan proxy.LogEntry, error) {
+	service := opts.Service
+	if service == "" {
+		service = m.cfg.ProxyContainer
+	}
 
-	logs, err := t.dockerClient.ExecCommand(t.cfg.TraefikContainerName, []string{
-		"tail", "-n", fmt.Sprintf("%d", tail), accessLogPath,
-	})
+	reader, err := m.docker.StreamContainerLogs(ctx, service)
 	if err != nil {
-		// Fallback to container logs if file reading fails
-		logger.Warn("Failed to read access log file, falling back to container logs",
-			"path", accessLogPath, "error", err)
-		logs, err = t.dockerClient.GetContainerLogs(t.cfg.TraefikContainerName, fmt.Sprintf("%d", tail))
-		if err != nil {
-			return "", fmt.Errorf("failed to get Traefik logs from %s: %w", accessLogPath, err)
+		return nil, fmt.Errorf("stream traefik logs: %w", err)
+	}
+
+	ch := make(chan proxy.LogEntry, 64)
+	go func() {
+		defer close(ch)
+		defer reader.Close()
+
+		scanner := bufio.NewScanner(reader)
+		for scanner.Scan() {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				line := scanner.Text()
+				if line = strings.TrimSpace(line); line == "" {
+					continue
+				}
+				ch <- proxy.LogEntry{
+					Timestamp: time.Now().UTC().Format(time.RFC3339),
+					Level:     "info",
+					Message:   line,
+					Source:    "traefik",
+				}
+			}
 		}
-	}
+	}()
 
-	return logs, nil
+	return ch, nil
 }
 
-// AnalyzeLogs performs advanced analysis of Traefik logs
-func (t *TraefikLogManager) AnalyzeLogs(ctx context.Context, tail int) (*models.LogStats, error) {
-	logger.Info("Analyzing Traefik logs", "tail", tail)
-	
-	logs, err := t.GetAccessLogs(ctx, tail)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get logs for analysis: %w", err)
-	}
-	
-	// Parse and analyze logs
-	stats := t.analyzeLogs(logs)
-	return &stats, nil
-}
-
-// GetLogPath returns the path to the Traefik access log file
-func (t *TraefikLogManager) GetLogPath() string {
-	return t.cfg.Paths.TraefikAccessLog
-}
-
-// analyzeLogs performs log analysis and returns statistics
-func (t *TraefikLogManager) analyzeLogs(logs string) models.LogStats {
-	lines := strings.Split(logs, "\n")
-
-	stats := models.LogStats{
-		TotalLines:   len(lines),
-		TopIPs:       []models.IPCount{},
-		StatusCodes:  make(map[string]int),
-		HTTPMethods:  make(map[string]int),
-		ErrorEntries: []models.LogEntry{},
-	}
-
-	ipMap := make(map[string]int)
-	ipRegex := regexp.MustCompile(`\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b`)
-	statusRegex := regexp.MustCompile(`\s(2\d{2}|3\d{2}|4\d{2}|5\d{2})\s`)
-	methodRegex := regexp.MustCompile(`"(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)`)
-
+func parseLogLines(raw, source string) []proxy.LogEntry {
+	lines := strings.Split(raw, "\n")
+	entries := make([]proxy.LogEntry, 0, len(lines))
 	for _, line := range lines {
+		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
-
-		// Extract IPs
-		if ips := ipRegex.FindAllString(line, -1); len(ips) > 0 {
-			for _, ip := range ips {
-				ipMap[ip]++
-			}
+		// Clean up Docker log prefix bytes (first 8 bytes are stream header).
+		if len(line) > 8 && (line[0] == 1 || line[0] == 2) {
+			line = line[8:]
 		}
-
-		// Extract status codes
-		if matches := statusRegex.FindStringSubmatch(line); len(matches) > 1 {
-			stats.StatusCodes[matches[1]]++
-		}
-
-		// Extract HTTP methods
-		if matches := methodRegex.FindStringSubmatch(line); len(matches) > 1 {
-			stats.HTTPMethods[matches[1]]++
-		}
-
-		// Collect error entries
-		if strings.Contains(strings.ToLower(line), "error") ||
-			strings.Contains(line, "5") && statusRegex.MatchString(line) {
-			stats.ErrorEntries = append(stats.ErrorEntries, models.LogEntry{
-				Timestamp: time.Now(),
-				Level:     "error",
-				Service:   "traefik",
-				Message:   line,
-			})
-		}
-	}
-
-	// Convert IP map to sorted slice
-	for ip, count := range ipMap {
-		stats.TopIPs = append(stats.TopIPs, models.IPCount{
-			IP:    ip,
-			Count: count,
+		entries = append(entries, proxy.LogEntry{
+			Timestamp: time.Now().UTC().Format(time.RFC3339),
+			Level:     "info",
+			Message:   line,
+			Source:    source,
 		})
 	}
-	sort.Slice(stats.TopIPs, func(i, j int) bool {
-		return stats.TopIPs[i].Count > stats.TopIPs[j].Count
-	})
-
-	// Keep only top 10 IPs
-	if len(stats.TopIPs) > 10 {
-		stats.TopIPs = stats.TopIPs[:10]
-	}
-
-	// Keep only last 20 error entries
-	if len(stats.ErrorEntries) > 20 {
-		stats.ErrorEntries = stats.ErrorEntries[len(stats.ErrorEntries)-20:]
-	}
-
-	return stats
-}
-
-// GetErrorLogs retrieves Traefik error logs
-func (t *TraefikLogManager) GetErrorLogs(ctx context.Context, tail int) (string, error) {
-	logger.Info("Getting Traefik error logs", "tail", tail)
-	
-	// Try to read from error log file
-	errorLogPath := "/var/log/traefik/error.log"
-	if t.cfg.TraefikErrorLog != "" {
-		errorLogPath = t.cfg.TraefikErrorLog
-	}
-	
-	logs, err := t.dockerClient.ExecCommand(t.cfg.TraefikContainerName, []string{
-		"tail", "-n", fmt.Sprintf("%d", tail), errorLogPath,
-	})
-	if err != nil {
-		// Fallback to container logs if file reading fails
-		logger.Warn("Failed to read error log file, falling back to container logs", "error", err)
-		logs, err = t.dockerClient.GetContainerLogs(t.cfg.TraefikContainerName, fmt.Sprintf("%d", tail))
-		if err != nil {
-			return "", fmt.Errorf("failed to get Traefik error logs: %w", err)
-		}
-	}
-	
-	return logs, nil
+	return entries
 }

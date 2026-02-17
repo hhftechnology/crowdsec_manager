@@ -7,7 +7,7 @@ on:
       - dev
       - dev-discord
       - traefik
-      - traefik-dev-Dashboard
+      - multi-proxy-final-development
       - traefuk-dev-variables
     tags:
       - 'v*'
