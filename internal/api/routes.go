@@ -4,6 +4,7 @@ import (
 	"crowdsec-manager/internal/api/handlers"
 	"crowdsec-manager/internal/backup"
 	"crowdsec-manager/internal/config"
+	"crowdsec-manager/internal/configvalidator"
 	"crowdsec-manager/internal/cron"
 	"crowdsec-manager/internal/database"
 	"crowdsec-manager/internal/docker"
@@ -209,7 +210,21 @@ func RegisterTerminalRoutes(router *gin.RouterGroup, dockerClient *docker.Client
 	router.GET("/terminal/:container", handlers.TerminalSession(dockerClient))
 }
 
-// RegisterEventRoutes configures WebSocket endpoint for real-time event streaming
+// RegisterConfigValidationRoutes configures endpoints for config drift detection and recovery
+func RegisterConfigValidationRoutes(router *gin.RouterGroup, validator *configvalidator.Validator) {
+	cfgValidation := router.Group("/config/validation")
+	{
+		cfgValidation.GET("/validate", handlers.ValidateConfigs(validator))
+		cfgValidation.GET("/snapshots", handlers.GetConfigSnapshots(validator))
+		cfgValidation.POST("/snapshot", handlers.SnapshotAllConfigs(validator))
+		cfgValidation.POST("/restore/:type", handlers.RestoreConfig(validator))
+		cfgValidation.POST("/accept/:type", handlers.AcceptCurrentConfig(validator))
+		cfgValidation.DELETE("/snapshot/:type", handlers.DeleteConfigSnapshot(validator))
+	}
+}
+
+// RegisterEventRoutes configures WebSocket and SSE endpoints for real-time event streaming
 func RegisterEventRoutes(router *gin.RouterGroup, hub *messaging.Hub) {
 	router.GET("/events/ws", handlers.EventsWebSocket(hub))
+	router.GET("/events/sse", handlers.EventsSSE(hub))
 }

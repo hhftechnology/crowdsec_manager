@@ -375,6 +375,35 @@ type ConsoleStatus struct {
 	Tainted           bool `json:"tainted"`
 }
 
+// ConfigSnapshot represents a stored configuration file snapshot
+type ConfigSnapshot struct {
+	ID          int    `json:"id"`
+	ConfigType  string `json:"config_type"`
+	FilePath    string `json:"file_path"`
+	Content     string `json:"content"`
+	ContentHash string `json:"content_hash"`
+	Source      string `json:"source"`
+	CreatedAt   string `json:"created_at"`
+	UpdatedAt   string `json:"updated_at"`
+}
+
+// ConfigValidationResult represents the validation status of a single config file
+type ConfigValidationResult struct {
+	ConfigType string `json:"config_type"`
+	FilePath   string `json:"file_path"`
+	Status     string `json:"status"`
+	Message    string `json:"message"`
+	DBHash     string `json:"db_hash,omitempty"`
+	LiveHash   string `json:"live_hash,omitempty"`
+}
+
+// ConfigValidationReport represents a full validation report across all configs
+type ConfigValidationReport struct {
+	Timestamp string                   `json:"timestamp"`
+	Overall   string                   `json:"overall"`
+	Results   []ConfigValidationResult `json:"results"`
+}
+
 // ProfileRequest represents the request to update profiles.yaml
 type ProfileRequest struct {
 	Content string `json:"content"`

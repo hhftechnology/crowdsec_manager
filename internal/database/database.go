@@ -82,6 +82,18 @@ func (d *Database) initSchema() error {
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		content TEXT NOT NULL,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
+
+	CREATE TABLE IF NOT EXISTS config_snapshots (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		config_type TEXT NOT NULL,
+		file_path TEXT NOT NULL,
+		content TEXT NOT NULL,
+		content_hash TEXT NOT NULL,
+		source TEXT NOT NULL DEFAULT 'auto',
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		UNIQUE(config_type, file_path)
 	);`
 	if _, err := d.db.Exec(createTable); err != nil {
 		return fmt.Errorf("failed to create settings table: %w", err)
@@ -200,4 +212,67 @@ func (d *Database) GetLatestProfileHistory() (*models.ProfileHistory, error) {
 		return nil, nil
 	}
 	return history, err
+}
+
+// SaveConfigSnapshot upserts a config snapshot by (config_type, file_path)
+func (d *Database) SaveConfigSnapshot(snapshot *models.ConfigSnapshot) error {
+	_, err := d.db.Exec(`
+		INSERT INTO config_snapshots (config_type, file_path, content, content_hash, source)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(config_type, file_path) DO UPDATE SET
+			content = excluded.content,
+			content_hash = excluded.content_hash,
+			source = excluded.source,
+			updated_at = CURRENT_TIMESTAMP
+	`, snapshot.ConfigType, snapshot.FilePath, snapshot.Content, snapshot.ContentHash, snapshot.Source)
+	return err
+}
+
+// GetConfigSnapshot retrieves a config snapshot by type and path
+func (d *Database) GetConfigSnapshot(configType, filePath string) (*models.ConfigSnapshot, error) {
+	snapshot := &models.ConfigSnapshot{}
+	err := d.db.QueryRow(`
+		SELECT id, config_type, file_path, content, content_hash, source, created_at, updated_at
+		FROM config_snapshots
+		WHERE config_type = ? AND file_path = ?
+	`, configType, filePath).Scan(
+		&snapshot.ID, &snapshot.ConfigType, &snapshot.FilePath,
+		&snapshot.Content, &snapshot.ContentHash, &snapshot.Source,
+		&snapshot.CreatedAt, &snapshot.UpdatedAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	return snapshot, err
+}
+
+// GetAllConfigSnapshots returns all stored config snapshots
+func (d *Database) GetAllConfigSnapshots() ([]models.ConfigSnapshot, error) {
+	rows, err := d.db.Query(`
+		SELECT id, config_type, file_path, content, content_hash, source, created_at, updated_at
+		FROM config_snapshots
+		ORDER BY config_type, file_path
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var snapshots []models.ConfigSnapshot
+	for rows.Next() {
+		var s models.ConfigSnapshot
+		if err := rows.Scan(&s.ID, &s.ConfigType, &s.FilePath, &s.Content, &s.ContentHash, &s.Source, &s.CreatedAt, &s.UpdatedAt); err != nil {
+			return nil, err
+		}
+		snapshots = append(snapshots, s)
+	}
+	return snapshots, rows.Err()
+}
+
+// DeleteConfigSnapshot removes a config snapshot by type and path
+func (d *Database) DeleteConfigSnapshot(configType, filePath string) error {
+	_, err := d.db.Exec(`
+		DELETE FROM config_snapshots WHERE config_type = ? AND file_path = ?
+	`, configType, filePath)
+	return err
 }

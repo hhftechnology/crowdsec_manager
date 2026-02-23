@@ -24,6 +24,7 @@ import {
   Moon,
   Sun,
   TerminalSquare,
+  ShieldCheck,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -87,6 +88,7 @@ export const navigation = [
       { name: 'Terminal', href: '/terminal', icon: TerminalSquare },
       { name: 'Logs', href: '/logs', icon: FileText },
       { name: 'Updates', href: '/update', icon: RefreshCw },
+      { name: 'Config Validation', href: '/config-validation', icon: ShieldCheck },
       { name: 'Settings', href: '/configuration', icon: Sliders },
     ]
   }

@@ -18,6 +18,7 @@ import { updateAPI } from './api/update'
 import { hostsAPI } from './api/hosts'
 import { terminalAPI } from './api/terminal'
 import { eventsAPI } from './api/events'
+import { configValidationAPI } from './api/config-validation'
 
 export default {
   health: healthAPI,
@@ -37,4 +38,5 @@ export default {
   structuredLogs: structuredLogsAPI,
   terminal: terminalAPI,
   events: eventsAPI,
+  configValidation: configValidationAPI,
 }

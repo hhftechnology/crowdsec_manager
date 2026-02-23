@@ -2,6 +2,7 @@ package messaging
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"sync"
 	"time"
@@ -111,6 +112,52 @@ func (h *Hub) Broadcast(event Event) {
 	case h.broadcast <- data:
 	default:
 		logger.Warn("Hub broadcast channel full, dropping event")
+	}
+}
+
+// HandleSSE returns a Gin handler for Server-Sent Events streaming
+func (h *Hub) HandleSSE() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Header("Content-Type", "text/event-stream")
+		c.Header("Cache-Control", "no-cache")
+		c.Header("Connection", "keep-alive")
+		c.Header("X-Accel-Buffering", "no")
+
+		flusher, ok := c.Writer.(http.Flusher)
+		if !ok {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "streaming not supported"})
+			return
+		}
+
+		// Create a client to receive broadcast events
+		client := &wsClient{
+			conn:     nil, // no WebSocket conn for SSE
+			send:     make(chan []byte, 256),
+			subjects: make(map[string]bool),
+		}
+
+		h.register <- client
+		defer func() {
+			h.unregister <- client
+		}()
+
+		// Send initial connection event
+		fmt.Fprintf(c.Writer, "data: {\"type\":\"connected\"}\n\n")
+		flusher.Flush()
+
+		ctx := c.Request.Context()
+		for {
+			select {
+			case message, ok := <-client.send:
+				if !ok {
+					return
+				}
+				fmt.Fprintf(c.Writer, "data: %s\n\n", message)
+				flusher.Flush()
+			case <-ctx.Done():
+				return
+			}
+		}
 	}
 }
 

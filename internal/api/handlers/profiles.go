@@ -214,6 +214,8 @@ func UpdateProfiles(db *database.Database, cfg *config.Config, dockerClient *doc
 			}
 		}
 
+		autoSnapshot("profiles")
+
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
 			Message: "Profiles updated successfully",

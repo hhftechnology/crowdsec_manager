@@ -1,12 +1,15 @@
 import { ReactNode, useState, useCallback } from 'react'
 import Sidebar from './Sidebar'
 import Header from './Header'
+import { useConfigEvents } from '@/hooks/useConfigEvents'
 
 interface LayoutProps {
   children: ReactNode
 }
 
 export default function Layout({ children }: LayoutProps) {
+  // Listen for config drift/missing events and show toast notifications
+  useConfigEvents()
   const [isCollapsed, setIsCollapsed] = useState(
     () => localStorage.getItem('sidebar-collapsed') === 'true'
   )

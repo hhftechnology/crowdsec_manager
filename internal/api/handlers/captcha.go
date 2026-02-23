@@ -140,6 +140,9 @@ func SetupCaptcha(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFu
 		logger.Info("Verifying captcha setup")
 		verified := verifyCaptchaSetup(dockerClient, cfg)
 
+		autoSnapshot("dynamic_config")
+		autoSnapshot("acquis")
+
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
 			Message: "Captcha configured successfully",

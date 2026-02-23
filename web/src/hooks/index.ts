@@ -1,6 +1,8 @@
 export { useAsyncOperation } from './useAsyncOperation'
 export { useCommandPalette } from './useCommandPalette'
+export { useConfigEvents } from './useConfigEvents'
 export { useKeyboardNavigation } from './useKeyboardNavigation'
 export { useMediaQuery, useIsMobile, useIsTablet, useIsDesktop } from './useMediaQuery'
 export { useRealtimeEvents } from './useRealtimeEvents'
+export { useSSE } from './useSSE'
 export { useTerminal } from './useTerminal'

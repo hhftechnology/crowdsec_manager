@@ -93,6 +93,8 @@ whitelist:
 
 		_, _ = dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{"cscli", "parsers", "reload"})
 
+		autoSnapshot("whitelist")
+
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
 			Message: fmt.Sprintf("IP %s added to CrowdSec whitelist", req.IP),
@@ -125,6 +127,8 @@ func AddToTraefikWhitelist(dockerClient *docker.Client, cfg *config.Config) gin.
 			})
 			return
 		}
+
+		autoSnapshot("dynamic_config")
 
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
@@ -189,6 +193,9 @@ whitelist:
 		if err == nil {
 			results["traefik"] = true
 		}
+
+		autoSnapshot("whitelist")
+		autoSnapshot("dynamic_config")
 
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,

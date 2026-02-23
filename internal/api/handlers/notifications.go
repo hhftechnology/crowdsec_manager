@@ -198,6 +198,8 @@ func UpdateDiscordConfig(db *database.Database, cfg *config.Config, dockerClient
 			message += "Discord notifications disabled in profiles.yaml."
 		}
 
+		autoSnapshot("notifications")
+
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
 			Message: message,
