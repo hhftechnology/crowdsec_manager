@@ -5,11 +5,24 @@ import (
 	"strings"
 	"time"
 
+	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
 	"crowdsec-manager/internal/models"
 
 	"github.com/gin-gonic/gin"
 )
+
+// resolveDockerClient returns the per-request Docker client from gin.Context
+// (set by DockerHostSelector middleware), falling back to the default client.
+// This enables multi-host support: handlers call this at the top of their closure.
+func resolveDockerClient(c *gin.Context, fallback *docker.Client) *docker.Client {
+	if val, exists := c.Get("dockerClient"); exists {
+		if client, ok := val.(*docker.Client); ok {
+			return client
+		}
+	}
+	return fallback
+}
 
 // truncateString truncates a string to a maximum length for logging
 func truncateString(s string, maxLen int) string {

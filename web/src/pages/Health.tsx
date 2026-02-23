@@ -35,9 +35,9 @@ export default function Health() {
             {isLoading ? (
               <Activity className="h-5 w-5 animate-pulse" />
             ) : allRunning ? (
-              <CheckCircle2 className="h-5 w-5 text-green-500" />
+              <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
             ) : (
-              <XCircle className="h-5 w-5 text-red-500" />
+              <XCircle className="h-5 w-5 text-destructive" />
             )}
             System Status
           </CardTitle>
@@ -128,9 +128,9 @@ export default function Health() {
                         </TableCell>
                         <TableCell>
                           {container.running ? (
-                            <CheckCircle2 className="h-4 w-4 text-green-500" />
+                            <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                           ) : (
-                            <XCircle className="h-4 w-4 text-red-500" />
+                            <XCircle className="h-4 w-4 text-destructive" />
                           )}
                         </TableCell>
                       </TableRow>
@@ -203,7 +203,7 @@ export default function Health() {
               {isLoading ? (
                 <div className="space-y-2">
                   <div className="h-12 bg-muted animate-pulse rounded" />
-                  <div className="h-12 bg-mute animate-pulse rounded" />
+                  <div className="h-12 bg-muted animate-pulse rounded" />
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -215,9 +215,9 @@ export default function Health() {
                       </p>
                     </div>
                     {diagnostics?.traefik_integration?.middleware_configured ? (
-                      <CheckCircle2 className="h-5 w-5 text-green-500" />
+                      <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                     ) : (
-                      <XCircle className="h-5 w-5 text-red-500" />
+                      <XCircle className="h-5 w-5 text-destructive" />
                     )}
                   </div>
 
@@ -229,9 +229,9 @@ export default function Health() {
                       </p>
                     </div>
                     {diagnostics?.traefik_integration?.lapi_key_found ? (
-                      <CheckCircle2 className="h-5 w-5 text-green-500" />
+                      <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                     ) : (
-                      <XCircle className="h-5 w-5 text-red-500" />
+                      <XCircle className="h-5 w-5 text-destructive" />
                     )}
                   </div>
 
@@ -243,9 +243,9 @@ export default function Health() {
                       </p>
                     </div>
                     {diagnostics?.traefik_integration?.appsec_enabled ? (
-                      <CheckCircle2 className="h-5 w-5 text-green-500" />
+                      <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                     ) : (
-                      <XCircle className="h-5 w-5 text-red-500" />
+                      <XCircle className="h-5 w-5 text-destructive" />
                     )}
                   </div>
 

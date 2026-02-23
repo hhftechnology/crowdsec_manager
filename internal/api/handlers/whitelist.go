@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"regexp"
 	"strings"
 
 	"crowdsec-manager/internal/config"
+	"crowdsec-manager/internal/constants"
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
 	"crowdsec-manager/internal/models"
@@ -22,6 +22,7 @@ import (
 // ViewWhitelist displays all whitelisted IPs from both CrowdSec and Traefik
 func ViewWhitelist(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		dockerClient = resolveDockerClient(c, dockerClient)
 		logger.Info("Viewing whitelist")
 
 		whitelist := gin.H{
@@ -31,7 +32,7 @@ func ViewWhitelist(dockerClient *docker.Client, cfg *config.Config) gin.HandlerF
 
 		// Get CrowdSec whitelist
 		crowdsecWL, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
-			"cat", "/etc/crowdsec/parsers/s02-enrich/mywhitelists.yaml",
+			"cat", cfg.CrowdSecWhitelistPath,
 		})
 		if err == nil {
 			whitelist["crowdsec"] = parseWhitelistYAML(crowdsecWL)
@@ -39,7 +40,7 @@ func ViewWhitelist(dockerClient *docker.Client, cfg *config.Config) gin.HandlerF
 
 		// Get Traefik whitelist
 		traefikWL, err := dockerClient.ExecCommand(cfg.TraefikContainerName, []string{
-			"cat", "/etc/traefik/dynamic_config.yml",
+			"cat", cfg.TraefikDynamicConfig,
 		})
 		if err == nil {
 			whitelist["traefik"] = parseTraefikWhitelist(traefikWL)
@@ -55,10 +56,11 @@ func ViewWhitelist(dockerClient *docker.Client, cfg *config.Config) gin.HandlerF
 // WhitelistCurrentIP whitelists the current public IP
 func WhitelistCurrentIP(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		dockerClient = resolveDockerClient(c, dockerClient)
 		logger.Info("Whitelisting current IP")
 
-		// Get public IP
-		resp, err := http.Get("https://api.ipify.org")
+		// Get public IP using first available service
+		resp, err := http.Get(constants.ExternalIPServices[0])
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
@@ -82,7 +84,7 @@ whitelist:
 
 		// Write to CrowdSec container
 		_, err = dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
-			"sh", "-c", fmt.Sprintf("echo '%s' > /etc/crowdsec/parsers/s02-enrich/mywhitelists.yaml", whitelistContent),
+			"sh", "-c", fmt.Sprintf("echo '%s' > %s", whitelistContent, cfg.CrowdSecWhitelistPath),
 		})
 		if err != nil {
 			logger.Error("Failed to update CrowdSec whitelist", "error", err)
@@ -103,6 +105,7 @@ whitelist:
 // WhitelistManualIP whitelists a manually specified IP
 func WhitelistManualIP(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		dockerClient = resolveDockerClient(c, dockerClient)
 		var req models.WhitelistRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, models.Response{
@@ -120,7 +123,7 @@ func WhitelistManualIP(dockerClient *docker.Client, cfg *config.Config) gin.Hand
 		if req.AddToCrowdSec {
 			// Get current whitelist
 			currentWL, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
-				"cat", "/etc/crowdsec/parsers/s02-enrich/mywhitelists.yaml",
+				"cat", cfg.CrowdSecWhitelistPath,
 			})
 
 			var whitelistContent string
@@ -138,7 +141,7 @@ whitelist:
 			}
 
 			_, err = dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
-				"sh", "-c", fmt.Sprintf("echo '%s' > /etc/crowdsec/parsers/s02-enrich/mywhitelists.yaml", whitelistContent),
+				"sh", "-c", fmt.Sprintf("echo '%s' > %s", whitelistContent, cfg.CrowdSecWhitelistPath),
 			})
 			if err != nil {
 				errMsg := fmt.Sprintf("Failed to add IP to CrowdSec whitelist: %v", err)
@@ -158,7 +161,7 @@ whitelist:
 		if req.AddToTraefik {
 			// Update Traefik dynamic config
 			_, err := dockerClient.ExecCommand(cfg.TraefikContainerName, []string{
-				"sh", "-c", fmt.Sprintf(`sed -i '/sourceRange:/a\        - %s' /etc/traefik/dynamic_config.yml`, req.IP),
+				"sh", "-c", fmt.Sprintf(`sed -i '/sourceRange:/a\        - %s' %s`, req.IP, cfg.TraefikDynamicConfig),
 			})
 			if err != nil {
 				errMsg := fmt.Sprintf("Failed to add IP to Traefik whitelist: %v", err)
@@ -200,6 +203,7 @@ whitelist:
 // WhitelistCIDR whitelists a CIDR range
 func WhitelistCIDR(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		dockerClient = resolveDockerClient(c, dockerClient)
 		var req models.WhitelistRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, models.Response{
@@ -221,7 +225,7 @@ whitelist:
 `, req.CIDR)
 
 			_, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
-				"sh", "-c", fmt.Sprintf("echo '%s' > /etc/crowdsec/parsers/s02-enrich/mywhitelists.yaml", whitelistContent),
+				"sh", "-c", fmt.Sprintf("echo '%s' > %s", whitelistContent, cfg.CrowdSecWhitelistPath),
 			})
 			if err != nil {
 				logger.Error("Failed to update CrowdSec whitelist", "error", err)
@@ -237,181 +241,4 @@ whitelist:
 	}
 }
 
-// AddToCrowdSecWhitelist adds an IP to CrowdSec whitelist only
-func AddToCrowdSecWhitelist(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		var req models.WhitelistRequest
-		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(http.StatusBadRequest, models.Response{
-				Success: false,
-				Error:   "Invalid request: " + err.Error(),
-			})
-			return
-		}
 
-		logger.Info("Adding to CrowdSec whitelist", "ip", req.IP)
-
-		whitelistContent := fmt.Sprintf(`name: mywhitelists
-description: "My custom whitelists"
-whitelist:
-  reason: "Manually added to CrowdSec"
-  ip:
-    - %s
-`, req.IP)
-
-		_, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
-			"sh", "-c", fmt.Sprintf("echo '%s' > /etc/crowdsec/parsers/s02-enrich/mywhitelists.yaml", whitelistContent),
-		})
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, models.Response{
-				Success: false,
-				Error:   fmt.Sprintf("Failed to update whitelist: %v", err),
-			})
-			return
-		}
-
-		_, _ = dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{"cscli", "parsers", "reload"})
-
-		c.JSON(http.StatusOK, models.Response{
-			Success: true,
-			Message: fmt.Sprintf("IP %s added to CrowdSec whitelist", req.IP),
-		})
-	}
-}
-
-// AddToTraefikWhitelist adds an IP to Traefik whitelist only
-func AddToTraefikWhitelist(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		var req models.WhitelistRequest
-		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(http.StatusBadRequest, models.Response{
-				Success: false,
-				Error:   "Invalid request: " + err.Error(),
-			})
-			return
-		}
-
-		logger.Info("Adding to Traefik whitelist", "ip", req.IP)
-
-		_, err := dockerClient.ExecCommand(cfg.TraefikContainerName, []string{
-			"sh", "-c", fmt.Sprintf(`sed -i '/sourceRange:/a\        - %s' /etc/traefik/dynamic_config.yml`, req.IP),
-		})
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, models.Response{
-				Success: false,
-				Error:   fmt.Sprintf("Failed to update whitelist: %v", err),
-			})
-			return
-		}
-
-		c.JSON(http.StatusOK, models.Response{
-			Success: true,
-			Message: fmt.Sprintf("IP %s added to Traefik whitelist", req.IP),
-		})
-	}
-}
-
-// SetupComprehensiveWhitelist sets up complete whitelist configuration
-func SetupComprehensiveWhitelist(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		var req models.WhitelistRequest
-		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(http.StatusBadRequest, models.Response{
-				Success: false,
-				Error:   "Invalid request: " + err.Error(),
-			})
-			return
-		}
-
-		logger.Info("Setting up comprehensive whitelist", "ip", req.IP)
-
-		// Get public IP if not provided
-		ip := req.IP
-		if ip == "" {
-			resp, err := http.Get("https://api.ipify.org")
-			if err == nil {
-				defer resp.Body.Close()
-				body, _ := io.ReadAll(resp.Body)
-				ip = strings.TrimSpace(string(body))
-			}
-		}
-
-		results := gin.H{
-			"ip":       ip,
-			"crowdsec": false,
-			"traefik":  false,
-		}
-
-		// Add to CrowdSec
-		whitelistContent := fmt.Sprintf(`name: mywhitelists
-description: "Comprehensive whitelist"
-whitelist:
-  reason: "Comprehensive setup"
-  ip:
-    - %s
-`, ip)
-
-		_, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
-			"sh", "-c", fmt.Sprintf("echo '%s' > /etc/crowdsec/parsers/s02-enrich/mywhitelists.yaml", whitelistContent),
-		})
-		if err == nil {
-			_, _ = dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{"cscli", "parsers", "reload"})
-			results["crowdsec"] = true
-		}
-
-		// Add to Traefik
-		_, err = dockerClient.ExecCommand(cfg.TraefikContainerName, []string{
-			"sh", "-c", fmt.Sprintf(`sed -i '/sourceRange:/a\        - %s' /etc/traefik/dynamic_config.yml`, ip),
-		})
-		if err == nil {
-			results["traefik"] = true
-		}
-
-		c.JSON(http.StatusOK, models.Response{
-			Success: true,
-			Message: "Comprehensive whitelist setup completed",
-			Data:    results,
-		})
-	}
-}
-
-// parseWhitelistYAML parses whitelist YAML content and extracts IPs
-func parseWhitelistYAML(content string) []string {
-	ips := []string{}
-	lines := strings.Split(content, "\n")
-
-	ipRegex := regexp.MustCompile(`^\s*-\s+([0-9\.\/]+)`)
-	for _, line := range lines {
-		if matches := ipRegex.FindStringSubmatch(line); len(matches) > 1 {
-			ips = append(ips, matches[1])
-		}
-	}
-
-	return ips
-}
-
-// parseTraefikWhitelist parses Traefik whitelist configuration
-func parseTraefikWhitelist(content string) []string {
-	ips := []string{}
-	lines := strings.Split(content, "\n")
-
-	ipRegex := regexp.MustCompile(`^\s*-\s+([0-9\.\/]+)`)
-	inSourceRange := false
-
-	for _, line := range lines {
-		if strings.Contains(line, "sourceRange:") {
-			inSourceRange = true
-			continue
-		}
-
-		if inSourceRange {
-			if matches := ipRegex.FindStringSubmatch(line); len(matches) > 1 {
-				ips = append(ips, matches[1])
-			} else if !strings.HasPrefix(strings.TrimSpace(line), "-") {
-				inSourceRange = false
-			}
-		}
-	}
-
-	return ips
-}

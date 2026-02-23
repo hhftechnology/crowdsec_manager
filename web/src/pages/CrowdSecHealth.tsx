@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import api from '@/lib/api'
+import { StatCard } from '@/components/charts'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -49,15 +50,15 @@ export default function CrowdSecHealth() {
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'healthy':
-        return <CheckCircle2 className="h-5 w-5 text-green-500" />
+        return <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
       case 'unhealthy':
-        return <XCircle className="h-5 w-5 text-red-500" />
+        return <XCircle className="h-5 w-5 text-destructive" />
       case 'degraded':
-        return <AlertTriangle className="h-5 w-5 text-yellow-500" />
+        return <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
       case 'warning':
         return <AlertTriangle className="h-5 w-5 text-orange-500" />
       case 'info':
-        return <Info className="h-5 w-5 text-blue-500" />
+        return <Info className="h-5 w-5 text-blue-600 dark:text-blue-400" />
       default:
         return <Activity className="h-5 w-5 text-muted-foreground" />
     }
@@ -66,13 +67,13 @@ export default function CrowdSecHealth() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'healthy':
-        return <Badge className="bg-green-500">Healthy</Badge>
+        return <Badge variant="success">Healthy</Badge>
       case 'unhealthy':
         return <Badge variant="destructive">Unhealthy</Badge>
       case 'degraded':
-        return <Badge className="bg-yellow-500">Degraded</Badge>
+        return <Badge variant="warning">Degraded</Badge>
       case 'warning':
-        return <Badge className="bg-orange-500">Warning</Badge>
+        return <Badge className="bg-orange-500/15 text-orange-700 dark:text-orange-400">Warning</Badge>
       case 'info':
         return <Badge variant="outline">Info</Badge>
       default:
@@ -175,6 +176,21 @@ export default function CrowdSecHealth() {
         </CardContent>
       </Card>
 
+      {/* Quick Health Metrics */}
+      {healthData?.checks && (
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-5">
+          {Object.entries(healthData.checks).map(([name, check]) => (
+            <StatCard
+              key={name}
+              title={getCheckTitle(name)}
+              value={check.status}
+              icon={getCheckIcon(name)}
+              description={check.message}
+            />
+          ))}
+        </div>
+      )}
+
       {/* Detailed Health Checks */}
       {healthData?.checks && (
         <div className="grid gap-4 md:grid-cols-2">
@@ -263,15 +279,15 @@ export default function CrowdSecHealth() {
         <CardContent>
           <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-5">
             <div className="flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 text-green-500" />
+              <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
               <span className="text-sm">Healthy - All checks passed</span>
             </div>
             <div className="flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-yellow-500" />
+              <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
               <span className="text-sm">Degraded - Some issues detected</span>
             </div>
             <div className="flex items-center gap-2">
-              <XCircle className="h-4 w-4 text-red-500" />
+              <XCircle className="h-4 w-4 text-destructive" />
               <span className="text-sm">Unhealthy - Critical failure</span>
             </div>
             <div className="flex items-center gap-2">
@@ -279,7 +295,7 @@ export default function CrowdSecHealth() {
               <span className="text-sm">Warning - Needs attention</span>
             </div>
             <div className="flex items-center gap-2">
-              <Info className="h-4 w-4 text-blue-500" />
+              <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
               <span className="text-sm">Info - Informational</span>
             </div>
           </div>

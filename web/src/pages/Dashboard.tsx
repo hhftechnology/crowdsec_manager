@@ -1,8 +1,11 @@
+import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import api from '@/lib/api'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import api, { Container as ContainerType, Decision } from '@/lib/api'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { AlertCircle, CheckCircle2, Container, Shield, Users } from 'lucide-react'
+import { Shield, Users, Container, Activity } from 'lucide-react'
+import { StatCard, ChartCard, AreaTimeline, PieBreakdown, BarDistribution } from '@/components/charts'
+import { groupByField } from '@/lib/chart-utils'
 
 export default function Dashboard() {
   const { data: healthData, isLoading: healthLoading } = useQuery({
@@ -11,7 +14,7 @@ export default function Dashboard() {
       const response = await api.health.checkStack()
       return response.data.data
     },
-    refetchInterval: 5000, // Refresh every 5 seconds
+    refetchInterval: 5000,
   })
 
   const { data: decisionsData, isLoading: decisionsLoading } = useQuery({
@@ -20,7 +23,7 @@ export default function Dashboard() {
       const response = await api.crowdsec.getDecisions()
       return response.data.data
     },
-    refetchInterval: 10000, // Refresh every 10 seconds
+    refetchInterval: 10000,
   })
 
   const { data: bouncersData, isLoading: bouncersLoading } = useQuery({
@@ -29,166 +32,180 @@ export default function Dashboard() {
       const response = await api.crowdsec.getBouncers()
       return response.data.data
     },
-    refetchInterval: 30000, // Refresh every 30 seconds
+    refetchInterval: 30000,
   })
 
-  const parseDecisionsCount = (data: any): number => {
-    if (!data) return 0
-    // If the API returns a count field, use it (preferred)
-    if (typeof data.count === 'number') return data.count
-    // If decisions array is available, use its length
-    if (Array.isArray(data.decisions)) return data.decisions.length
-    // Fallback to parsing the string (legacy support)
-    if (typeof data.decisions === 'string') {
-      const lines = data.decisions.split('\n').filter((line: string) => line.trim())
-      return Math.max(0, lines.length - 2)
+  const { data: alertsData } = useQuery({
+    queryKey: ['alerts-dashboard'],
+    queryFn: async () => {
+      const response = await api.crowdsec.getAlertsAnalysis({ since: '7d' })
+      return response.data.data
+    },
+    refetchInterval: 30000,
+  })
+
+  const decisions: Decision[] = useMemo(() => {
+    if (!decisionsData) return []
+    if (Array.isArray(decisionsData.decisions)) return decisionsData.decisions
+    return []
+  }, [decisionsData])
+
+  const decisionsCount = useMemo(() => {
+    if (!decisionsData) return 0
+    if (typeof decisionsData.count === 'number') return decisionsData.count
+    return decisions.length
+  }, [decisionsData, decisions])
+
+  const bouncersCount = useMemo(() => {
+    if (!bouncersData) return 0
+    if (typeof bouncersData.count === 'number') return bouncersData.count
+    if (Array.isArray(bouncersData.bouncers)) return bouncersData.bouncers.length
+    return 0
+  }, [bouncersData])
+
+  const runningContainers = healthData?.containers?.filter((c: ContainerType) => c.running).length ?? 0
+  const totalContainers = healthData?.containers?.length ?? 0
+  const alertsCount = alertsData?.count ?? 0
+
+  const decisionTypeData = useMemo(() => {
+    if (decisions.length === 0) return []
+    return groupByField(decisions, 'type', 5)
+  }, [decisions])
+
+  const topBlockedIPs = useMemo(() => {
+    if (decisions.length === 0) return []
+    return groupByField(decisions, 'value', 10)
+  }, [decisions])
+
+  const decisionsOverTime = useMemo(() => {
+    if (decisions.length === 0) return []
+    const buckets: Record<string, number> = {}
+    for (const d of decisions) {
+      const date = d.created_at
+        ? new Date(d.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+        : 'Unknown'
+      buckets[date] = (buckets[date] || 0) + 1
     }
-    return 0
-  }
-
-  const parseBouncersCount = (data: any): number => {
-    if (!data) return 0
-    if (typeof data.count === 'number') return data.count
-    if (Array.isArray(data)) return data.length
-    if (data.bouncers && Array.isArray(data.bouncers)) return data.bouncers.length
-    return 0
-  }
-
-  const decisionsCount = parseDecisionsCount(decisionsData)
-  const bouncersCount = parseBouncersCount(bouncersData)
+    return Object.entries(buckets)
+      .map(([date, count]) => ({ date, value: count }))
+      .slice(-7)
+  }, [decisions])
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold">Dashboard</h1>
-        <p className="text-muted-foreground mt-2">
-          System overview and health status
+        <p className="text-muted-foreground mt-1">
+          System overview and threat posture
         </p>
       </div>
 
-      {/* System Health Status */}
+      {/* Row 1: Stat Cards */}
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          title="Active Decisions"
+          value={decisionsCount}
+          description="IPs currently blocked"
+          icon={<Shield className="h-4 w-4 text-muted-foreground" />}
+          loading={decisionsLoading}
+        />
+        <StatCard
+          title="Alerts (7d)"
+          value={alertsCount}
+          description="Alerts in the last 7 days"
+          icon={<Activity className="h-4 w-4 text-muted-foreground" />}
+          loading={!alertsData && !decisionsLoading}
+        />
+        <StatCard
+          title="Active Bouncers"
+          value={bouncersCount}
+          description="Connected enforcement agents"
+          icon={<Users className="h-4 w-4 text-muted-foreground" />}
+          loading={bouncersLoading}
+        />
+        <StatCard
+          title="Containers"
+          value={`${runningContainers}/${totalContainers}`}
+          description={healthData?.allRunning ? 'All running' : 'Some containers down'}
+          icon={<Container className="h-4 w-4 text-muted-foreground" />}
+          loading={healthLoading}
+        />
+      </div>
+
+      {/* Row 2: Decisions Over Time + Type Distribution */}
+      <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
+        <ChartCard title="Decisions Over Time" description="Recent decision activity">
+          {decisionsOverTime.length > 0 ? (
+            <AreaTimeline data={decisionsOverTime} height={280} />
+          ) : (
+            <div className="flex items-center justify-center h-[280px] text-muted-foreground text-sm">
+              No decision data available
+            </div>
+          )}
+        </ChartCard>
+        <ChartCard title="Decision Types" description="Distribution by type">
+          {decisionTypeData.length > 0 ? (
+            <PieBreakdown data={decisionTypeData} height={280} />
+          ) : (
+            <div className="flex items-center justify-center h-[280px] text-muted-foreground text-sm">
+              No decision data available
+            </div>
+          )}
+        </ChartCard>
+      </div>
+
+      {/* Row 3: Top Blocked IPs */}
+      {topBlockedIPs.length > 0 && (
+        <ChartCard title="Top Blocked IPs" description="Most frequently targeted addresses">
+          <BarDistribution data={topBlockedIPs} height={300} layout="horizontal" />
+        </ChartCard>
+      )}
+
+      {/* Row 4: Container Status */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            {healthLoading ? (
-              <AlertCircle className="h-5 w-5 animate-pulse" />
-            ) : healthData?.allRunning ? (
-              <CheckCircle2 className="h-5 w-5 text-green-500" />
-            ) : (
-              <AlertCircle className="h-5 w-5 text-red-500" />
-            )}
-            System Health
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Container className="h-5 w-5" />
+            Container Status
           </CardTitle>
-          <CardDescription>
-            {healthData?.allRunning
-              ? 'All containers are running'
-              : 'Some containers are not running'}
-          </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-2">
-            {healthData?.containers.map((container: any) => (
-              <div
-                key={container.id}
-                className="flex items-center justify-between p-3 rounded-lg border"
-              >
-                <div className="flex items-center gap-3">
-                  <Container className="h-4 w-4 text-muted-foreground" />
-                  <div>
-                    <p className="font-medium">{container.name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {container.id.substring(0, 12)}
-                    </p>
-                  </div>
-                </div>
-                <Badge
-                  variant={container.running ? 'default' : 'destructive'}
+          {healthLoading ? (
+            <div className="space-y-2">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-14 animate-pulse bg-muted rounded-lg" />
+              ))}
+            </div>
+          ) : healthData?.containers ? (
+            <div className="space-y-2">
+              {healthData.containers.map((container: ContainerType) => (
+                <div
+                  key={container.id}
+                  className="flex items-center justify-between p-3 rounded-lg border"
                 >
-                  {container.status}
-                </Badge>
-              </div>
-            ))}
-          </div>
+                  <div className="flex items-center gap-3">
+                    <div className={`h-2 w-2 rounded-full ${container.running ? 'bg-green-500' : 'bg-red-500'}`} />
+                    <div>
+                      <p className="font-medium">{container.name}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {container.id.substring(0, 12)}
+                      </p>
+                    </div>
+                  </div>
+                  <Badge variant={container.running ? 'success' : 'destructive'}>
+                    {container.status}
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-muted-foreground text-sm text-center py-4">No container data available</p>
+          )}
         </CardContent>
       </Card>
 
-      {/* Statistics Grid */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {/* Active Decisions */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Active Decisions
-            </CardTitle>
-            <Shield className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {decisionsLoading ? (
-                <div className="h-8 w-16 animate-pulse bg-muted rounded" />
-              ) : (
-                decisionsCount
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              IPs currently blocked
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Active Bouncers */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Active Bouncers
-            </CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {bouncersLoading ? (
-                <div className="h-8 w-16 animate-pulse bg-muted rounded" />
-              ) : (
-                bouncersCount
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Connected enforcement agents
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Containers Status */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Containers
-            </CardTitle>
-            <Container className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {healthLoading ? (
-                <div className="h-8 w-16 animate-pulse bg-muted rounded" />
-              ) : (
-                <>
-                  {healthData?.containers.filter((c: any) => c.running).length || 0}
-                  <span className="text-muted-foreground text-base">
-                    /{healthData?.containers.length || 0}
-                  </span>
-                </>
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Running containers
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Timestamp */}
       {healthData?.timestamp && (
-        <p className="text-sm text-muted-foreground text-center">
+        <p className="text-xs text-muted-foreground text-center">
           Last updated: {new Date(healthData.timestamp).toLocaleString()}
         </p>
       )}

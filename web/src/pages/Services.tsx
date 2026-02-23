@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import api, { ServiceActionRequest } from '@/lib/api'
+import api, { ServiceActionRequest, ServiceInfo } from '@/lib/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -56,7 +56,7 @@ export default function Services() {
     shutdownMutation.mutate()
   }
 
-  const getServiceStatus = (service: any): 'running' | 'stopped' | 'unknown' => {
+  const getServiceStatus = (service: ServiceInfo): 'running' | 'stopped' | 'unknown' => {
     if (service.running === true) return 'running'
     if (service.running === false) return 'stopped'
     return 'unknown'
@@ -90,7 +90,7 @@ export default function Services() {
             <div className="h-48 bg-muted animate-pulse rounded-lg" />
           </>
         ) : servicesData && servicesData.length > 0 ? (
-          servicesData.map((service: any, index: number) => {
+          servicesData.map((service: ServiceInfo, index: number) => {
             const status = getServiceStatus(service)
             return (
               <Card key={service.name || index}>
@@ -100,9 +100,9 @@ export default function Services() {
                       {service.name || 'Unknown Service'}
                     </CardTitle>
                     {status === 'running' ? (
-                      <CheckCircle2 className="h-5 w-5 text-green-500" />
+                      <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                     ) : status === 'stopped' ? (
-                      <XCircle className="h-5 w-5 text-red-500" />
+                      <XCircle className="h-5 w-5 text-destructive" />
                     ) : (
                       <XCircle className="h-5 w-5 text-muted-foreground" />
                     )}

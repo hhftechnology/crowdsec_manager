@@ -40,8 +40,9 @@ export function ImportDecisionsDialog({ onSuccess }: ImportDecisionsDialogProps)
       setOpen(false)
       setFile(null)
       onSuccess()
-    } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Failed to import decisions')
+    } catch (error: unknown) {
+      const axiosError = error as { response?: { data?: { error?: string } } }
+      toast.error(axiosError.response?.data?.error || 'Failed to import decisions')
     } finally {
       setIsLoading(false)
     }

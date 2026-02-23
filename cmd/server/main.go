@@ -15,12 +15,14 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"crowdsec-manager/internal/api"
+	"crowdsec-manager/internal/api/middleware"
 	"crowdsec-manager/internal/backup"
 	"crowdsec-manager/internal/config"
 	"crowdsec-manager/internal/cron"
 	"crowdsec-manager/internal/database"
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
+	"crowdsec-manager/internal/messaging"
 )
 
 // Main entry point for the CrowdSec Manager server
@@ -35,6 +37,7 @@ func main() {
 
 	// Initialize structured logger with configured level and output file
 	logger.Init(cfg.LogLevel, cfg.LogFile)
+	defer logger.Sync()
 
 	// Initialize SQLite database connection with automatic schema migration
 	db, err := database.New(cfg.DatabasePath)
@@ -44,12 +47,15 @@ func main() {
 	defer db.Close()
 	logger.Info("Database initialized", "path", cfg.DatabasePath)
 
-	// Initialize Docker API client with automatic version negotiation
-	dockerClient, err := docker.NewClient()
+	// Initialize multi-host Docker client (falls back to single host if DOCKER_HOSTS is empty)
+	multiHost, err := docker.NewMultiHostClient(cfg.DockerHosts)
 	if err != nil {
 		logger.Fatal("Failed to initialize Docker client", "error", err)
 	}
-	defer dockerClient.Close()
+	defer multiHost.Close()
+
+	// Default client for backward compatibility with existing handler signatures
+	dockerClient := multiHost.DefaultClient()
 
 	dataDir := cfg.ConfigDir
 
@@ -61,6 +67,12 @@ func main() {
 	cronScheduler.Start()
 	defer cronScheduler.Stop()
 
+	// Initialize NATS messaging (optional — nil-safe when disabled)
+	publisher, hub, natsCleanup := initMessaging(cfg)
+	if natsCleanup != nil {
+		defer natsCleanup()
+	}
+
 	// Configure HTTP router with recovery middleware and custom logger
 	router := gin.New()
 	router.Use(gin.Recovery())
@@ -70,7 +82,7 @@ func main() {
 	router.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{"http://localhost:3000", "http://localhost:5173"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "X-Docker-Host"},
 		ExposeHeaders:    []string{"Content-Length"},
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
@@ -83,6 +95,10 @@ func main() {
 
 	// Register all API route groups under /api prefix
 	apiGroup := router.Group("/api")
+
+	// Add Docker host selector middleware for multi-host support
+	apiGroup.Use(middleware.DockerHostSelector(multiHost))
+
 	{
 		api.RegisterHealthRoutes(apiGroup, dockerClient, db, cfg)
 		api.RegisterIPRoutes(apiGroup, dockerClient, cfg)
@@ -97,7 +113,21 @@ func main() {
 		api.RegisterServicesRoutes(apiGroup, dockerClient, db, cfg)
 		api.RegisterNotificationRoutes(apiGroup, dockerClient, db, cfg)
 		api.RegisterProfileRoutes(apiGroup, db, cfg, dockerClient)
+		api.RegisterHostRoutes(apiGroup, multiHost)
+		api.RegisterTerminalRoutes(apiGroup, dockerClient)
+
+		// Event routes (only if NATS hub is available)
+		if hub != nil {
+			api.RegisterEventRoutes(apiGroup, hub)
+		}
 	}
+
+	// Bridge NATS events to WebSocket hub (if both are available)
+	if publisher != nil && hub != nil {
+		go bridgeNATSToHub(cfg, hub)
+	}
+	// Suppress unused variable warnings — publisher will be used by handlers in Phase 4
+	_ = publisher
 
 	// Serve React frontend static assets and handle client-side routing
 	router.Static("/assets", "./web/dist/assets")
@@ -139,6 +169,39 @@ func main() {
 	}
 
 	logger.Info("Server exited")
+}
+
+// initMessaging initializes NATS client, publisher, and WebSocket hub.
+// Returns nil values when NATS is disabled — all are nil-safe.
+func initMessaging(cfg *config.Config) (*messaging.Publisher, *messaging.Hub, func()) {
+	if !cfg.NatsEnabled || cfg.NatsURL == "" {
+		logger.Info("NATS messaging disabled")
+		return nil, nil, nil
+	}
+
+	natsClient, err := messaging.NewClient(cfg.NatsURL, cfg.NatsToken)
+	if err != nil {
+		logger.Error("Failed to connect to NATS (messaging disabled)", "error", err)
+		return nil, nil, nil
+	}
+
+	publisher := messaging.NewPublisher(natsClient)
+	hub := messaging.NewHub()
+	go hub.Run()
+
+	logger.Info("NATS messaging initialized", "url", cfg.NatsURL)
+
+	cleanup := func() {
+		hub.Stop()
+		natsClient.Close()
+	}
+	return publisher, hub, cleanup
+}
+
+// bridgeNATSToHub subscribes to NATS subjects and forwards events to the WebSocket hub
+func bridgeNATSToHub(cfg *config.Config, hub *messaging.Hub) {
+	// This will be wired up when NATS client Subscribe is implemented
+	logger.Info("NATS-to-WebSocket bridge started")
 }
 
 // checkPrerequisites verifies that Docker daemon is running and required containers exist

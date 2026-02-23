@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 import { RefreshCw, AlertTriangle, Info, Package, AlertCircle, ArrowUpCircle } from 'lucide-react'
+import { PageHeader } from '@/components/common'
 
 export default function Update() {
   const queryClient = useQueryClient()
@@ -83,12 +84,7 @@ export default function Update() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">System Update</h1>
-        <p className="text-muted-foreground mt-2">
-          Update Docker image tags for system components
-        </p>
-      </div>
+      <PageHeader title="System Update" description="Update Docker image tags for system components" />
 
       {/* Current Tags */}
       <Card>
@@ -115,7 +111,7 @@ export default function Update() {
                     <p className="text-sm font-medium capitalize">{service}</p>
                     <div className="flex gap-2">
                       {status.update_available && (
-                        <Badge variant="default" className="bg-green-500 hover:bg-green-600">
+                        <Badge variant="success">
                           <ArrowUpCircle className="w-3 h-3 mr-1" />
                           Update Available
                         </Badge>
@@ -135,7 +131,7 @@ export default function Update() {
                   </div>
                   
                   {status.error && (
-                    <p className="text-xs text-red-500 mt-2">{status.error}</p>
+                    <p className="text-xs text-destructive mt-2">{status.error}</p>
                   )}
                 </div>
               ))}

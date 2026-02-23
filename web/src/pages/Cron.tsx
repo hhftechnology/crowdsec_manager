@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import api, { CronJobRequest } from '@/lib/api'
+import api, { CronJobRequest, CronJob } from '@/lib/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
@@ -178,7 +178,7 @@ export default function Cron() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {cronJobs.map((job: any, index: number) => (
+                {cronJobs.map((job: CronJob, index: number) => (
                   <TableRow key={job.id || index}>
                     <TableCell className="font-mono text-sm">
                       {job.schedule}

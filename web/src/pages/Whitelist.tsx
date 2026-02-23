@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { Shield, Globe, Plus } from 'lucide-react'
+import { PageHeader } from '@/components/common'
 
 export default function Whitelist() {
   const queryClient = useQueryClient()
@@ -126,12 +127,7 @@ export default function Whitelist() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Whitelist Management</h1>
-        <p className="text-muted-foreground mt-2">
-          Manage whitelisted IPs and CIDR ranges across CrowdSec and Traefik
-        </p>
-      </div>
+      <PageHeader title="Whitelist Management" description="Manage whitelisted IPs and CIDR ranges across CrowdSec and Traefik" />
 
       {/* Current IP Quick Whitelist */}
       <Card>

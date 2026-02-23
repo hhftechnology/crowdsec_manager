@@ -9,6 +9,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Database, Download, Trash2, RefreshCw, Plus, AlertTriangle } from 'lucide-react'
+import { PageHeader, EmptyState } from '@/components/common'
 
 export default function Backup() {
   const queryClient = useQueryClient()
@@ -102,15 +103,12 @@ export default function Backup() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Backup Management</h1>
-          <p className="text-muted-foreground mt-2">
-            Create, restore, and manage system backups
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button
+      <PageHeader
+        title="Backup Management"
+        description="Create, restore, and manage system backups"
+        actions={
+          <>
+            <Button
             variant="outline"
             onClick={handleCleanup}
             disabled={cleanupMutation.isPending}
@@ -153,8 +151,9 @@ export default function Backup() {
               </div>
             </DialogContent>
           </Dialog>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {/* Backups Table */}
       <Card>
@@ -280,13 +279,11 @@ export default function Backup() {
               </TableBody>
             </Table>
           ) : (
-            <div className="text-center py-12">
-              <Database className="mx-auto h-12 w-12 text-muted-foreground/50" />
-              <p className="mt-4 text-muted-foreground">No backups available</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                Click "Create Backup" to create your first backup
-              </p>
-            </div>
+            <EmptyState
+              icon={Database}
+              title="No backups available"
+              description='Click "Create Backup" to create your first backup'
+            />
           )}
         </CardContent>
       </Card>

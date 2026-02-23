@@ -127,7 +127,7 @@ export default function Notifications() {
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <CardTitle>Discord Integration</CardTitle>
-              {config.enabled && <CheckCircle className="h-5 w-5 text-green-500" />}
+              {config.enabled && <CheckCircle className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />}
             </div>
             <div className="flex items-center space-x-2">
               <Label htmlFor="discord-enabled">Enable</Label>

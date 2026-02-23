@@ -7,6 +7,7 @@ import (
 	"crowdsec-manager/internal/cron"
 	"crowdsec-manager/internal/database"
 	"crowdsec-manager/internal/docker"
+	"crowdsec-manager/internal/messaging"
 
 	"github.com/gin-gonic/gin"
 )
@@ -89,6 +90,7 @@ func RegisterLogRoutes(router *gin.RouterGroup, dockerClient *docker.Client, db 
 		logs.GET("/traefik/advanced", handlers.AnalyzeTraefikLogsAdvanced(dockerClient, cfg))
 		logs.GET("/:service", handlers.GetServiceLogs(dockerClient))
 		logs.GET("/stream/:service", handlers.StreamLogs(dockerClient))
+		logs.GET("/structured/:service", handlers.GetStructuredLogs(dockerClient, cfg))
 	}
 }
 
@@ -192,4 +194,22 @@ func RegisterProfileRoutes(router *gin.RouterGroup, db *database.Database, cfg *
 		profiles.GET("", handlers.GetProfiles(cfg, dockerClient))
 		profiles.POST("", handlers.UpdateProfiles(db, cfg, dockerClient))
 	}
+}
+
+// RegisterHostRoutes configures endpoints for listing and managing Docker hosts
+func RegisterHostRoutes(router *gin.RouterGroup, multiHost *docker.MultiHostClient) {
+	hosts := router.Group("/hosts")
+	{
+		hosts.GET("/list", handlers.ListDockerHosts(multiHost))
+	}
+}
+
+// RegisterTerminalRoutes configures WebSocket endpoint for interactive container terminals
+func RegisterTerminalRoutes(router *gin.RouterGroup, dockerClient *docker.Client) {
+	router.GET("/terminal/:container", handlers.TerminalSession(dockerClient))
+}
+
+// RegisterEventRoutes configures WebSocket endpoint for real-time event streaming
+func RegisterEventRoutes(router *gin.RouterGroup, hub *messaging.Hub) {
+	router.GET("/events/ws", handlers.EventsWebSocket(hub))
 }

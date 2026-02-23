@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import api, { Bouncer } from '@/lib/api'
+import api, { Bouncer, AxiosErrorResponse } from '@/lib/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -50,7 +50,7 @@ export default function Bouncers() {
       // Handle both array and object response formats
       const data = response.data.data
       if (Array.isArray(data)) return data
-      if (data && Array.isArray((data as any).bouncers)) return (data as any).bouncers
+      if (data && Array.isArray((data as { bouncers: Bouncer[] }).bouncers)) return (data as { bouncers: Bouncer[] }).bouncers
       return []
     },
   })
@@ -69,7 +69,7 @@ export default function Bouncers() {
       setNewBouncerName('')
       toast.success('Bouncer added successfully')
     },
-    onError: (error: any) => {
+    onError: (error: AxiosErrorResponse) => {
       toast.error(error.response?.data?.error || 'Failed to add bouncer')
     },
   })
@@ -82,7 +82,7 @@ export default function Bouncers() {
       queryClient.invalidateQueries({ queryKey: ['bouncers'] })
       toast.success('Bouncer deleted successfully')
     },
-    onError: (error: any) => {
+    onError: (error: AxiosErrorResponse) => {
       toast.error(error.response?.data?.error || 'Failed to delete bouncer')
     },
   })
@@ -108,11 +108,11 @@ export default function Bouncers() {
   const getStatusBadge = (status: string) => {
     switch (status?.toLowerCase()) {
       case 'connected':
-        return <Badge className="bg-green-500">Connected</Badge>
+        return <Badge variant="success">Connected</Badge>
       case 'disconnected':
         return <Badge variant="destructive">Disconnected</Badge>
       case 'stale':
-        return <Badge className="bg-yellow-500">Stale</Badge>
+        return <Badge variant="warning">Stale</Badge>
       default:
         return <Badge variant="secondary">{status || 'Unknown'}</Badge>
     }
@@ -180,7 +180,7 @@ export default function Bouncers() {
                       onClick={() => copyToClipboard(createdBouncer.api_key)}
                     >
                       {copied ? (
-                        <Check className="h-4 w-4 text-green-500" />
+                        <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                       ) : (
                         <Copy className="h-4 w-4" />
                       )}
@@ -189,7 +189,7 @@ export default function Bouncers() {
                   <code className="block p-2 bg-background rounded border font-mono text-sm break-all">
                     {createdBouncer.api_key}
                   </code>
-                  <p className="text-xs text-yellow-600 flex items-center gap-1">
+                  <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
                     <AlertCircle className="h-3 w-3" />
                     Copy this key now. It won't be shown again.
                   </p>

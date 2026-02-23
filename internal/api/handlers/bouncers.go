@@ -19,6 +19,7 @@ import (
 // GetBouncers retrieves CrowdSec bouncers
 func GetBouncers(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		dockerClient = resolveDockerClient(c, dockerClient)
 		logger.Info("Getting CrowdSec bouncers")
 
 		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
@@ -74,6 +75,7 @@ func GetBouncers(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFun
 // AddBouncer adds a new bouncer with a generated API key
 func AddBouncer(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		dockerClient = resolveDockerClient(c, dockerClient)
 		var req struct {
 			Name string `json:"name" binding:"required"`
 		}
@@ -144,6 +146,7 @@ func generateBouncerAPIKey() (string, error) {
 // DeleteBouncer deletes a bouncer
 func DeleteBouncer(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		dockerClient = resolveDockerClient(c, dockerClient)
 		name := strings.TrimSpace(c.Param("name"))
 		if name == "" {
 			c.JSON(http.StatusBadRequest, models.Response{

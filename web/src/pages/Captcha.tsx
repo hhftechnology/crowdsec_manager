@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { XCircle, Shield, Info } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { useEffect } from 'react'
+import { PageHeader } from '@/components/common'
 
 export default function Captcha() {
   const queryClient = useQueryClient()
@@ -79,12 +80,7 @@ export default function Captcha() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Captcha Setup</h1>
-        <p className="text-muted-foreground mt-2">
-          Configure captcha protection for CrowdSec remediation
-        </p>
-      </div>
+      <PageHeader title="Captcha Setup" description="Configure captcha protection for CrowdSec remediation" />
 
       {/* Current Status */}
       <Card>
@@ -104,10 +100,10 @@ export default function Captcha() {
             <div className="space-y-4">
               {/* Implementation Status - Fully Active */}
               {statusData?.implemented && (
-                <div className="flex items-center gap-3 p-4 border border-green-500/50 bg-green-500/10 rounded-lg">
-                  <Shield className="h-5 w-5 text-green-500 flex-shrink-0" />
+                <div className="flex items-center gap-3 p-4 border border-emerald-500/50 bg-emerald-500/10 rounded-lg">
+                  <Shield className="h-5 w-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
                   <div>
-                    <p className="font-medium text-green-700 dark:text-green-400">
+                    <p className="font-medium text-emerald-700 dark:text-emerald-400">
                       Captcha Protection Active
                     </p>
                     <p className="text-sm text-muted-foreground">
@@ -119,10 +115,10 @@ export default function Captcha() {
 
               {/* Implementation Status Warning - Partially Configured */}
               {!statusData?.implemented && (statusData?.configured || statusData?.configSaved) && (
-                <div className="flex items-center gap-3 p-4 border border-yellow-500/50 bg-yellow-500/10 rounded-lg">
-                  <XCircle className="h-5 w-5 text-yellow-500 flex-shrink-0" />
+                <div className="flex items-center gap-3 p-4 border border-amber-500/50 bg-amber-500/10 rounded-lg">
+                  <XCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
                   <div>
-                    <p className="font-medium text-yellow-700 dark:text-yellow-400">
+                    <p className="font-medium text-amber-700 dark:text-amber-400">
                       Captcha Partially Configured
                     </p>
                     <p className="text-sm text-muted-foreground">
@@ -158,7 +154,7 @@ export default function Captcha() {
                   </p>
                 </div>
                 {statusData?.configured ? (
-                  <Badge variant="default" className="bg-green-600">Active</Badge>
+                  <Badge variant="success">Active</Badge>
                 ) : (
                   <Badge variant="outline">Not Found</Badge>
                 )}
@@ -201,7 +197,7 @@ export default function Captcha() {
                   </p>
                 </div>
                 {statusData?.captchaHTMLExists ? (
-                  <Badge variant="default" className="bg-green-600">Exists</Badge>
+                  <Badge variant="success">Exists</Badge>
                 ) : (
                   <Badge variant="destructive">Missing</Badge>
                 )}

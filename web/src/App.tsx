@@ -1,8 +1,8 @@
 import { Suspense, lazy } from 'react'
 import { Routes, Route } from 'react-router-dom'
 import { Toaster } from 'sonner'
-import Layout from './components/Layout'
-import { ThemeProvider } from './components/ThemeProvider'
+import Layout from './layouts/Layout'
+import { ThemeProvider } from './contexts/ThemeContext'
 
 // Lazy load pages
 const Dashboard = lazy(() => import('./pages/Dashboard'))
@@ -24,6 +24,7 @@ const AlertAnalysis = lazy(() => import('./pages/AlertAnalysis'))
 const Notifications = lazy(() => import('./pages/Notifications'))
 const Profiles = lazy(() => import('./pages/Profiles'))
 const Bouncers = lazy(() => import('./pages/Bouncers'))
+const Terminal = lazy(() => import('./pages/Terminal'))
 
 function App() {
   return (
@@ -51,6 +52,7 @@ function App() {
               <Route path="/notifications" element={<Notifications />} />
               <Route path="/profiles" element={<Profiles />} />
               <Route path="/bouncers" element={<Bouncers />} />
+              <Route path="/terminal" element={<Terminal />} />
             </Routes>
           </Suspense>
         </Layout>
