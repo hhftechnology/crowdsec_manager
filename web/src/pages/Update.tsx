@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import api, { UpdateRequest } from '@/lib/api'
+import { ErrorContexts, getErrorMessage } from '@/lib/api/errors'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -37,8 +38,8 @@ export default function Update() {
       setTraefikTag('')
       setCrowdsecTag('')
     },
-    onError: () => {
-      toast.error('Failed to update with CrowdSec')
+    onError: (error) => {
+      toast.error(getErrorMessage(error, 'Failed to update with CrowdSec', ErrorContexts.UpdateWithCrowdSec))
     },
   })
 
@@ -52,8 +53,8 @@ export default function Update() {
       setGerbilTag('')
       setTraefikTag('')
     },
-    onError: () => {
-      toast.error('Failed to update without CrowdSec')
+    onError: (error) => {
+      toast.error(getErrorMessage(error, 'Failed to update without CrowdSec', ErrorContexts.UpdateWithoutCrowdSec))
     },
   })
 
@@ -217,7 +218,7 @@ export default function Update() {
                   className="flex-1"
                   disabled={isUpdating}
                 >
-                  <RefreshCw className="mr-2 h-4 w-4" />
+                  <RefreshCw className="h-4 w-4" />
                   Update with CrowdSec
                 </Button>
               </AlertDialogTrigger>
@@ -261,7 +262,7 @@ export default function Update() {
                   className="flex-1"
                   disabled={isUpdating}
                 >
-                  <RefreshCw className="mr-2 h-4 w-4" />
+                  <RefreshCw className="h-4 w-4" />
                   Update without CrowdSec
                 </Button>
               </AlertDialogTrigger>

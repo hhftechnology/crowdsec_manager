@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"crowdsec-manager/internal/config"
+	"crowdsec-manager/internal/database"
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
 	"crowdsec-manager/internal/models"
@@ -9,6 +10,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/buger/jsonparser"
 	"github.com/gin-gonic/gin"
@@ -162,12 +164,13 @@ func GetMetrics(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc
 }
 
 // EnrollCrowdSec enrolls CrowdSec with the console
-func EnrollCrowdSec(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
+func EnrollCrowdSec(dockerClient *docker.Client, db *database.Database, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		dockerClient = resolveDockerClient(c, dockerClient)
 		var req struct {
-			EnrollmentKey string `json:"enrollment_key" binding:"required"`
-			Name          string `json:"name"`
+			EnrollmentKey  string `json:"enrollment_key" binding:"required"`
+			Name           string `json:"name"`
+			DisableContext *bool  `json:"disable_context,omitempty"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, models.Response{
@@ -179,8 +182,33 @@ func EnrollCrowdSec(dockerClient *docker.Client, cfg *config.Config) gin.Handler
 
 		logger.Info("Enrolling CrowdSec with console", "has_name", req.Name != "")
 
+		settings, err := db.GetSettings()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to read settings: %v", err),
+			})
+			return
+		}
+
+		disableContext := settings.EnrollDisableContext
+		if req.DisableContext != nil {
+			disableContext = *req.DisableContext
+			settings.EnrollDisableContext = disableContext
+			if err := db.UpdateSettings(settings); err != nil {
+				c.JSON(http.StatusInternalServerError, models.Response{
+					Success: false,
+					Error:   fmt.Sprintf("Failed to save enrollment preference: %v", err),
+				})
+				return
+			}
+		}
+
 		// Build command with optional name parameter
 		cmd := []string{"cscli", "console", "enroll"}
+		if disableContext {
+			cmd = append(cmd, "--disable", "context")
+		}
 		if req.Name != "" {
 			cmd = append(cmd, "--name", req.Name)
 		}
@@ -213,7 +241,7 @@ func EnrollCrowdSec(dockerClient *docker.Client, cfg *config.Config) gin.Handler
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
 			Message: fmt.Sprintf("Enrollment key submitted. Please approve the request in your CrowdSec Console at %s", cfg.CrowdSecConsoleURL),
-			Data:    gin.H{"output": output},
+			Data:    gin.H{"output": output, "disable_context": disableContext},
 		})
 	}
 }
@@ -241,3 +269,110 @@ func GetCrowdSecEnrollmentStatus(dockerClient *docker.Client, cfg *config.Config
 	}
 }
 
+// FinalizeCrowdSecEnrollment restarts CrowdSec and re-reads console status
+func FinalizeCrowdSecEnrollment(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		dockerClient = resolveDockerClient(c, dockerClient)
+
+		logger.Info("Finalizing CrowdSec enrollment", "container", cfg.CrowdsecContainerName)
+
+		if err := dockerClient.RestartContainer(cfg.CrowdsecContainerName); err != nil {
+			logger.Error("Failed to restart CrowdSec during enrollment finalize", "error", err)
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to restart CrowdSec: %v", err),
+			})
+			return
+		}
+
+		var (
+			status  models.ConsoleStatus
+			lastErr error
+		)
+
+		// Poll briefly because status can fail while container is still starting.
+		for i := 0; i < 6; i++ {
+			status, lastErr = GetConsoleStatusHelper(dockerClient, cfg.CrowdsecContainerName)
+			if lastErr == nil {
+				c.JSON(http.StatusOK, models.Response{
+					Success: true,
+					Message: "CrowdSec restarted and console status refreshed",
+					Data:    status,
+				})
+				return
+			}
+
+			time.Sleep(2 * time.Second)
+		}
+
+		logger.Error("Failed to read console status after CrowdSec restart", "error", lastErr)
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Success: false,
+			Error:   fmt.Sprintf("CrowdSec restarted but status check failed: %v", lastErr),
+		})
+	}
+}
+
+// GetCrowdSecEnrollmentPreferences returns persisted enrollment preferences
+func GetCrowdSecEnrollmentPreferences(db *database.Database) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		settings, err := db.GetSettings()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to read settings: %v", err),
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, models.Response{
+			Success: true,
+			Data: gin.H{
+				"disable_context": settings.EnrollDisableContext,
+			},
+		})
+	}
+}
+
+// UpdateCrowdSecEnrollmentPreferences updates persisted enrollment preferences
+func UpdateCrowdSecEnrollmentPreferences(db *database.Database) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req struct {
+			DisableContext bool `json:"disable_context"`
+		}
+
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, models.Response{
+				Success: false,
+				Error:   "Invalid request: " + err.Error(),
+			})
+			return
+		}
+
+		settings, err := db.GetSettings()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to read settings: %v", err),
+			})
+			return
+		}
+
+		settings.EnrollDisableContext = req.DisableContext
+		if err := db.UpdateSettings(settings); err != nil {
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to save enrollment preference: %v", err),
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, models.Response{
+			Success: true,
+			Message: "Enrollment preferences updated",
+			Data: gin.H{
+				"disable_context": settings.EnrollDisableContext,
+			},
+		})
+	}
+}

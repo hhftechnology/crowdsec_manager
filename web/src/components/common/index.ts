@@ -9,6 +9,8 @@ export type { EmptyStateProps, ErrorStateProps } from './ErrorStates'
 
 export { PageHeader } from './PageHeader'
 export type { PageHeaderProps } from './PageHeader'
+export { ResultsSummary } from './ResultsSummary'
+export type { ResultsSummaryProps } from './ResultsSummary'
 
 export { StatusCard } from './StatusCard'
 export type { StatusCardProps, StatusCardVariant } from './StatusCard'
@@ -24,3 +26,6 @@ export type { InfoCardProps, InfoItem } from './InfoCard'
 
 export { QueryError } from './QueryError'
 export type { QueryErrorProps } from './QueryError'
+
+export { ScenarioName } from './ScenarioName'
+export { TimeDisplay, formatDuration, expiresIn } from './TimeDisplay'

@@ -85,6 +85,36 @@ func GetDiscordConfig(db *database.Database, cfg *config.Config, dockerClient *d
 	}
 }
 
+// PreviewDiscordConfig returns the raw YAML template or container config for advanced editing
+func PreviewDiscordConfig(cfg *config.Config, dockerClient *docker.Client) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		dockerClient = resolveDockerClient(c, dockerClient)
+		source := c.DefaultQuery("source", "default")
+
+		var yamlContent string
+
+		if source == "container" {
+			// Try to read existing discord.yaml from container
+			output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
+				"cat", cfg.CrowdSecNotificationsDir + "/discord.yaml",
+			})
+			if err == nil && output != "" {
+				yamlContent = output
+			} else {
+				// Fall back to template
+				yamlContent = DiscordTemplate
+			}
+		} else {
+			yamlContent = DiscordTemplate
+		}
+
+		c.JSON(http.StatusOK, models.Response{
+			Success: true,
+			Data:    yamlContent,
+		})
+	}
+}
+
 // UpdateDiscordConfig updates the Discord configuration
 func UpdateDiscordConfig(db *database.Database, cfg *config.Config, dockerClient *docker.Client) gin.HandlerFunc {
 	return func(c *gin.Context) {

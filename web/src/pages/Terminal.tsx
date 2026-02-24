@@ -16,6 +16,7 @@ import { Badge } from '@/components/ui/badge'
 import { healthAPI } from '@/lib/api'
 import { useTerminal } from '@/hooks/useTerminal'
 import { TerminalSquare, Play, Square } from 'lucide-react'
+import { PageHeader } from '@/components/common'
 
 export default function Terminal() {
   const [selectedContainer, setSelectedContainer] = useState('')
@@ -50,10 +51,10 @@ export default function Terminal() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Terminal</h1>
-        <p className="text-muted-foreground">Interactive container terminal sessions</p>
-      </div>
+      <PageHeader
+        title="Terminal"
+        description="Interactive container terminal sessions"
+      />
 
       <Card>
         <CardHeader>

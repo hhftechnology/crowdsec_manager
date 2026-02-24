@@ -1,16 +1,19 @@
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import api, { ServiceActionRequest, ServiceInfo } from '@/lib/api'
+import { ErrorContexts, getErrorMessage } from '@/lib/api/errors'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 import { CheckCircle2, XCircle, Play, Square, RotateCw, Power, Key } from 'lucide-react'
 import EnrollDialog from '@/components/EnrollDialog'
-import { QueryError } from '@/components/common'
+import { PageHeader, QueryError } from '@/components/common'
 
 export default function Services() {
   const queryClient = useQueryClient()
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
 
 
 
@@ -23,6 +26,17 @@ export default function Services() {
     refetchInterval: 10000, // Refresh every 10 seconds
   })
 
+  useEffect(() => {
+    if (servicesData) {
+      setLastUpdated(new Date())
+    }
+  }, [servicesData])
+
+  const lastUpdatedLabel = useMemo(() => {
+    if (!lastUpdated) return 'Not refreshed yet'
+    return `Updated ${lastUpdated.toLocaleTimeString()}`
+  }, [lastUpdated])
+
   // Poll for enrollment status (keep this for the page-level awareness if needed, or remove if EnrollDialog handles it all)
   // Actually, the page doesn't use enrollmentData other than for the dialog.
   // So we can remove the polling here as EnrollDialog handles it.
@@ -33,8 +47,13 @@ export default function Services() {
       toast.success(`Service ${variables.action} command sent successfully`)
       queryClient.invalidateQueries({ queryKey: ['services'] })
     },
-    onError: (_error: unknown, variables: ServiceActionRequest) => {
-      toast.error(`Failed to ${variables.action} service`)
+    onError: (error: unknown, variables: ServiceActionRequest) => {
+      const actionContext = {
+        start: ErrorContexts.ServicesActionStart,
+        stop: ErrorContexts.ServicesActionStop,
+        restart: ErrorContexts.ServicesActionRestart,
+      } as const
+      toast.error(getErrorMessage(error, `Failed to ${variables.action} service`, actionContext[variables.action]))
     },
   })
 
@@ -44,8 +63,8 @@ export default function Services() {
       toast.success('Graceful shutdown initiated')
       queryClient.invalidateQueries({ queryKey: ['services'] })
     },
-    onError: () => {
-      toast.error('Failed to initiate shutdown')
+    onError: (error) => {
+      toast.error(getErrorMessage(error, 'Failed to initiate shutdown', ErrorContexts.ServicesShutdown))
     },
   })
 
@@ -65,22 +84,23 @@ export default function Services() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Services Management</h1>
-          <p className="text-muted-foreground mt-2">
-            Control and monitor system services
-          </p>
-        </div>
-        <EnrollDialog 
-          trigger={
-            <Button variant="outline">
-              <Key className="mr-2 h-4 w-4" />
-              Enroll CrowdSec
-            </Button>
-          }
-        />
-      </div>
+      <PageHeader
+        title="Services Management"
+        description="Control and monitor system services"
+        actions={
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">{lastUpdatedLabel}</span>
+            <EnrollDialog
+              trigger={
+                <Button variant="outline">
+                  <Key className="h-4 w-4" />
+                  Enroll CrowdSec
+                </Button>
+              }
+            />
+          </div>
+        }
+      />
 
       {isError && <QueryError error={error} onRetry={refetch} />}
 
@@ -182,7 +202,7 @@ export default function Services() {
                 variant="destructive"
                 disabled={shutdownMutation.isPending}
               >
-                <Power className="mr-2 h-4 w-4" />
+                <Power className="h-4 w-4" />
                 Graceful Shutdown
               </Button>
             </AlertDialogTrigger>

@@ -1,10 +1,12 @@
 /// <reference types="vite/client" />
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import api, { Scenario, ScenarioSetupRequest } from '@/lib/api'
 import { simulationAPI } from '@/lib/api/simulation'
 import type { SimulationStatus } from '@/lib/api/simulation'
+import { ErrorContexts, getErrorMessage } from '@/lib/api/errors'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -14,6 +16,7 @@ import { Switch } from '@/components/ui/switch'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { FileText, Plus, X, CheckCircle2, AlertCircle, FlaskConical } from 'lucide-react'
 import { PageHeader, EmptyState, CardSkeleton } from '@/components/common'
+import { useSearch } from '@/contexts/SearchContext'
 
 interface ScenarioItem {
   name: string
@@ -68,8 +71,10 @@ const parseScenariosList = (data: ScenariosResponse | null | undefined): Scenari
 
 export default function Scenarios() {
   const queryClient = useQueryClient()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [scenarios, setScenarios] = useState<Scenario[]>([{ name: '', description: '', content: '' }])
   const [debugInfo, setDebugInfo] = useState<Record<string, unknown> | null>(null)
+  const { query, setQuery } = useSearch()
 
   const { data: scenariosListRaw, isLoading, error, isError } = useQuery({
     queryKey: ['scenarios'],
@@ -88,7 +93,7 @@ export default function Scenarios() {
       setScenarios([{ name: '', description: '', content: '' }])
       queryClient.invalidateQueries({ queryKey: ['scenarios'] })
     },
-    onError: () => { toast.error('Failed to setup scenarios') },
+    onError: (error) => { toast.error(getErrorMessage(error, 'Failed to setup scenarios', ErrorContexts.ScenariosSetup)) },
   })
 
   const handleScenarioChange = (index: number, field: keyof Scenario, value: string) => {
@@ -108,6 +113,34 @@ export default function Scenarios() {
   }
 
   const scenariosList = parseScenariosList(scenariosListRaw)
+  const filteredScenarios = useMemo(() => {
+    if (!query) return scenariosList
+    const lower = query.toLowerCase()
+    return scenariosList.filter((scenario) =>
+      scenario.name?.toLowerCase().includes(lower) ||
+      scenario.description?.toLowerCase().includes(lower) ||
+      scenario.local_path?.toLowerCase().includes(lower)
+    )
+  }, [scenariosList, query])
+
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams)
+    if (query) {
+      next.set('q', query)
+    } else {
+      next.delete('q')
+    }
+    if (next.toString() !== searchParams.toString()) {
+      setSearchParams(next, { replace: true })
+    }
+  }, [query, searchParams, setSearchParams])
+
+  useEffect(() => {
+    const q = searchParams.get('q') ?? ''
+    if (q && q !== query) {
+      setQuery(q)
+    }
+  }, [searchParams, query, setQuery])
 
   useEffect(() => {
     if (scenariosListRaw) {
@@ -123,7 +156,19 @@ export default function Scenarios() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Scenario Management" description="Setup and manage custom CrowdSec scenarios" />
+      <PageHeader
+        title="Scenario Management"
+        description="Setup and manage custom CrowdSec scenarios"
+        breadcrumbs="Hub / Scenarios"
+        actions={
+          <Input
+            placeholder="Search scenarios..."
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            className="h-9 w-56"
+          />
+        }
+      />
 
       {/* Current Scenarios */}
       <Card>
@@ -135,15 +180,18 @@ export default function Scenarios() {
                 <CardTitle>Active Scenarios</CardTitle>
                 <CardDescription>
                   Currently installed CrowdSec scenarios
-                  {scenariosList.length > 0 && (
-                    <span className="ml-2">({scenariosList.length} scenario{scenariosList.length !== 1 ? 's' : ''} found)</span>
+                  {filteredScenarios.length > 0 && (
+                    <span className="ml-2">
+                      ({filteredScenarios.length} scenario{filteredScenarios.length !== 1 ? 's' : ''} found
+                      {query ? ` of ${scenariosList.length}` : ''})
+                    </span>
                   )}
                 </CardDescription>
               </div>
             </div>
-            {scenariosList.length > 0 && (
+            {filteredScenarios.length > 0 && (
               <Badge variant="outline" className="flex items-center gap-1">
-                <CheckCircle2 className="h-3 w-3" />{scenariosList.length} Active
+                <CheckCircle2 className="h-3 w-3" />{filteredScenarios.length} Active
               </Badge>
             )}
           </div>
@@ -168,9 +216,9 @@ export default function Scenarios() {
           )}
           {isLoading ? (
             <CardSkeleton lines={3} />
-          ) : scenariosList.length > 0 ? (
+          ) : filteredScenarios.length > 0 ? (
             <div className="space-y-2">
-              {scenariosList.map((scenario, index) => (
+              {filteredScenarios.map((scenario, index) => (
                 <div key={index} className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent/50 transition-colors">
                   <div className="flex-1 min-w-0">
                     <p className="font-mono font-medium text-sm truncate">{scenario.name}</p>
@@ -190,7 +238,11 @@ export default function Scenarios() {
               ))}
             </div>
           ) : (
-            <EmptyState icon={AlertCircle} title="No scenarios installed" description={debugInfo ? 'Check the debug info above for more details' : undefined} />
+            <EmptyState
+              icon={AlertCircle}
+              title={query ? 'No scenarios matched your search' : 'No scenarios installed'}
+              description={debugInfo ? 'Check the debug info above for more details' : undefined}
+            />
           )}
         </CardContent>
       </Card>
@@ -236,7 +288,7 @@ export default function Scenarios() {
             ))}
             <div className="flex gap-2">
               <Button type="button" variant="outline" onClick={() => setScenarios([...scenarios, { name: '', description: '', content: '' }])} className="flex-1">
-                <Plus className="mr-2 h-4 w-4" />Add Another Scenario
+                <Plus className="h-4 w-4" />Add Another Scenario
               </Button>
               <Button type="submit" disabled={setupMutation.isPending} className="flex-1">
                 {setupMutation.isPending ? 'Setting up...' : 'Setup Scenarios'}
@@ -294,7 +346,7 @@ function SimulationCard() {
       toast.success('Simulation mode updated')
       queryClient.invalidateQueries({ queryKey: ['simulation-status'] })
     },
-    onError: () => toast.error('Failed to update simulation mode'),
+    onError: (error) => toast.error(getErrorMessage(error, 'Failed to update simulation mode', ErrorContexts.ScenariosSimulationModeUpdate)),
   })
 
   return (

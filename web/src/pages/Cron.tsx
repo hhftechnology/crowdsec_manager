@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import api, { CronJobRequest, CronJob } from '@/lib/api'
+import { ErrorContexts, getErrorMessage } from '@/lib/api/errors'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
@@ -10,7 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Clock, Plus, Trash2, AlertCircle } from 'lucide-react'
-import { QueryError } from '@/components/common'
+import { PageHeader, QueryError, ResultsSummary } from '@/components/common'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 
 export default function Cron() {
@@ -36,8 +37,8 @@ export default function Cron() {
       setIsDialogOpen(false)
       queryClient.invalidateQueries({ queryKey: ['cron-jobs'] })
     },
-    onError: () => {
-      toast.error('Failed to create cron job')
+    onError: (error) => {
+      toast.error(getErrorMessage(error, 'Failed to create cron job', ErrorContexts.CronCreate))
     },
   })
 
@@ -47,8 +48,8 @@ export default function Cron() {
       toast.success('Cron job deleted successfully')
       queryClient.invalidateQueries({ queryKey: ['cron-jobs'] })
     },
-    onError: () => {
-      toast.error('Failed to delete cron job')
+    onError: (error) => {
+      toast.error(getErrorMessage(error, 'Failed to delete cron job', ErrorContexts.CronDelete))
     },
   })
 
@@ -85,81 +86,82 @@ export default function Cron() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Cron Job Management</h1>
-          <p className="text-muted-foreground mt-2">
-            Schedule and manage automated tasks
-          </p>
-        </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              New Cron Job
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Create Cron Job</DialogTitle>
-              <DialogDescription>
-                Schedule a new automated task using cron syntax
-              </DialogDescription>
-            </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="schedule">
-                  Schedule (Cron Expression) <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  id="schedule"
-                  type="text"
-                  placeholder="0 0 * * *"
-                  value={schedule}
-                  onChange={(e) => setSchedule(e.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Format: minute hour day month weekday
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="task">
-                  Task/Command <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  id="task"
-                  type="text"
-                  placeholder="/path/to/script.sh"
-                  value={task}
-                  onChange={(e) => setTask(e.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Command or script to execute
-                </p>
-              </div>
-
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={setupMutation.isPending}
-              >
-                {setupMutation.isPending ? 'Creating...' : 'Create Cron Job'}
+      <PageHeader
+        title="Cron Job Management"
+        description="Schedule and manage automated tasks"
+        actions={
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="h-4 w-4" />
+                New Cron Job
               </Button>
-            </form>
-          </DialogContent>
-        </Dialog>
-      </div>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Create Cron Job</DialogTitle>
+                <DialogDescription>
+                  Schedule a new automated task using cron syntax
+                </DialogDescription>
+              </DialogHeader>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="schedule">
+                    Schedule (Cron Expression) <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="schedule"
+                    type="text"
+                    placeholder="0 0 * * *"
+                    value={schedule}
+                    onChange={(e) => setSchedule(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Format: minute hour day month weekday
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="task">
+                    Task/Command <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="task"
+                    type="text"
+                    placeholder="/path/to/script.sh"
+                    value={task}
+                    onChange={(e) => setTask(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Command or script to execute
+                  </p>
+                </div>
+
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={setupMutation.isPending}
+                >
+                  {setupMutation.isPending ? 'Creating...' : 'Create Cron Job'}
+                </Button>
+              </form>
+            </DialogContent>
+          </Dialog>
+        }
+      />
 
       {isError && <QueryError error={error} onRetry={refetch} />}
 
       {/* Cron Jobs Table */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Clock className="h-5 w-5" />
-            Scheduled Jobs
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <Clock className="h-5 w-5" />
+              Scheduled Jobs
+            </CardTitle>
+            <Badge variant="secondary">{cronJobs?.length || 0}</Badge>
+          </div>
           <CardDescription>
             All configured cron jobs and their schedules
           </CardDescription>
@@ -171,7 +173,9 @@ export default function Cron() {
               <div className="h-16 bg-muted animate-pulse rounded" />
             </div>
           ) : cronJobs && cronJobs.length > 0 ? (
-            <Table>
+            <div className="space-y-3">
+              <ResultsSummary total={cronJobs.length} label="jobs" />
+              <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Schedule</TableHead>
@@ -227,7 +231,8 @@ export default function Cron() {
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
+              </Table>
+            </div>
           ) : (
             <div className="text-center py-8">
               <Clock className="mx-auto h-12 w-12 text-muted-foreground/50" />

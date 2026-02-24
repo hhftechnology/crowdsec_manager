@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import api, { UnbanRequest } from '@/lib/api'
+import { ErrorContexts, getErrorMessage } from '@/lib/api/errors'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Input } from '@/components/ui/input'
@@ -33,8 +34,8 @@ export default function IPManagement() {
       setBlockedCheckResult(response.data.data)
       toast.success('IP check completed')
     },
-    onError: () => {
-      toast.error('Failed to check IP status')
+    onError: (error) => {
+      toast.error(getErrorMessage(error, 'Failed to check IP status', ErrorContexts.IPCheckBlocked))
       setBlockedCheckResult(null)
     },
   })
@@ -45,8 +46,8 @@ export default function IPManagement() {
       setSecurityCheckResult(response.data.data)
       toast.success('Security check completed')
     },
-    onError: () => {
-      toast.error('Failed to check IP security')
+    onError: (error) => {
+      toast.error(getErrorMessage(error, 'Failed to check IP security', ErrorContexts.IPCheckSecurity))
       setSecurityCheckResult(null)
     },
   })
@@ -58,8 +59,8 @@ export default function IPManagement() {
       setUnbanIP('')
       queryClient.invalidateQueries({ queryKey: ['publicIP'] })
     },
-    onError: () => {
-      toast.error('Failed to unban IP')
+    onError: (error) => {
+      toast.error(getErrorMessage(error, 'Failed to unban IP', ErrorContexts.IPUnban))
     },
   })
 

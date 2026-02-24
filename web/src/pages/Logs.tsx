@@ -1,14 +1,17 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import api from '@/lib/api'
+import { ErrorContexts, getErrorMessage } from '@/lib/api/errors'
+import { useSearch } from '@/contexts/SearchContext'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
-import { Switch } from '@/components/ui/switch'
-import { FileText, RefreshCw, Activity } from 'lucide-react'
+import { FileText, RefreshCw, Activity, Download } from 'lucide-react'
 import { PageHeader, QueryError } from '@/components/common'
+import { LogFilterPanel, type LogFilters } from '@/components/logs/LogFilterPanel'
+import { LogViewer } from '@/components/logs/LogViewer'
 import { TraefikAnalytics } from '@/components/logs/TraefikAnalytics'
 
 export default function Logs() {
@@ -16,8 +19,13 @@ export default function Logs() {
   const [tailLines, setTailLines] = useState('100')
   const [isStreaming, setIsStreaming] = useState(false)
   const [streamLogs, setStreamLogs] = useState<string[]>([])
+  const { query, setQuery } = useSearch()
+  const [filters, setFilters] = useState<LogFilters>({
+    service: 'crowdsec',
+    level: 'all',
+    search: '',
+  })
   const wsRef = useRef<WebSocket | null>(null)
-  const logEndRef = useRef<HTMLDivElement>(null)
   const prevStreamLengthRef = useRef<number>(0)
 
   const { data: crowdsecLogs, isLoading: crowdsecLoading, isError: isCrowdsecError, error: crowdsecError, refetch: refetchCrowdSec } = useQuery({
@@ -66,10 +74,10 @@ export default function Logs() {
             return [...prev, ...lines]
           })
         }
-        ws.onerror = () => { toast.error('WebSocket error occurred'); setIsStreaming(false) }
+        ws.onerror = (event) => { toast.error(getErrorMessage(event, 'WebSocket error occurred', ErrorContexts.LogsStreamWebsocketError)); setIsStreaming(false) }
         ws.onclose = () => { toast.info('Log stream disconnected'); setIsStreaming(false) }
-      } catch {
-        toast.error('Failed to connect to log stream')
+      } catch (error) {
+        toast.error(getErrorMessage(error, 'Failed to connect to log stream', ErrorContexts.LogsStreamConnect))
         setIsStreaming(false)
       }
       return () => { if (wsRef.current) wsRef.current.close(); prevStreamLengthRef.current = 0 }
@@ -81,24 +89,19 @@ export default function Logs() {
   }, [isStreaming, selectedService])
 
   useEffect(() => {
-    if (isStreaming) {
-      const currentLength = streamLogs.length
-      if (currentLength > prevStreamLengthRef.current && logEndRef.current) {
-        logEndRef.current.scrollIntoView({ behavior: 'smooth' })
-        prevStreamLengthRef.current = currentLength
-      }
-    } else if (logEndRef.current) {
-      logEndRef.current.scrollIntoView({ behavior: 'smooth' })
+    if (filters.service === 'all') {
+      return
     }
-  }, [streamLogs, crowdsecLogs, traefikLogs, isStreaming])
+    if (filters.service !== selectedService) {
+      setSelectedService(filters.service as 'crowdsec' | 'traefik')
+    }
+  }, [filters.service, selectedService])
 
-  const switchService = (service: 'crowdsec' | 'traefik') => {
-    if (isStreaming && wsRef.current) { wsRef.current.close(); wsRef.current = null }
-    setSelectedService(service)
-    setStreamLogs([])
-    prevStreamLengthRef.current = 0
-    setIsStreaming(false)
-  }
+  useEffect(() => {
+    if (filters.search !== query) {
+      setFilters((prev) => ({ ...prev, search: query }))
+    }
+  }, [query, filters.search])
 
   const handleToggleStream = () => {
     if (isStreaming) {
@@ -111,17 +114,59 @@ export default function Logs() {
     }
   }
 
-  const currentLogs = isStreaming
+  const rawLogs = isStreaming
     ? streamLogs.filter(line => line.trim().length > 0).join('\n')
     : selectedService === 'crowdsec'
       ? crowdsecLogs?.logs || ''
       : traefikLogs?.logs || ''
 
+  // Filter logs by search term and level
+  const filteredLines = useMemo(() => {
+    if (!rawLogs) return []
+    let lines = rawLogs.split('\n').filter(l => l.trim())
+
+    if (filters.level !== 'all') {
+      lines = lines.filter(line => {
+        const match = line.match(/\b(ERROR|WARN(?:ING)?|INFO|DEBUG)\b/)
+        if (!match) return false
+        const normalized = match[1] === 'WARNING' ? 'WARN' : match[1]
+        return normalized === filters.level.toUpperCase()
+      })
+    }
+
+    if (filters.search) {
+      const lower = filters.search.toLowerCase()
+      lines = lines.filter(line => line.toLowerCase().includes(lower))
+    }
+
+    return lines
+  }, [rawLogs, filters.search, filters.level])
+
+  const totalLines = rawLogs ? rawLogs.split('\n').filter(l => l.trim()).length : 0
+
+  const handleExport = useCallback(() => {
+    if (!filteredLines.length) return
+    const blob = new Blob([filteredLines.join('\n')], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${selectedService}-logs-${new Date().toISOString().slice(0, 19)}.txt`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    toast.success('Logs exported')
+  }, [filteredLines, selectedService])
+
   const isLoading = selectedService === 'crowdsec' ? crowdsecLoading : traefikLoading
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Logs Viewer" description="View and analyze service logs in real-time" />
+      <PageHeader
+        title="Logs Viewer"
+        description="View and analyze service logs in real-time"
+        breadcrumbs="System / Logs"
+      />
 
       {isCrowdsecError && <QueryError error={crowdsecError} onRetry={refetchCrowdSec} />}
 
@@ -133,10 +178,6 @@ export default function Logs() {
           <CardDescription>Select a service to view its logs</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex gap-2">
-            <Button variant={selectedService === 'crowdsec' ? 'default' : 'outline'} onClick={() => switchService('crowdsec')} className="flex-1">CrowdSec Logs</Button>
-            <Button variant={selectedService === 'traefik' ? 'default' : 'outline'} onClick={() => switchService('traefik')} className="flex-1">Traefik Logs</Button>
-          </div>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
@@ -149,13 +190,25 @@ export default function Logs() {
                   <option value="1000">1000</option>
                 </select>
               </div>
-              <div className="flex items-center gap-2">
-                <Switch id="streaming" checked={isStreaming} onCheckedChange={handleToggleStream} />
-                <Label htmlFor="streaming" className="cursor-pointer">Live Stream</Label>
+              <div className="hidden md:flex items-center gap-1">
+                {['100', '500', '1000'].map((preset) => (
+                  <Button
+                    key={preset}
+                    variant={tailLines === preset ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setTailLines(preset)}
+                    disabled={isStreaming}
+                  >
+                    {preset}
+                  </Button>
+                ))}
               </div>
+              <Button variant="outline" size="sm" onClick={handleToggleStream}>
+                {isStreaming ? 'Pause Stream' : 'Start Stream'}
+              </Button>
             </div>
             <Button onClick={() => { selectedService === 'crowdsec' ? refetchCrowdSec() : refetchTraefik(); toast.success('Logs refreshed') }} disabled={isLoading || isStreaming} size="sm" variant="outline">
-              <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />Refresh
+              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />Refresh
             </Button>
           </div>
           {isStreaming && (
@@ -164,6 +217,33 @@ export default function Logs() {
               <span className="text-sm text-emerald-600 dark:text-emerald-400">Live streaming {selectedService} logs...</span>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Search, Filter & Export Controls */}
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex flex-col gap-3">
+            <LogFilterPanel
+              services={['crowdsec', 'traefik']}
+              filters={filters}
+              includeAllServices={false}
+              onFilterChange={(next) => {
+                setFilters(next)
+                if (next.search !== query) {
+                  setQuery(next.search)
+                }
+              }}
+            />
+            <div className="flex items-center justify-between">
+              <div className="text-xs text-muted-foreground">
+                Showing {filteredLines.length} of {totalLines} lines
+              </div>
+              <Button variant="outline" size="sm" onClick={handleExport} disabled={!filteredLines.length}>
+                <Download className="h-4 w-4" />Export
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
@@ -178,17 +258,7 @@ export default function Logs() {
           {isLoading && !isStreaming ? (
             <div className="h-96 bg-muted animate-pulse rounded" />
           ) : (
-            <div className="relative">
-              <pre className="bg-black text-green-400 p-4 rounded-lg overflow-x-auto max-h-96 overflow-y-auto text-xs font-mono">
-                {currentLogs || 'No logs available'}
-                <div ref={logEndRef} />
-              </pre>
-              {currentLogs && (
-                <div className="absolute top-2 right-2">
-                  <Badge variant="secondary" className="text-xs">{currentLogs.split('\n').length} lines</Badge>
-                </div>
-              )}
-            </div>
+            <LogViewer logs={filteredLines} autoScroll />
           )}
         </CardContent>
       </Card>

@@ -46,6 +46,7 @@ func RegisterWhitelistRoutes(router *gin.RouterGroup, dockerClient *docker.Clien
 		whitelist.POST("/crowdsec", handlers.AddToCrowdSecWhitelist(dockerClient, cfg))
 		whitelist.POST("/traefik", handlers.AddToTraefikWhitelist(dockerClient, cfg))
 		whitelist.POST("/comprehensive", handlers.SetupComprehensiveWhitelist(dockerClient, cfg))
+		whitelist.DELETE("/remove", handlers.RemoveFromWhitelist(dockerClient, cfg))
 	}
 }
 
@@ -142,7 +143,10 @@ func RegisterServicesRoutes(router *gin.RouterGroup, dockerClient *docker.Client
 		crowdsec.GET("/alerts/analysis", handlers.GetAlertsAnalysis(dockerClient, cfg))
 		crowdsec.GET("/alerts/:id", handlers.InspectAlert(dockerClient, cfg))
 		crowdsec.GET("/metrics", handlers.GetMetrics(dockerClient, cfg))
-		crowdsec.POST("/enroll", handlers.EnrollCrowdSec(dockerClient, cfg))
+		crowdsec.POST("/enroll", handlers.EnrollCrowdSec(dockerClient, db, cfg))
+		crowdsec.POST("/enroll/finalize", handlers.FinalizeCrowdSecEnrollment(dockerClient, cfg))
+		crowdsec.GET("/enroll/preferences", handlers.GetCrowdSecEnrollmentPreferences(db))
+		crowdsec.PUT("/enroll/preferences", handlers.UpdateCrowdSecEnrollmentPreferences(db))
 		crowdsec.GET("/status", handlers.GetCrowdSecEnrollmentStatus(dockerClient, cfg))
 	}
 
@@ -169,6 +173,7 @@ func RegisterNotificationRoutes(router *gin.RouterGroup, dockerClient *docker.Cl
 	{
 		notifications.GET("/discord", handlers.GetDiscordConfig(db, cfg, dockerClient))
 		notifications.POST("/discord", handlers.UpdateDiscordConfig(db, cfg, dockerClient))
+		notifications.GET("/discord/preview", handlers.PreviewDiscordConfig(cfg, dockerClient))
 	}
 }
 

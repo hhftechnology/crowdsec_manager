@@ -1,7 +1,9 @@
-import { ReactNode, useState, useCallback } from 'react'
+import { ReactNode, useEffect, useState, useCallback } from 'react'
+import { useLocation } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import Header from './Header'
 import { useConfigEvents } from '@/hooks/useConfigEvents'
+import { useSearch } from '@/contexts/SearchContext'
 
 interface LayoutProps {
   children: ReactNode
@@ -10,6 +12,8 @@ interface LayoutProps {
 export default function Layout({ children }: LayoutProps) {
   // Listen for config drift/missing events and show toast notifications
   useConfigEvents()
+  const location = useLocation()
+  const { setScope, clear } = useSearch()
   const [isCollapsed, setIsCollapsed] = useState(
     () => localStorage.getItem('sidebar-collapsed') === 'true'
   )
@@ -18,6 +22,26 @@ export default function Layout({ children }: LayoutProps) {
   const handleMobileNavigate = useCallback(() => {
     setMobileOpen(false)
   }, [])
+
+  useEffect(() => {
+    const path = location.pathname
+    if (path.startsWith('/hub')) {
+      setScope('hub')
+    } else if (path.startsWith('/logs')) {
+      setScope('logs')
+    } else if (path.startsWith('/scenarios')) {
+      setScope('scenarios')
+    } else if (path.startsWith('/bouncers')) {
+      setScope('bouncers')
+    } else if (path.startsWith('/alerts')) {
+      setScope('alerts')
+    } else if (path.startsWith('/decisions')) {
+      setScope('decisions')
+    } else {
+      setScope('global')
+    }
+    clear()
+  }, [location.pathname, setScope, clear])
 
   return (
     <div className="h-full bg-background overflow-hidden">
@@ -50,7 +74,11 @@ export default function Layout({ children }: LayoutProps) {
         </div>
 
         <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
-          <Header onMenuClick={() => setMobileOpen(true)} />
+          <Header
+            onMenuClick={() => setMobileOpen(true)}
+            isCollapsed={isCollapsed}
+            onToggleCollapse={() => setIsCollapsed((prev) => !prev)}
+          />
           <main className="flex-1 overflow-y-auto bg-background p-4 md:p-6">
             <div className="max-w-screen-2xl mx-auto w-full h-full">
               {children}

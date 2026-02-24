@@ -33,6 +33,8 @@ export type {
   UnbanRequest,
   ServiceActionRequest,
   EnrollRequest,
+  ConsoleStatus,
+  EnrollmentPreferences,
   ScenarioItem,
   CronJob,
   ServiceInfo,

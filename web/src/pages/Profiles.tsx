@@ -6,7 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import api from '@/lib/api'
-import { QueryError } from '@/components/common'
+import { ErrorContexts, getErrorMessage } from '@/lib/api/errors'
+import { PageHeader, QueryError } from '@/components/common'
 
 export default function Profiles() {
   const queryClient = useQueryClient()
@@ -47,8 +48,8 @@ export default function Profiles() {
         toast.success(data.message)
       }
     },
-    onError: () => {
-      toast.error('Failed to load default template')
+    onError: (error) => {
+      toast.error(getErrorMessage(error, 'Failed to load default template', ErrorContexts.ProfilesLoadDefault))
     },
   })
 
@@ -61,8 +62,8 @@ export default function Profiles() {
       toast.success(data.message || 'Profiles updated successfully')
       queryClient.invalidateQueries({ queryKey: ['profiles'] })
     },
-    onError: () => {
-      toast.error('Failed to update profiles')
+    onError: (error) => {
+      toast.error(getErrorMessage(error, 'Failed to update profiles', ErrorContexts.ProfilesSave))
     },
   })
 
@@ -75,39 +76,37 @@ export default function Profiles() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">Profiles</h2>
-          <p className="text-muted-foreground">
-            Manage your CrowdSec profiles configuration (profiles.yaml).
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={() => loadDefaultMutation.mutate()}
-            disabled={saving || restarting || loadDefaultMutation.isPending}
-          >
-            <RotateCcw className="mr-2 h-4 w-4" />
-            Reset to Default
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => saveMutation.mutate({ restart: false })}
-            disabled={saving || restarting}
-          >
-            <Save className="mr-2 h-4 w-4" />
-            {saving ? 'Saving...' : 'Save'}
-          </Button>
-          <Button
-            onClick={() => saveMutation.mutate({ restart: true })}
-            disabled={saving || restarting}
-          >
-            <RefreshCw className={`mr-2 h-4 w-4 ${restarting ? 'animate-spin' : ''}`} />
-            {restarting ? 'Restarting...' : 'Save & Restart'}
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title="Profiles"
+        description="Manage your CrowdSec profiles configuration (profiles.yaml)."
+        actions={
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => loadDefaultMutation.mutate()}
+              disabled={saving || restarting || loadDefaultMutation.isPending}
+            >
+              <RotateCcw className="h-4 w-4" />
+              Reset to Default
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => saveMutation.mutate({ restart: false })}
+              disabled={saving || restarting}
+            >
+              <Save className="h-4 w-4" />
+              {saving ? 'Saving...' : 'Save'}
+            </Button>
+            <Button
+              onClick={() => saveMutation.mutate({ restart: true })}
+              disabled={saving || restarting}
+            >
+              <RefreshCw className={`h-4 w-4 ${restarting ? 'animate-spin' : ''}`} />
+              {restarting ? 'Restarting...' : 'Save & Restart'}
+            </Button>
+          </div>
+        }
+      />
 
       {isError && <QueryError error={error} onRetry={refetch} />}
 

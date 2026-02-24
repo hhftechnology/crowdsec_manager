@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useRef } from "react"
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -16,8 +17,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { User, Settings, Github, Book, Server, Search, Menu } from "lucide-react"
+import { User, Settings, Github, Book, Server, Search, Menu, PanelLeftClose, PanelLeftOpen } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
 import {
   Select,
   SelectContent,
@@ -29,13 +32,18 @@ import EnrollDialog from "@/components/dialogs/EnrollDialog"
 import { CrowdSecLogo } from "@/components/icons/CrowdSecLogo"
 import { useQuery } from "@tanstack/react-query"
 import { hostsAPI, setSelectedHost, type HostInfo } from "@/lib/api"
+import { useSearch } from "@/contexts/SearchContext"
 
 interface HeaderProps {
   onMenuClick?: () => void
+  isCollapsed?: boolean
+  onToggleCollapse?: () => void
 }
 
-export default function Header({ onMenuClick }: HeaderProps) {
+export default function Header({ onMenuClick, isCollapsed, onToggleCollapse }: HeaderProps) {
   const location = useLocation()
+  const { query, scope, setQuery } = useSearch()
+  const searchRef = useRef<HTMLInputElement>(null)
 
   const { data: hostsData } = useQuery({
     queryKey: ['docker-hosts'],
@@ -59,17 +67,34 @@ export default function Header({ onMenuClick }: HeaderProps) {
     })
   ]
 
-  const handleSearchClick = () => {
-    // Dispatch the same keyboard shortcut the CommandPalette listens for
-    document.dispatchEvent(
-      new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true })
-    )
-  }
+  const scopeLabel = useMemo(() => {
+    if (scope === 'hub') return 'Hub'
+    if (scope === 'logs') return 'Logs'
+    if (scope === 'scenarios') return 'Scenarios'
+    if (scope === 'bouncers') return 'Bouncers'
+    if (scope === 'alerts') return 'Alerts'
+    if (scope === 'decisions') return 'Decisions'
+    return 'Global'
+  }, [scope])
+
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (event.key !== '/' || event.defaultPrevented) return
+      const target = event.target as HTMLElement | null
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return
+      }
+      event.preventDefault()
+      searchRef.current?.focus()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
 
   return (
     <header className="h-16 border-b border-sidebar-border bg-card px-6 flex items-center justify-between shadow-sm">
       {/* Left: Menu + Breadcrumbs */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4 min-w-0">
         {/* Mobile hamburger */}
         <Button
           variant="ghost"
@@ -80,40 +105,61 @@ export default function Header({ onMenuClick }: HeaderProps) {
           <Menu className="h-5 w-5" />
         </Button>
 
-        <Breadcrumb>
-          <BreadcrumbList className="text-sm">
-            {breadcrumbs.map((item, index) => (
-              <div key={item.href} className="flex items-center">
-                <BreadcrumbItem>
-                  {index === breadcrumbs.length - 1 ? (
-                    <BreadcrumbPage>{item.name}</BreadcrumbPage>
-                  ) : (
-                    <BreadcrumbLink href={item.href}>{item.name}</BreadcrumbLink>
-                  )}
-                </BreadcrumbItem>
-                {index < breadcrumbs.length - 1 && (
-                  <BreadcrumbSeparator />
-                )}
-              </div>
-            ))}
-          </BreadcrumbList>
-        </Breadcrumb>
-
-        {/* Command Palette Trigger */}
-        <button
-          onClick={handleSearchClick}
-          className="hidden md:inline-flex items-center gap-2 rounded-md border border-input bg-muted/50 px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted transition-colors"
-        >
-          <Search className="h-3.5 w-3.5" />
-          <span>Search...</span>
-          <kbd className="pointer-events-none ml-auto inline-flex h-5 select-none items-center gap-1 rounded border bg-background px-1.5 font-mono text-[10px] font-medium">
-            <span className="text-xs">&#8984;</span>K
-          </kbd>
-        </button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="hidden md:inline-flex h-9 w-9"
+            onClick={onToggleCollapse}
+          >
+            {isCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+          </Button>
+          <div className="flex flex-col min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-base font-semibold truncate">CrowdSec Manager</span>
+              <Badge variant="secondary" className="text-[10px] px-1.5 py-0.5 uppercase">
+                {import.meta.env.MODE}
+              </Badge>
+            </div>
+            <Breadcrumb>
+              <BreadcrumbList className="text-xs text-muted-foreground">
+                {breadcrumbs.map((item, index) => (
+                  <div key={item.href} className="flex items-center">
+                    <BreadcrumbItem>
+                      {index === breadcrumbs.length - 1 ? (
+                        <BreadcrumbPage>{item.name}</BreadcrumbPage>
+                      ) : (
+                        <BreadcrumbLink href={item.href}>{item.name}</BreadcrumbLink>
+                      )}
+                    </BreadcrumbItem>
+                    {index < breadcrumbs.length - 1 && (
+                      <BreadcrumbSeparator />
+                    )}
+                  </div>
+                ))}
+              </BreadcrumbList>
+            </Breadcrumb>
+          </div>
+        </div>
       </div>
 
       {/* Right Section: Links & User Profile */}
       <div className="flex items-center gap-4">
+        <div className="hidden lg:flex items-center gap-2">
+          <Badge variant="outline" className="text-[10px] uppercase tracking-wide">
+            Searching: {scopeLabel}
+          </Badge>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              ref={searchRef}
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder={`Search ${scopeLabel}...`}
+              className="h-9 w-[240px] pl-9"
+            />
+          </div>
+        </div>
         {/* Host Selector */}
         {showHostSelector && (
           <div className="flex items-center gap-2">
@@ -182,21 +228,21 @@ export default function Header({ onMenuClick }: HeaderProps) {
             <EnrollDialog
               trigger={
                 <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="cursor-pointer">
-                  <Settings className="mr-2 h-4 w-4" />
+                  <Settings className="h-4 w-4" />
                   <span>Enroll CrowdSec</span>
                 </DropdownMenuItem>
               }
             />
             <DropdownMenuItem asChild>
               <a href="https://app.crowdsec.net/" target="_blank" rel="noopener noreferrer" className="cursor-pointer">
-                <User className="mr-2 h-4 w-4" />
+                <User className="h-4 w-4" />
                 <span>Get your enroll key</span>
               </a>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
               <a href="https://docs.crowdsec.net/" target="_blank" rel="noopener noreferrer" className="cursor-pointer">
-                <Book className="mr-2 h-4 w-4" />
+                <Book className="h-4 w-4" />
                 <span>CrowdSec Documentation</span>
               </a>
             </DropdownMenuItem>

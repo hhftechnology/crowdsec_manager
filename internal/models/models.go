@@ -174,6 +174,13 @@ type WhitelistRequest struct {
 	Comprehensive bool   `json:"comprehensive,omitempty"`
 }
 
+// WhitelistDeleteRequest represents a request to remove an IP from whitelists
+type WhitelistDeleteRequest struct {
+	IP                 string `json:"ip" binding:"required"`
+	RemoveFromCrowdSec bool   `json:"remove_from_crowdsec"`
+	RemoveFromTraefik  bool   `json:"remove_from_traefik"`
+}
+
 // Backup represents a backup
 type Backup struct {
 	ID        string    `json:"id"`
@@ -362,17 +369,21 @@ type DiscordConfig struct {
 	CrowdSecRestarted  bool   `json:"crowdsec_restarted,omitempty"`  // Status flag
 	ManuallyConfigured bool   `json:"manually_configured,omitempty"` // Indicates if config was manually added by user
 	ConfigSource       string `json:"config_source,omitempty"`       // Where config was found: "database", "container", "both"
+	RawYAML            string `json:"raw_yaml,omitempty"`            // Raw YAML for advanced editing mode
 }
 
 // ConsoleStatus represents the CrowdSec Console enrollment status
 type ConsoleStatus struct {
-	Enrolled          bool `json:"enrolled"`
-	Validated         bool `json:"validated"`
-	Manual            bool `json:"manual"`
-	ConsoleManagement bool `json:"console_management"`
-	Context           bool `json:"context"`
-	Custom            bool `json:"custom"`
-	Tainted           bool `json:"tainted"`
+	Enrolled          bool   `json:"enrolled"`
+	Validated         bool   `json:"validated"`
+	Manual            bool   `json:"manual"`
+	ConsoleManagement bool   `json:"console_management"`
+	Approved          bool   `json:"approved"`
+	ManagementEnabled bool   `json:"management_enabled"`
+	Phase             string `json:"phase"`
+	Context           bool   `json:"context"`
+	Custom            bool   `json:"custom"`
+	Tainted           bool   `json:"tainted"`
 }
 
 // ConfigSnapshot represents a stored configuration file snapshot

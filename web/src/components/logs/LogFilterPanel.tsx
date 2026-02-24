@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
 import {
@@ -20,16 +20,30 @@ interface LogFilterPanelProps {
   onFilterChange: (filters: LogFilters) => void
   services: string[]
   className?: string
+  filters?: LogFilters
+  includeAllServices?: boolean
 }
 
 const LOG_LEVELS = ['all', 'debug', 'info', 'warn', 'error', 'fatal'] as const
 
-function LogFilterPanel({ onFilterChange, services, className }: LogFilterPanelProps) {
-  const [filters, setFilters] = useState<LogFilters>({
+function LogFilterPanel({
+  onFilterChange,
+  services,
+  className,
+  filters: controlledFilters,
+  includeAllServices = true,
+}: LogFilterPanelProps) {
+  const [filters, setFilters] = useState<LogFilters>(controlledFilters ?? {
     service: 'all',
     level: 'all',
     search: '',
   })
+
+  useEffect(() => {
+    if (controlledFilters) {
+      setFilters(controlledFilters)
+    }
+  }, [controlledFilters])
 
   const updateFilter = useCallback(
     <K extends keyof LogFilters>(key: K, value: LogFilters[K]) => {
@@ -51,7 +65,7 @@ function LogFilterPanel({ onFilterChange, services, className }: LogFilterPanelP
           <SelectValue placeholder="Select service" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="all">All Services</SelectItem>
+          {includeAllServices && <SelectItem value="all">All Services</SelectItem>}
           {services.map((service) => (
             <SelectItem key={service} value={service}>
               {service}

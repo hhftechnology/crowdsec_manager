@@ -23,6 +23,7 @@ type Settings struct {
 	TraefikAccessLog     string
 	TraefikErrorLog      string
 	CrowdSecAcquisFile   string
+	EnrollDisableContext bool
 	DiscordWebhookID     string
 	DiscordWebhookToken  string
 	GeoapifyKey          string
@@ -72,6 +73,7 @@ func (d *Database) initSchema() error {
 		traefik_access_log TEXT NOT NULL DEFAULT '/var/log/traefik/access.log',
 		traefik_error_log TEXT NOT NULL DEFAULT '/var/log/traefik/traefik.log',
 		crowdsec_acquis_file TEXT NOT NULL DEFAULT '/etc/crowdsec/acquis.yaml',
+		enroll_disable_context INTEGER NOT NULL DEFAULT 0,
 		discord_webhook_id TEXT NOT NULL DEFAULT '',
 		discord_webhook_token TEXT NOT NULL DEFAULT '',
 		geoapify_key TEXT NOT NULL DEFAULT '',
@@ -106,6 +108,7 @@ func (d *Database) initSchema() error {
 		"ALTER TABLE settings ADD COLUMN discord_webhook_token TEXT NOT NULL DEFAULT ''",
 		"ALTER TABLE settings ADD COLUMN geoapify_key TEXT NOT NULL DEFAULT ''",
 		"ALTER TABLE settings ADD COLUMN cti_key TEXT NOT NULL DEFAULT ''",
+		"ALTER TABLE settings ADD COLUMN enroll_disable_context INTEGER NOT NULL DEFAULT 0",
 	}
 
 	for _, query := range migrations {
@@ -114,8 +117,8 @@ func (d *Database) initSchema() error {
 
 	// Insert default settings row if database is empty
 	insertDefaults := `
-	INSERT OR IGNORE INTO settings (id, traefik_dynamic_config, traefik_static_config, traefik_access_log, traefik_error_log, crowdsec_acquis_file, discord_webhook_id, discord_webhook_token, geoapify_key, cti_key)
-	VALUES (1, '/etc/traefik/dynamic_config.yml', '/etc/traefik/traefik_config.yml', '/var/log/traefik/access.log', '/var/log/traefik/traefik.log', '/etc/crowdsec/acquis.yaml', '', '', '', '');
+	INSERT OR IGNORE INTO settings (id, traefik_dynamic_config, traefik_static_config, traefik_access_log, traefik_error_log, crowdsec_acquis_file, enroll_disable_context, discord_webhook_id, discord_webhook_token, geoapify_key, cti_key)
+	VALUES (1, '/etc/traefik/dynamic_config.yml', '/etc/traefik/traefik_config.yml', '/var/log/traefik/access.log', '/var/log/traefik/traefik.log', '/etc/crowdsec/acquis.yaml', 0, '', '', '', '');
 	`
 	_, err := d.db.Exec(insertDefaults)
 	return err
@@ -127,12 +130,12 @@ func (d *Database) GetSettings() (*Settings, error) {
 	settings := &Settings{}
 	err := d.db.QueryRow(`
 		SELECT id, traefik_dynamic_config, traefik_static_config, traefik_access_log, traefik_error_log, crowdsec_acquis_file,
-		discord_webhook_id, discord_webhook_token, geoapify_key, cti_key
+		enroll_disable_context, discord_webhook_id, discord_webhook_token, geoapify_key, cti_key
 		FROM settings
 		WHERE id = 1
 	`).Scan(&settings.ID, &settings.TraefikDynamicConfig, &settings.TraefikStaticConfig,
 		&settings.TraefikAccessLog, &settings.TraefikErrorLog, &settings.CrowdSecAcquisFile,
-		&settings.DiscordWebhookID, &settings.DiscordWebhookToken, &settings.GeoapifyKey, &settings.CrowdSecCTIKey)
+		&settings.EnrollDisableContext, &settings.DiscordWebhookID, &settings.DiscordWebhookToken, &settings.GeoapifyKey, &settings.CrowdSecCTIKey)
 
 	if err == sql.ErrNoRows {
 		// Return sensible defaults if no settings row exists
@@ -143,6 +146,7 @@ func (d *Database) GetSettings() (*Settings, error) {
 			TraefikAccessLog:     "/var/log/traefik/access.log",
 			TraefikErrorLog:      "/var/log/traefik/traefik.log",
 			CrowdSecAcquisFile:   "/etc/crowdsec/acquis.yaml",
+			EnrollDisableContext: false,
 		}, nil
 	}
 
@@ -158,6 +162,7 @@ func (d *Database) UpdateSettings(settings *Settings) error {
 		    traefik_access_log = ?,
 		    traefik_error_log = ?,
 		    crowdsec_acquis_file = ?,
+		    enroll_disable_context = ?,
 			discord_webhook_id = ?,
 			discord_webhook_token = ?,
 			geoapify_key = ?,
@@ -165,6 +170,7 @@ func (d *Database) UpdateSettings(settings *Settings) error {
 		WHERE id = 1
 	`, settings.TraefikDynamicConfig, settings.TraefikStaticConfig,
 		settings.TraefikAccessLog, settings.TraefikErrorLog, settings.CrowdSecAcquisFile,
+		settings.EnrollDisableContext,
 		settings.DiscordWebhookID, settings.DiscordWebhookToken, settings.GeoapifyKey, settings.CrowdSecCTIKey)
 	return err
 }

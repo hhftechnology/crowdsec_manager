@@ -22,4 +22,7 @@ export const whitelistAPI = {
 
   setupComprehensive: (data: WhitelistRequest) =>
     apiClient.post<ApiResponse>('/whitelist/comprehensive', data),
+
+  remove: (data: { ip: string; remove_from_crowdsec: boolean; remove_from_traefik: boolean }) =>
+    apiClient.delete<ApiResponse>('/whitelist/remove', { data }),
 }

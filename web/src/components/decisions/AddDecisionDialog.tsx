@@ -60,7 +60,7 @@ export function AddDecisionDialog({ onSuccess }: AddDecisionDialogProps) {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button>
-          <Plus className="mr-2 h-4 w-4" />
+          <Plus className="h-4 w-4" />
           Add Decision
         </Button>
       </DialogTrigger>
@@ -144,7 +144,7 @@ export function AddDecisionDialog({ onSuccess }: AddDecisionDialogProps) {
 
           <DialogFooter>
             <Button type="submit" disabled={isLoading}>
-              {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
               Add Decision
             </Button>
           </DialogFooter>

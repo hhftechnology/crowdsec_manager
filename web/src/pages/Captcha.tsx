@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import api, { CaptchaSetupRequest } from '@/lib/api'
+import { ErrorContexts, getErrorMessage } from '@/lib/api/errors'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -48,8 +49,8 @@ export default function Captcha() {
       // Don't clear values - keep them populated
       queryClient.invalidateQueries({ queryKey: ['captcha-status'] })
     },
-    onError: () => {
-      toast.error('Failed to configure captcha')
+    onError: (error) => {
+      toast.error(getErrorMessage(error, 'Failed to configure captcha', ErrorContexts.CaptchaSetup))
     },
   })
 

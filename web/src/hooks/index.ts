@@ -6,3 +6,5 @@ export { useMediaQuery, useIsMobile, useIsTablet, useIsDesktop } from './useMedi
 export { useRealtimeEvents } from './useRealtimeEvents'
 export { useSSE } from './useSSE'
 export { useTerminal } from './useTerminal'
+export { useUrlFilters } from './useUrlFilters'
+export { useInfiniteScroll } from './useInfiniteScroll'

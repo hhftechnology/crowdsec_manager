@@ -52,7 +52,7 @@ export function ImportDecisionsDialog({ onSuccess }: ImportDecisionsDialogProps)
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button variant="outline">
-          <Upload className="mr-2 h-4 w-4" />
+          <Upload className="h-4 w-4" />
           Import CSV
         </Button>
       </DialogTrigger>
@@ -86,7 +86,7 @@ export function ImportDecisionsDialog({ onSuccess }: ImportDecisionsDialogProps)
               className="w-full"
               onClick={() => fileInputRef.current?.click()}
             >
-              <FileText className="mr-2 h-4 w-4" />
+              <FileText className="h-4 w-4" />
               {file ? file.name : 'Select CSV File'}
             </Button>
           </div>
@@ -100,7 +100,7 @@ export function ImportDecisionsDialog({ onSuccess }: ImportDecisionsDialogProps)
 
         <DialogFooter>
           <Button onClick={handleImport} disabled={!file || isLoading}>
-            {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
             Import
           </Button>
         </DialogFooter>

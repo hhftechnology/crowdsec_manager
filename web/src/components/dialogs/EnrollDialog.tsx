@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import api, { EnrollRequest } from '@/lib/api'
+import api, { ConsoleStatus, EnrollRequest } from '@/lib/api'
+import { ErrorContexts, getErrorMessage } from '@/lib/api/errors'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Checkbox } from '@/components/ui/checkbox'
 import { CheckCircle2 } from 'lucide-react'
 
 interface EnrollDialogProps {
@@ -29,8 +31,27 @@ export default function EnrollDialog({ trigger, open: controlledOpen, onOpenChan
 
   const [enrollmentKey, setEnrollmentKey] = useState('')
   const [enrollmentStatus, setEnrollmentStatus] = useState<'idle' | 'enrolling' | 'waiting_approval' | 'success'>('idle')
+  const [disableContext, setDisableContext] = useState(false)
 
   const queryClient = useQueryClient()
+
+  const isEnrollmentApproved = (status: ConsoleStatus | undefined) =>
+    !!status && (status.approved || (status.manual && status.context) || (status.enrolled && status.validated))
+
+  const { data: enrollmentPreferences } = useQuery({
+    queryKey: ['crowdsec-enrollment-preferences'],
+    queryFn: async () => {
+      const response = await api.crowdsec.getEnrollmentPreferences()
+      return response.data.data
+    },
+    enabled: isOpen,
+  })
+
+  useEffect(() => {
+    if (enrollmentPreferences) {
+      setDisableContext(enrollmentPreferences.disable_context)
+    }
+  }, [enrollmentPreferences])
 
   // Poll for enrollment status
   const { data: enrollmentData } = useQuery({
@@ -40,9 +61,9 @@ export default function EnrollDialog({ trigger, open: controlledOpen, onOpenChan
       return response.data.data
     },
     refetchInterval: (query) => {
-      const data = query.state.data
+      const data = query.state.data as ConsoleStatus | undefined
       // Poll faster if waiting for approval
-      if (data?.enrolled && !data.validated) return 2000
+      if (data && !isEnrollmentApproved(data)) return 2000
       return 5000
     },
     enabled: isOpen, // Only poll when dialog is open
@@ -52,13 +73,13 @@ export default function EnrollDialog({ trigger, open: controlledOpen, onOpenChan
   useEffect(() => {
     if (!enrollmentData) return
 
-    if (enrollmentData.enrolled && enrollmentData.validated) {
-      // Successfully enrolled and validated
+    if (isEnrollmentApproved(enrollmentData)) {
+      // Successfully approved in console
       if (enrollmentStatus !== 'success') {
         setEnrollmentStatus('success')
         // Only show toast if we were previously enrolling or waiting
         if (enrollmentStatus === 'enrolling' || enrollmentStatus === 'waiting_approval') {
-          toast.success('CrowdSec instance successfully enrolled and validated!')
+          toast.success('CrowdSec instance successfully enrolled and approved!')
           setTimeout(() => {
             setIsOpen(false)
             setEnrollmentStatus('idle')
@@ -66,8 +87,8 @@ export default function EnrollDialog({ trigger, open: controlledOpen, onOpenChan
           }, 2000)
         }
       }
-    } else if (enrollmentData.enrolled && !enrollmentData.validated) {
-      // Enrolled but not yet validated - keep waiting
+    } else {
+      // Not approved yet - keep waiting
       if (enrollmentStatus === 'idle') {
         setEnrollmentStatus('waiting_approval')
       }
@@ -85,9 +106,39 @@ export default function EnrollDialog({ trigger, open: controlledOpen, onOpenChan
       // Enrollment output available at response.data.data?.output if needed
       queryClient.invalidateQueries({ queryKey: ['crowdsec-enrollment-status'] })
     },
-    onError: () => {
-      toast.error('Failed to submit enrollment key')
+    onError: (error) => {
+      toast.error(getErrorMessage(error, 'Failed to submit enrollment key', ErrorContexts.EnrollSubmitKey))
       setEnrollmentStatus('idle')
+    },
+  })
+
+  const savePreferenceMutation = useMutation({
+    mutationFn: (enabled: boolean) =>
+      api.crowdsec.updateEnrollmentPreferences({ disable_context: enabled }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['crowdsec-enrollment-preferences'] })
+    },
+    onError: (error) => {
+      toast.error(getErrorMessage(error, 'Failed to save enrollment preference', ErrorContexts.EnrollSubmitKey))
+    },
+  })
+
+  const finalizeMutation = useMutation({
+    mutationFn: () => api.crowdsec.finalizeEnrollment(),
+    onSuccess: (response) => {
+      const status = response.data.data
+      queryClient.invalidateQueries({ queryKey: ['crowdsec-enrollment-status'] })
+
+      if (isEnrollmentApproved(status)) {
+        setEnrollmentStatus('success')
+        toast.success('CrowdSec restarted and enrollment is complete.')
+        return
+      }
+
+      toast.message('Restart completed. Approval is still pending from CrowdSec Console.')
+    },
+    onError: (error) => {
+      toast.error(getErrorMessage(error, 'Failed to restart CrowdSec', ErrorContexts.EnrollSubmitKey))
     },
   })
 
@@ -97,7 +148,7 @@ export default function EnrollDialog({ trigger, open: controlledOpen, onOpenChan
       toast.error('Please enter an enrollment key')
       return
     }
-    enrollMutation.mutate({ enrollment_key: enrollmentKey.trim() })
+    enrollMutation.mutate({ enrollment_key: enrollmentKey.trim(), disable_context: disableContext })
     setEnrollmentStatus('enrolling')
   }
 
@@ -110,12 +161,12 @@ export default function EnrollDialog({ trigger, open: controlledOpen, onOpenChan
   // Check status when dialog first opens
   useEffect(() => {
     if (isOpen && enrollmentData && enrollmentStatus === 'idle') {
-      // If already enrolled and validated, show success immediately
-      if (enrollmentData.enrolled && enrollmentData.validated) {
+      // If already approved, show success immediately
+      if (isEnrollmentApproved(enrollmentData)) {
         setEnrollmentStatus('success')
       }
-      // If enrolled but not validated, show waiting state
-      else if (enrollmentData.enrolled && !enrollmentData.validated) {
+      // Otherwise show waiting state
+      else {
         setEnrollmentStatus('waiting_approval')
       }
     }
@@ -162,6 +213,26 @@ export default function EnrollDialog({ trigger, open: controlledOpen, onOpenChan
                   Get your enrollment key from the CrowdSec Console
                 </p>
               </div>
+              <div className="flex items-start gap-3 rounded-md border p-3">
+                <Checkbox
+                  id="disable-context-enroll"
+                  checked={disableContext}
+                  onCheckedChange={(checked) => {
+                    const enabled = checked === true
+                    setDisableContext(enabled)
+                    savePreferenceMutation.mutate(enabled)
+                  }}
+                  disabled={enrollmentStatus === 'enrolling' || savePreferenceMutation.isPending}
+                />
+                <div className="space-y-1">
+                  <Label htmlFor="disable-context-enroll" className="cursor-pointer">
+                    Disable context during enrollment
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Uses <code>cscli console enroll --disable context</code> and stores this preference.
+                  </p>
+                </div>
+              </div>
               <Button
                 type="submit"
                 className="w-full"
@@ -183,6 +254,14 @@ export default function EnrollDialog({ trigger, open: controlledOpen, onOpenChan
               </div>
               <Button
                 type="button"
+                onClick={() => finalizeMutation.mutate()}
+                disabled={finalizeMutation.isPending}
+                className="w-full"
+              >
+                {finalizeMutation.isPending ? 'Restarting CrowdSec...' : 'Restart CrowdSec & Recheck'}
+              </Button>
+              <Button
+                type="button"
                 variant="outline"
                 onClick={handleCancelEnrollment}
                 className="w-full"
@@ -198,8 +277,13 @@ export default function EnrollDialog({ trigger, open: controlledOpen, onOpenChan
               <div>
                 <h3 className="font-medium text-lg">Enrollment Successful!</h3>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Your instance has been successfully enrolled and validated.
+                  Your instance has been successfully enrolled and approved.
                 </p>
+                {enrollmentData && !enrollmentData.management_enabled && (
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Console management is disabled, but enrollment is complete.
+                  </p>
+                )}
               </div>
               <Button
                 type="button"

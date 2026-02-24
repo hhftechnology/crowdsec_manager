@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import api from '@/lib/api'
-import { QueryError } from '@/components/common'
+import { PageHeader, QueryError } from '@/components/common'
 import { StatCard } from '@/components/charts'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -118,12 +118,13 @@ export default function CrowdSecHealth() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">CrowdSec Security Engine Health</h1>
-        <p className="text-muted-foreground mt-2">
-          Real-time health monitoring of CrowdSec Security Engine
-        </p>
-      </div>
+      <PageHeader
+        title="CrowdSec Security Engine Health"
+        description="Real-time health monitoring of CrowdSec Security Engine"
+        actions={healthData?.timestamp ? (
+          <span className="text-xs text-muted-foreground">Updated {new Date(healthData.timestamp).toLocaleTimeString()}</span>
+        ) : undefined}
+      />
 
       {isError && <QueryError error={error} onRetry={refetch} />}
 

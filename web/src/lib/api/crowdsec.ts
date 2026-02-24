@@ -5,6 +5,8 @@ import type {
   Decision,
   CrowdSecAlert,
   EnrollRequest,
+  ConsoleStatus,
+  EnrollmentPreferences,
   AddDecisionRequest,
   DeleteDecisionRequest,
   DecisionFilters,
@@ -34,7 +36,16 @@ export const crowdsecAPI = {
     apiClient.post<ApiResponse<{ output: string }>>('/crowdsec/enroll', data),
 
   getStatus: () =>
-    apiClient.get<ApiResponse<{ enrolled: boolean; validated: boolean }>>('/crowdsec/status'),
+    apiClient.get<ApiResponse<ConsoleStatus>>('/crowdsec/status'),
+
+  finalizeEnrollment: () =>
+    apiClient.post<ApiResponse<ConsoleStatus>>('/crowdsec/enroll/finalize'),
+
+  getEnrollmentPreferences: () =>
+    apiClient.get<ApiResponse<EnrollmentPreferences>>('/crowdsec/enroll/preferences'),
+
+  updateEnrollmentPreferences: (data: EnrollmentPreferences) =>
+    apiClient.put<ApiResponse<EnrollmentPreferences>>('/crowdsec/enroll/preferences', data),
 
   getAlertsAnalysis: (filters: AlertFilters) =>
     apiClient.get<ApiResponse<{ alerts: CrowdSecAlert[]; count: number }>>('/crowdsec/alerts/analysis', { params: filters }),

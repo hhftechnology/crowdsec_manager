@@ -204,6 +204,22 @@ export interface ServiceActionRequest {
 export interface EnrollRequest {
   enrollment_key: string
   name?: string
+  disable_context?: boolean
+}
+
+export interface ConsoleStatus {
+  enrolled: boolean
+  validated: boolean
+  manual: boolean
+  context: boolean
+  console_management: boolean
+  approved: boolean
+  management_enabled: boolean
+  phase: 'not_enrolled' | 'pending_approval' | 'approved' | 'management_enabled'
+}
+
+export interface EnrollmentPreferences {
+  disable_context: boolean
 }
 
 export interface ScenarioItem {

@@ -2,11 +2,13 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { configValidationAPI } from '@/lib/api/config-validation'
 import type { ConfigValidationReport, ConfigSnapshot } from '@/lib/api/config-validation'
+import { ErrorContexts, getErrorMessage } from '@/lib/api/errors'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { toast } from 'sonner'
+import { PageHeader, ResultsSummary } from '@/components/common'
 import {
   ShieldCheck,
   RefreshCw,
@@ -70,7 +72,7 @@ export default function ConfigValidation() {
       toast.success('All configs snapshotted')
       queryClient.invalidateQueries({ queryKey: ['config-snapshots'] })
     },
-    onError: () => toast.error('Failed to snapshot configs'),
+    onError: (error) => toast.error(getErrorMessage(error, 'Failed to snapshot configs', ErrorContexts.ConfigSnapshotAll)),
   })
 
   const restore = useMutation({
@@ -79,7 +81,7 @@ export default function ConfigValidation() {
       toast.success(`Restored config: ${type}`)
       refetchReport()
     },
-    onError: () => toast.error('Failed to restore config'),
+    onError: (error) => toast.error(getErrorMessage(error, 'Failed to restore config', ErrorContexts.ConfigRestore)),
   })
 
   const accept = useMutation({
@@ -89,7 +91,7 @@ export default function ConfigValidation() {
       refetchReport()
       refetchSnapshots()
     },
-    onError: () => toast.error('Failed to accept config'),
+    onError: (error) => toast.error(getErrorMessage(error, 'Failed to accept config', ErrorContexts.ConfigAccept)),
   })
 
   const deleteSnapshot = useMutation({
@@ -99,33 +101,31 @@ export default function ConfigValidation() {
       refetchSnapshots()
       refetchReport()
     },
-    onError: () => toast.error('Failed to delete snapshot'),
+    onError: (error) => toast.error(getErrorMessage(error, 'Failed to delete snapshot', ErrorContexts.ConfigSnapshotDelete)),
   })
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Config Validation</h1>
-          <p className="text-muted-foreground mt-2">
-            Detect config drift, recover lost configurations, and manage snapshots
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => snapshotAll.mutate()} disabled={snapshotAll.isPending}>
-            <Camera className="h-4 w-4 mr-2" />
-            Snapshot All
-          </Button>
-          <Button onClick={handleValidate} disabled={validating}>
-            {validating ? (
-              <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <ShieldCheck className="h-4 w-4 mr-2" />
-            )}
-            Validate Now
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title="Config Validation"
+        description="Detect config drift, recover lost configurations, and manage snapshots"
+        actions={
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => snapshotAll.mutate()} disabled={snapshotAll.isPending}>
+              <Camera className="h-4 w-4" />
+              Snapshot All
+            </Button>
+            <Button onClick={handleValidate} disabled={validating}>
+              {validating ? (
+                <RefreshCw className="h-4 w-4 animate-spin" />
+              ) : (
+                <ShieldCheck className="h-4 w-4" />
+              )}
+              Validate Now
+            </Button>
+          </div>
+        }
+      />
 
       {/* Validation Results */}
       {report && (
@@ -209,7 +209,10 @@ export default function ConfigValidation() {
       {/* Stored Snapshots */}
       <Card>
         <CardHeader>
-          <CardTitle>Stored Snapshots</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle>Stored Snapshots</CardTitle>
+            <Badge variant="secondary">{snapshots?.length || 0}</Badge>
+          </div>
           <CardDescription>
             Configuration snapshots stored in the database for drift detection and recovery
           </CardDescription>
@@ -220,30 +223,33 @@ export default function ConfigValidation() {
               No snapshots stored yet. Click "Snapshot All" or "Validate Now" to create initial snapshots.
             </p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Config Type</TableHead>
-                  <TableHead>File Path</TableHead>
-                  <TableHead>Source</TableHead>
-                  <TableHead>Hash</TableHead>
-                  <TableHead>Updated</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {snapshots.map((snapshot) => (
-                  <TableRow key={snapshot.id}>
-                    <TableCell className="font-medium">{snapshot.config_type}</TableCell>
-                    <TableCell className="font-mono text-xs">{snapshot.file_path}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{snapshot.source}</Badge>
-                    </TableCell>
-                    <TableCell className="font-mono text-xs">{snapshot.content_hash.substring(0, 12)}...</TableCell>
-                    <TableCell className="text-sm">{new Date(snapshot.updated_at).toLocaleString()}</TableCell>
+            <div className="space-y-3">
+              <ResultsSummary total={snapshots.length} label="snapshots" />
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Config Type</TableHead>
+                    <TableHead>File Path</TableHead>
+                    <TableHead>Source</TableHead>
+                    <TableHead>Hash</TableHead>
+                    <TableHead>Updated</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {snapshots.map((snapshot) => (
+                    <TableRow key={snapshot.id}>
+                      <TableCell className="font-medium">{snapshot.config_type}</TableCell>
+                      <TableCell className="font-mono text-xs">{snapshot.file_path}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{snapshot.source}</Badge>
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">{snapshot.content_hash.substring(0, 12)}...</TableCell>
+                      <TableCell className="text-sm">{new Date(snapshot.updated_at).toLocaleString()}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>

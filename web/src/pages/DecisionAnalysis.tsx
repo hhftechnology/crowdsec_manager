@@ -1,11 +1,15 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import api, { Decision } from '@/lib/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { RefreshCw, AlertCircle, Download, Trash2 } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Switch } from '@/components/ui/switch'
+import { RefreshCw, AlertCircle, Download, Trash2, Search } from 'lucide-react'
 import { AddDecisionDialog } from '@/components/decisions/AddDecisionDialog'
 import { ImportDecisionsDialog } from '@/components/decisions/ImportDecisionsDialog'
 import {
@@ -15,10 +19,16 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
-import { PageHeader, EmptyState, PageLoader, InfoCard, CrowdSecFilterForm, SCOPE_OPTIONS, TYPE_OPTIONS, ORIGIN_OPTIONS, QueryError } from '@/components/common'
+import {
+  PageHeader, EmptyState, PageLoader, InfoCard, CrowdSecFilterForm, ResultsSummary,
+  SCOPE_OPTIONS, TYPE_OPTIONS, ORIGIN_OPTIONS, QueryError,
+  ScenarioName, TimeDisplay, formatDuration, expiresIn,
+} from '@/components/common'
 import type { FilterField } from '@/components/common'
 import { ChartCard, AreaTimeline, PieBreakdown, BarDistribution } from '@/components/charts'
 import { groupByField } from '@/lib/chart-utils'
+import { useInfiniteScroll } from '@/hooks'
+import { useSearch } from '@/contexts/SearchContext'
 
 interface DecisionFilters {
   [key: string]: string | boolean | undefined
@@ -33,6 +43,14 @@ interface DecisionFilters {
   range?: string
   includeAll?: boolean
 }
+
+/** Row type when duplicates are collapsed */
+interface CollapsedDecision extends Decision {
+  _count: number
+  _ids: number[]
+}
+
+const FILTER_PARAM_KEYS = ['since', 'until', 'type', 'scope', 'origin', 'value', 'scenario', 'ip', 'range'] as const
 
 const DECISION_SCOPE_OPTIONS = [
   ...SCOPE_OPTIONS,
@@ -60,10 +78,53 @@ const DECISION_INFO_ITEMS = [
   { label: 'Scenario', text: 'Filter by specific scenario (e.g., crowdsecurity/ssh-bf)' },
 ]
 
+function escapeCSVField(field: unknown): string {
+  const str = String(field ?? '')
+  if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+    return `"${str.replace(/"/g, '""')}"`
+  }
+  return str
+}
+
+function parseFiltersFromParams(searchParams: URLSearchParams): DecisionFilters {
+  const filters: DecisionFilters = {}
+  for (const key of FILTER_PARAM_KEYS) {
+    const val = searchParams.get(key)
+    if (val) filters[key] = val
+  }
+  if (searchParams.get('includeAll') === 'true') {
+    filters.includeAll = true
+  }
+  return filters
+}
+
+function syncFiltersToParams(filters: DecisionFilters, setSearchParams: ReturnType<typeof useSearchParams>[1]) {
+  const params = new URLSearchParams()
+  for (const key of FILTER_PARAM_KEYS) {
+    const val = filters[key]
+    if (val && typeof val === 'string' && val.length > 0) {
+      params.set(key, val)
+    }
+  }
+  if (filters.includeAll) {
+    params.set('includeAll', 'true')
+  }
+  setSearchParams(params, { replace: true })
+}
+
 export default function DecisionAnalysis() {
-  const [filters, setFilters] = useState<DecisionFilters>({})
-  const [activeFilters, setActiveFilters] = useState<DecisionFilters>({})
+  const [searchParams, setSearchParams] = useSearchParams()
+  // Initialise filters from URL on mount
+  const [filters, setFilters] = useState<DecisionFilters>(() => parseFiltersFromParams(searchParams))
+  const [activeFilters, setActiveFilters] = useState<DecisionFilters>(() => parseFiltersFromParams(searchParams))
+
   const [deleteId, setDeleteId] = useState<number | null>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [bulkDeleting, setBulkDeleting] = useState(false)
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [hideDuplicates, setHideDuplicates] = useState(false)
+  const { query, setQuery } = useSearch()
 
   const { data: decisionsData, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['decisions-analysis', activeFilters],
@@ -73,6 +134,19 @@ export default function DecisionAnalysis() {
     },
     refetchInterval: 30000,
   })
+
+  // Sync active filters to URL whenever they change
+  useEffect(() => {
+    syncFiltersToParams(activeFilters, setSearchParams)
+  }, [activeFilters, setSearchParams])
+
+  useEffect(() => {
+    if (query !== searchQuery) {
+      setSearchQuery(query)
+    }
+  }, [query, searchQuery])
+
+  // --- Chart data ---
 
   const decisionTimeData = useMemo(() => {
     if (!decisionsData?.decisions) return []
@@ -94,33 +168,160 @@ export default function DecisionAnalysis() {
     return groupByField(decisionsData.decisions, 'value', 8)
   }, [decisionsData])
 
+  // --- Client-side search filtering ---
+
+  const searchFiltered = useMemo(() => {
+    const decisions = decisionsData?.decisions ?? []
+    if (!searchQuery.trim()) return decisions
+    const q = searchQuery.toLowerCase()
+    return decisions.filter((d: Decision) =>
+      d.value?.toLowerCase().includes(q) ||
+      d.scenario?.toLowerCase().includes(q) ||
+      d.origin?.toLowerCase().includes(q)
+    )
+  }, [decisionsData, searchQuery])
+
+  // --- Collapse duplicates ---
+
+  const displayDecisions = useMemo<CollapsedDecision[]>(() => {
+    if (!hideDuplicates) {
+      return searchFiltered.map((d: Decision) => ({ ...d, _count: 1, _ids: [d.id] }))
+    }
+    const groups = new Map<string, CollapsedDecision>()
+    for (const d of searchFiltered) {
+      const key = d.value
+      const existing = groups.get(key)
+      if (existing) {
+        existing._count += 1
+        existing._ids.push(d.id)
+      } else {
+        groups.set(key, { ...d, _count: 1, _ids: [d.id] })
+      }
+    }
+    return Array.from(groups.values())
+  }, [searchFiltered, hideDuplicates])
+
+  // --- Infinite scroll ---
+
+  const { items: visibleDecisions, hasMore, sentinelRef } = useInfiniteScroll({
+    data: displayDecisions,
+    pageSize: 50,
+  })
+
+  // --- Selection helpers ---
+
+  const toggleSelected = useCallback((id: number) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+  }, [])
+
+  const toggleSelectAll = useCallback(() => {
+    if (selectedIds.size === visibleDecisions.length) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(visibleDecisions.map(d => d.id)))
+    }
+  }, [visibleDecisions, selectedIds.size])
+
+  // Clear selection when data changes
+  useEffect(() => {
+    setSelectedIds(new Set())
+  }, [decisionsData, searchQuery, hideDuplicates])
+
+  // --- Delete handlers ---
+
   const handleDelete = async () => {
     if (!deleteId) return
     try {
       await api.crowdsec.deleteDecision({ id: deleteId.toString() })
       toast.success('Decision deleted successfully')
       refetch()
-    } catch (error: unknown) {
-      const axiosError = error as { response?: { data?: { error?: string } } }
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { data?: { error?: string } } }
       toast.error(axiosError.response?.data?.error || 'Failed to delete decision')
     } finally {
       setDeleteId(null)
     }
   }
 
-  const handleFilterChange = (key: string, value: string | boolean) => {
-    setFilters({ ...filters, [key]: value })
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return
+    setBulkDeleting(true)
+
+    // When duplicates are collapsed, expand _ids for selected rows
+    const idsToDelete: number[] = []
+    if (hideDuplicates) {
+      for (const row of displayDecisions) {
+        if (selectedIds.has(row.id)) {
+          idsToDelete.push(...row._ids)
+        }
+      }
+    } else {
+      idsToDelete.push(...selectedIds)
+    }
+
+    let deleted = 0
+    let failed = 0
+    for (const id of idsToDelete) {
+      try {
+        await api.crowdsec.deleteDecision({ id: id.toString() })
+        deleted++
+      } catch {
+        failed++
+      }
+    }
+
+    setBulkDeleting(false)
+    setShowBulkDeleteConfirm(false)
+    setSelectedIds(new Set())
+
+    if (failed === 0) {
+      toast.success(`Deleted ${deleted} decision${deleted !== 1 ? 's' : ''} successfully`)
+    } else {
+      toast.warning(`Deleted ${deleted}, failed ${failed}`)
+    }
+    refetch()
   }
+
+  // --- Filter handlers ---
+
+  const handleFilterChange = (key: string, value: string | boolean) => {
+    setFilters(prev => ({ ...prev, [key]: value }))
+  }
+
+  const handleApplyFilters = () => {
+    setActiveFilters(filters)
+    toast.success('Filters applied')
+  }
+
+  const handleResetFilters = () => {
+    setFilters({})
+    setActiveFilters({})
+    setSearchParams(new URLSearchParams(), { replace: true })
+    toast.info('Filters reset')
+  }
+
+  // --- CSV export ---
 
   const handleExport = () => {
     if (!decisionsData?.decisions || decisionsData.decisions.length === 0) {
       toast.error('No data to export')
       return
     }
+    const headers = ['ID', 'Alert ID', 'Type', 'Scope', 'Value', 'Origin', 'Scenario', 'Duration', 'Created At']
     const csvContent = [
-      ['ID', 'Alert ID', 'Type', 'Scope', 'Value', 'Origin', 'Scenario', 'Duration', 'Created At'].join(','),
+      headers.map(escapeCSVField).join(','),
       ...decisionsData.decisions.map((d: Decision) =>
-        [d.id, d.alert_id, d.type, d.scope, d.value, d.origin, d.scenario, d.duration, d.created_at].join(',')
+        [d.id, d.alert_id, d.type, d.scope, d.value, d.origin, d.scenario, d.duration, d.created_at]
+          .map(escapeCSVField)
+          .join(',')
       ),
     ].join('\n')
     const blob = new Blob([csvContent], { type: 'text/csv' })
@@ -133,11 +334,17 @@ export default function DecisionAnalysis() {
     toast.success('Decisions exported successfully')
   }
 
+  const totalCount = decisionsData?.count ?? 0
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Decision List Analysis"
         description="Advanced filtering and analysis of CrowdSec decisions"
+        breadcrumbs="Activity / Decisions"
+        actions={totalCount > 0 ? (
+          <Badge variant="secondary">{totalCount} decisions</Badge>
+        ) : undefined}
       />
 
       {isError && <QueryError error={error} onRetry={refetch} />}
@@ -170,8 +377,8 @@ export default function DecisionAnalysis() {
         fields={DECISION_FILTER_FIELDS}
         filters={filters}
         onFilterChange={handleFilterChange}
-        onApply={() => { setActiveFilters(filters); toast.success('Filters applied') }}
-        onReset={() => { setFilters({}); setActiveFilters({}); toast.info('Filters reset') }}
+        onApply={handleApplyFilters}
+        onReset={handleResetFilters}
         description="Apply filters to analyze specific decisions based on CrowdSec criteria"
         showIncludeAll
         includeAllLabel="Include decisions from Central API"
@@ -181,10 +388,32 @@ export default function DecisionAnalysis() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle>Decision Results</CardTitle>
-              <CardDescription>{decisionsData?.count || 0} decisions found</CardDescription>
+              <CardTitle className="flex items-center gap-2">
+                Decision Results
+                {totalCount > 0 && (
+                  <Badge variant="secondary" className="text-xs font-normal">
+                    {totalCount}
+                  </Badge>
+                )}
+              </CardTitle>
+              <CardDescription>
+                {searchFiltered.length !== totalCount
+                  ? `${searchFiltered.length} of ${totalCount} decisions shown`
+                  : `${totalCount} decisions found`}
+              </CardDescription>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap justify-end">
+              {selectedIds.size > 0 && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  disabled={bulkDeleting}
+                  onClick={() => setShowBulkDeleteConfirm(true)}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete Selected ({selectedIds.size})
+                </Button>
+              )}
               <AddDecisionDialog onSuccess={refetch} />
               <ImportDecisionsDialog onSuccess={refetch} />
               <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isLoading}>
@@ -196,53 +425,122 @@ export default function DecisionAnalysis() {
               </Button>
             </div>
           </div>
+
+          {/* Search and hide-duplicates controls */}
+          <div className="flex items-center gap-4 pt-2">
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by IP, scenario, origin..."
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value)
+                  setQuery(e.target.value)
+                }}
+                className="pl-9"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch
+                id="hide-duplicates"
+                checked={hideDuplicates}
+                onCheckedChange={setHideDuplicates}
+              />
+              <label
+                htmlFor="hide-duplicates"
+                className="text-sm text-muted-foreground cursor-pointer select-none"
+              >
+                Hide duplicates
+              </label>
+            </div>
+          </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          <ResultsSummary
+            total={totalCount}
+            filtered={searchFiltered.length}
+            label="decisions"
+            query={searchQuery || undefined}
+          />
           {isLoading ? (
             <PageLoader message="Loading decisions..." />
-          ) : decisionsData?.decisions && decisionsData.decisions.length > 0 ? (
-            <div className="rounded-md border overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>ID</TableHead>
-                    <TableHead>Alert ID</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Scope</TableHead>
-                    <TableHead>Value</TableHead>
-                    <TableHead>Origin</TableHead>
-                    <TableHead>Scenario</TableHead>
-                    <TableHead>Duration</TableHead>
-                    <TableHead>Expires</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {decisionsData.decisions.map((decision: Decision, index: number) => (
-                    <TableRow key={decision.id || index}>
-                      <TableCell className="font-mono text-xs">{decision.id}</TableCell>
-                      <TableCell className="font-mono text-xs">{decision.alert_id}</TableCell>
-                      <TableCell>
-                        <Badge variant={decision.type === 'ban' ? 'destructive' : 'default'}>{decision.type}</Badge>
-                      </TableCell>
-                      <TableCell><Badge variant="outline">{decision.scope}</Badge></TableCell>
-                      <TableCell className="font-mono text-sm">{decision.value}</TableCell>
-                      <TableCell><Badge variant="secondary">{decision.origin}</Badge></TableCell>
-                      <TableCell className="text-sm">{decision.scenario}</TableCell>
-                      <TableCell className="text-sm">{decision.duration}</TableCell>
-                      <TableCell className="text-sm">
-                        {decision.until ? new Date(decision.until).toLocaleString() : 'N/A'}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setDeleteId(decision.id)}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
+          ) : visibleDecisions.length > 0 ? (
+            <>
+              <div className="rounded-md border overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-10">
+                        <Checkbox
+                          checked={visibleDecisions.length > 0 && selectedIds.size === visibleDecisions.length}
+                          onCheckedChange={toggleSelectAll}
+                          aria-label="Select all"
+                        />
+                      </TableHead>
+                      <TableHead>ID</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Scope</TableHead>
+                      <TableHead>Value</TableHead>
+                      <TableHead>Origin</TableHead>
+                      <TableHead>Scenario</TableHead>
+                      <TableHead>Duration</TableHead>
+                      <TableHead>Expires</TableHead>
+                      <TableHead>Created</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+                  </TableHeader>
+                  <TableBody>
+                    {visibleDecisions.map((decision, index) => (
+                      <TableRow key={decision.id || index}>
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedIds.has(decision.id)}
+                            onCheckedChange={() => toggleSelected(decision.id)}
+                            aria-label={`Select decision ${decision.id}`}
+                          />
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">{decision.id}</TableCell>
+                        <TableCell>
+                          <Badge variant={decision.type === 'ban' ? 'destructive' : 'default'}>{decision.type}</Badge>
+                        </TableCell>
+                        <TableCell><Badge variant="outline">{decision.scope}</Badge></TableCell>
+                        <TableCell className="font-mono text-sm">
+                          <span className="inline-flex items-center gap-1.5">
+                            {decision.value}
+                            {hideDuplicates && decision._count > 1 && (
+                              <Badge variant="secondary" className="text-[10px] px-1 py-0">
+                                x{decision._count}
+                              </Badge>
+                            )}
+                          </span>
+                        </TableCell>
+                        <TableCell><Badge variant="secondary">{decision.origin}</Badge></TableCell>
+                        <TableCell className="text-sm">
+                          <ScenarioName scenario={decision.scenario} />
+                        </TableCell>
+                        <TableCell className="text-sm">{formatDuration(decision.duration)}</TableCell>
+                        <TableCell className="text-sm">
+                          {decision.until ? expiresIn(decision.until) : 'N/A'}
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          <TimeDisplay date={decision.created_at} />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setDeleteId(decision.id)}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              {hasMore && (
+                <div ref={sentinelRef as React.RefObject<HTMLDivElement>} className="flex justify-center py-4">
+                  <span className="text-sm text-muted-foreground">Loading more...</span>
+                </div>
+              )}
+            </>
           ) : (
             <EmptyState icon={AlertCircle} title="No decisions found" description="Try adjusting your filters or check back later" />
           )}
@@ -251,6 +549,7 @@ export default function DecisionAnalysis() {
 
       <InfoCard title="Filter Information" description="Understanding decision list filters" items={DECISION_INFO_ITEMS} />
 
+      {/* Single-delete confirmation */}
       <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -264,6 +563,29 @@ export default function DecisionAnalysis() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
               Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Bulk-delete confirmation */}
+      <AlertDialog open={showBulkDeleteConfirm} onOpenChange={setShowBulkDeleteConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {selectedIds.size} decision{selectedIds.size !== 1 ? 's' : ''}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. The selected decisions will be permanently
+              removed from CrowdSec.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={bulkDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBulkDelete}
+              disabled={bulkDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {bulkDeleting ? 'Deleting...' : 'Delete All'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

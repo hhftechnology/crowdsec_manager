@@ -159,5 +159,31 @@ func GetConsoleStatusHelper(dockerClient interface {
 		status.Enrolled = true
 	}
 
+	// Normalized approval semantics across CrowdSec versions.
+	// Some versions only expose manual/context/console_management in JSON output.
+	status.Approved = status.ConsoleManagement ||
+		(status.Manual && status.Context) ||
+		status.Validated ||
+		(status.Enrolled && status.Validated)
+
+	status.ManagementEnabled = status.ConsoleManagement
+
+	if status.Approved {
+		// Keep legacy fields consistent for existing UI consumers.
+		status.Enrolled = true
+		status.Validated = true
+	}
+
+	switch {
+	case status.ManagementEnabled:
+		status.Phase = "management_enabled"
+	case status.Approved:
+		status.Phase = "approved"
+	case status.Manual || status.Context:
+		status.Phase = "pending_approval"
+	default:
+		status.Phase = "not_enrolled"
+	}
+
 	return status, nil
 }

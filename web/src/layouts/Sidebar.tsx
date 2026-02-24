@@ -19,8 +19,6 @@ import {
   Target,
   Bell,
   HeartPulse,
-  PanelLeftClose,
-  PanelLeftOpen,
   Moon,
   Sun,
   TerminalSquare,
@@ -98,7 +96,7 @@ export const navigation = [
   }
 ]
 
-export default function Sidebar({ isCollapsed, setIsCollapsed, onNavigate }: SidebarProps) {
+export default function Sidebar({ isCollapsed, setIsCollapsed: _setIsCollapsed, onNavigate }: SidebarProps) {
   const location = useLocation()
   const { theme, setTheme } = useTheme()
 
@@ -219,18 +217,6 @@ export default function Sidebar({ isCollapsed, setIsCollapsed, onNavigate }: Sid
               <Moon className="h-4 w-4 shrink-0" />
             )}
             {!isCollapsed && <span className="ml-2 truncate">Toggle Theme</span>}
-          </Button>
-          <Button
-            variant="ghost"
-            size={isCollapsed ? "icon" : "default"}
-            onClick={() => setIsCollapsed(!isCollapsed)}
-            className={cn(
-              "w-full justify-start text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground overflow-hidden",
-              isCollapsed && "justify-center"
-            )}
-          >
-            {isCollapsed ? <PanelLeftOpen className="h-4 w-4 shrink-0" /> : <PanelLeftClose className="h-4 w-4 shrink-0" />}
-            {!isCollapsed && <span className="ml-2 truncate">Collapse</span>}
           </Button>
         </div>
       </div>

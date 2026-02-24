@@ -7,12 +7,13 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Badge } from '@/components/ui/badge'
 import { Plus, Trash2, Eye, RefreshCw, Info, ListChecks } from 'lucide-react'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { PageHeader, EmptyState, QueryError } from '@/components/common'
+import { PageHeader, EmptyState, QueryError, ResultsSummary } from '@/components/common'
 import { InspectDialog } from '@/components/allowlist/InspectDialog'
 import { ManageEntries } from '@/components/allowlist/ManageEntries'
 
@@ -183,13 +184,14 @@ export default function Allowlist() {
               <CardDescription>Create and manage CrowdSec allowlists</CardDescription>
             </div>
             <div className="flex gap-2">
+              <Badge variant="secondary">{allowlistsData?.length || 0}</Badge>
               <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isLoading}>
-                <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
                 Refresh
               </Button>
               <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
                 <DialogTrigger asChild>
-                  <Button size="sm"><Plus className="h-4 w-4 mr-2" />Create Allowlist</Button>
+                  <Button size="sm"><Plus className="h-4 w-4" />Create Allowlist</Button>
                 </DialogTrigger>
                 <DialogContent>
                   <DialogHeader>
@@ -224,6 +226,9 @@ export default function Allowlist() {
             </div>
           ) : allowlistsData && allowlistsData.length > 0 ? (
             <div className="rounded-md border">
+              <div className="px-4 py-2">
+                <ResultsSummary total={allowlistsData.length} label="allowlists" />
+              </div>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -244,10 +249,10 @@ export default function Allowlist() {
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
                           <Button variant="outline" size="sm" onClick={() => handleInspect(allowlist.name)}>
-                            <Eye className="h-4 w-4 mr-1" />Inspect
+                            <Eye className="h-4 w-4" />Inspect
                           </Button>
                           <Button variant="destructive" size="sm" onClick={() => handleDelete(allowlist.name)}>
-                            <Trash2 className="h-4 w-4 mr-1" />Delete
+                            <Trash2 className="h-4 w-4" />Delete
                           </Button>
                         </div>
                       </TableCell>
