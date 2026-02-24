@@ -15,7 +15,7 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
-import { PageHeader, EmptyState, PageLoader, InfoCard, CrowdSecFilterForm, SCOPE_OPTIONS, TYPE_OPTIONS, ORIGIN_OPTIONS } from '@/components/common'
+import { PageHeader, EmptyState, PageLoader, InfoCard, CrowdSecFilterForm, SCOPE_OPTIONS, TYPE_OPTIONS, ORIGIN_OPTIONS, QueryError } from '@/components/common'
 import type { FilterField } from '@/components/common'
 import { ChartCard, AreaTimeline, PieBreakdown, BarDistribution } from '@/components/charts'
 import { groupByField } from '@/lib/chart-utils'
@@ -65,7 +65,7 @@ export default function DecisionAnalysis() {
   const [activeFilters, setActiveFilters] = useState<DecisionFilters>({})
   const [deleteId, setDeleteId] = useState<number | null>(null)
 
-  const { data: decisionsData, isLoading, refetch } = useQuery({
+  const { data: decisionsData, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['decisions-analysis', activeFilters],
     queryFn: async () => {
       const response = await api.crowdsec.getDecisionsAnalysis(activeFilters)
@@ -139,6 +139,8 @@ export default function DecisionAnalysis() {
         title="Decision List Analysis"
         description="Advanced filtering and analysis of CrowdSec decisions"
       />
+
+      {isError && <QueryError error={error} onRetry={refetch} />}
 
       {decisionsData?.decisions && decisionsData.decisions.length > 0 && (
         <div className="grid gap-4 grid-cols-1 lg:grid-cols-3">

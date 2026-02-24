@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import api, { Container as ContainerType, Decision } from '@/lib/api'
+import { QueryError } from '@/components/common'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Shield, Users, Container, Activity } from 'lucide-react'
@@ -8,7 +9,7 @@ import { StatCard, ChartCard, AreaTimeline, PieBreakdown, BarDistribution } from
 import { groupByField } from '@/lib/chart-utils'
 
 export default function Dashboard() {
-  const { data: healthData, isLoading: healthLoading } = useQuery({
+  const { data: healthData, isLoading: healthLoading, isError, error, refetch: refetchHealth } = useQuery({
     queryKey: ['health'],
     queryFn: async () => {
       const response = await api.health.checkStack()
@@ -100,6 +101,8 @@ export default function Dashboard() {
         </p>
       </div>
 
+      {isError && <QueryError error={error} onRetry={refetchHealth} />}
+
       {/* Row 1: Stat Cards */}
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
@@ -138,7 +141,7 @@ export default function Dashboard() {
           {decisionsOverTime.length > 0 ? (
             <AreaTimeline data={decisionsOverTime} height={280} />
           ) : (
-            <div className="flex items-center justify-center h-[280px] text-muted-foreground text-sm">
+            <div className="flex items-center justify-center h-72 text-muted-foreground text-sm">
               No decision data available
             </div>
           )}
@@ -147,7 +150,7 @@ export default function Dashboard() {
           {decisionTypeData.length > 0 ? (
             <PieBreakdown data={decisionTypeData} height={280} />
           ) : (
-            <div className="flex items-center justify-center h-[280px] text-muted-foreground text-sm">
+            <div className="flex items-center justify-center h-72 text-muted-foreground text-sm">
               No decision data available
             </div>
           )}

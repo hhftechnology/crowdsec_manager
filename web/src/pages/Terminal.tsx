@@ -112,8 +112,7 @@ export default function Terminal() {
           {/* Terminal container */}
           <div
             ref={terminalRef}
-            className="rounded-md border bg-[#1a1b26] min-h-[400px] p-1"
-            style={{ height: 'calc(100vh - 380px)' }}
+            className="rounded-md border bg-[#1a1b26] min-h-[60vh] h-[70vh] p-1"
           />
         </CardContent>
       </Card>

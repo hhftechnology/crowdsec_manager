@@ -80,10 +80,7 @@ whitelist:
     - %s
 `, req.IP)
 
-		_, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
-			"sh", "-c", fmt.Sprintf("echo '%s' > %s", whitelistContent, cfg.CrowdSecWhitelistPath),
-		})
-		if err != nil {
+		if err := dockerClient.WriteFileToContainer(cfg.CrowdsecContainerName, cfg.CrowdSecWhitelistPath, []byte(whitelistContent)); err != nil {
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
 				Error:   fmt.Sprintf("Failed to update whitelist: %v", err),
@@ -117,9 +114,7 @@ func AddToTraefikWhitelist(dockerClient *docker.Client, cfg *config.Config) gin.
 
 		logger.Info("Adding to Traefik whitelist", "ip", req.IP)
 
-		_, err := dockerClient.ExecCommand(cfg.TraefikContainerName, []string{
-			"sh", "-c", fmt.Sprintf(`sed -i '/sourceRange:/a\        - %s' %s`, req.IP, cfg.TraefikDynamicConfig),
-		})
+		err := dockerClient.AppendLineToFileInContainer(cfg.TraefikContainerName, cfg.TraefikDynamicConfig, "sourceRange:", "        - "+req.IP)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
@@ -155,7 +150,7 @@ func SetupComprehensiveWhitelist(dockerClient *docker.Client, cfg *config.Config
 		// Get public IP if not provided
 		ip := req.IP
 		if ip == "" {
-			resp, err := http.Get(constants.ExternalIPServices[0])
+			resp, err := constants.ExternalHTTPClient.Get(constants.ExternalIPServices[0])
 			if err == nil {
 				defer resp.Body.Close()
 				body, _ := io.ReadAll(resp.Body)
@@ -178,19 +173,13 @@ whitelist:
     - %s
 `, ip)
 
-		_, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
-			"sh", "-c", fmt.Sprintf("echo '%s' > %s", whitelistContent, cfg.CrowdSecWhitelistPath),
-		})
-		if err == nil {
+		if err := dockerClient.WriteFileToContainer(cfg.CrowdsecContainerName, cfg.CrowdSecWhitelistPath, []byte(whitelistContent)); err == nil {
 			_, _ = dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{"cscli", "parsers", "reload"})
 			results["crowdsec"] = true
 		}
 
 		// Add to Traefik
-		_, err = dockerClient.ExecCommand(cfg.TraefikContainerName, []string{
-			"sh", "-c", fmt.Sprintf(`sed -i '/sourceRange:/a\        - %s' %s`, ip, cfg.TraefikDynamicConfig),
-		})
-		if err == nil {
+		if err := dockerClient.AppendLineToFileInContainer(cfg.TraefikContainerName, cfg.TraefikDynamicConfig, "sourceRange:", "        - "+ip); err == nil {
 			results["traefik"] = true
 		}
 

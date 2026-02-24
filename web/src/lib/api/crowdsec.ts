@@ -39,6 +39,9 @@ export const crowdsecAPI = {
   getAlertsAnalysis: (filters: AlertFilters) =>
     apiClient.get<ApiResponse<{ alerts: CrowdSecAlert[]; count: number }>>('/crowdsec/alerts/analysis', { params: filters }),
 
+  inspectAlert: (id: number) =>
+    apiClient.get<ApiResponse<CrowdSecAlert>>(`/crowdsec/alerts/${id}`),
+
   addDecision: (data: AddDecisionRequest) =>
     apiClient.post<ApiResponse>('/crowdsec/decisions', data),
 

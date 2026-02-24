@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { Shield, Globe, Plus } from 'lucide-react'
-import { PageHeader } from '@/components/common'
+import { PageHeader, QueryError } from '@/components/common'
 
 export default function Whitelist() {
   const queryClient = useQueryClient()
@@ -19,7 +19,7 @@ export default function Whitelist() {
   const [addToCrowdSec, setAddToCrowdSec] = useState(true)
   const [addToTraefik, setAddToTraefik] = useState(true)
 
-  const { data: whitelistData, isLoading } = useQuery({
+  const { data: whitelistData, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['whitelist'],
     queryFn: async () => {
       const response = await api.whitelist.view()
@@ -128,6 +128,8 @@ export default function Whitelist() {
   return (
     <div className="space-y-6">
       <PageHeader title="Whitelist Management" description="Manage whitelisted IPs and CIDR ranges across CrowdSec and Traefik" />
+
+      {isError && <QueryError error={error} onRetry={refetch} />}
 
       {/* Current IP Quick Whitelist */}
       <Card>

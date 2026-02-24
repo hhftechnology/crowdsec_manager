@@ -12,6 +12,18 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// GetSettings retrieves application settings from the database
+func GetSettings(db *database.Database) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		settings, err := db.GetSettings()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, models.Response{Success: false, Error: err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, models.Response{Success: true, Data: settings})
+	}
+}
+
 // GetTraefikConfig retrieves Traefik configuration
 func GetTraefikConfig() gin.HandlerFunc {
 	return func(c *gin.Context) {

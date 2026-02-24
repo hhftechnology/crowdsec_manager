@@ -21,3 +21,6 @@ export type { CrowdSecFilterFormProps, FilterField } from './CrowdSecFilterForm'
 
 export { InfoCard } from './InfoCard'
 export type { InfoCardProps, InfoItem } from './InfoCard'
+
+export { QueryError } from './QueryError'
+export type { QueryErrorProps } from './QueryError'

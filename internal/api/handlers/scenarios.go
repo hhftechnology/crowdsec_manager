@@ -89,10 +89,7 @@ func SetupCustomScenarios(dockerClient *docker.Client, configDir string, cfg *co
 				continue
 			}
 
-			verifyCmd := fmt.Sprintf("test -f %s && echo 'exists' || echo 'missing'", containerScenarioPath)
-			output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{"sh", "-c", verifyCmd})
-
-			fileExists := strings.TrimSpace(output) == "exists"
+			fileExists, err := dockerClient.FileExists(cfg.CrowdsecContainerName, containerScenarioPath)
 
 			result := gin.H{
 				"name":           scenario.Name,
@@ -117,7 +114,7 @@ func SetupCustomScenarios(dockerClient *docker.Client, configDir string, cfg *co
 		if !hasErrors && len(req.Scenarios) > 0 {
 			logger.Info("Restarting CrowdSec to load new scenarios")
 
-			restartOutput, restartErr := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{"sh", "-c", "kill -SIGHUP 1"})
+			restartOutput, restartErr := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{"kill", "-SIGHUP", "1"})
 
 			if restartErr != nil {
 				logger.Warn("Failed to send HUP signal to CrowdSec, attempting container restart", "error", restartErr)
@@ -251,5 +248,3 @@ func ListScenarios(dockerClient *docker.Client, cfg *config.Config) gin.HandlerF
 		})
 	}
 }
-
-

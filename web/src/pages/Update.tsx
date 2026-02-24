@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 import { RefreshCw, AlertTriangle, Info, Package, AlertCircle, ArrowUpCircle } from 'lucide-react'
-import { PageHeader } from '@/components/common'
+import { PageHeader, QueryError } from '@/components/common'
 
 export default function Update() {
   const queryClient = useQueryClient()
@@ -18,7 +18,7 @@ export default function Update() {
   const [traefikTag, setTraefikTag] = useState('')
   const [crowdsecTag, setCrowdsecTag] = useState('')
 
-  const { data: updateStatus, isLoading } = useQuery({
+  const { data: updateStatus, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['update-check'],
     queryFn: async () => {
       const response = await api.update.checkForUpdates()
@@ -85,6 +85,8 @@ export default function Update() {
   return (
     <div className="space-y-6">
       <PageHeader title="System Update" description="Update Docker image tags for system components" />
+
+      {isError && <QueryError error={error} onRetry={refetch} />}
 
       {/* Current Tags */}
       <Card>

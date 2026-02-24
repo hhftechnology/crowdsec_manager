@@ -55,21 +55,21 @@ type Alert struct {
 // Decision represents a CrowdSec decision
 type Decision struct {
 	ID        int64  `json:"id"`
-	AlertID   int64  `json:"alert_id"`           // ID of the parent alert
-	Origin    string `json:"origin"`             // Source of the decision (crowdsec, cscli, etc.)
-	Type      string `json:"type"`               // Decision type (ban, captcha, etc.)
-	Scope     string `json:"scope"`              // Scope (Ip, Range, etc.)
-	Value     string `json:"value"`              // IP address or range
-	Duration  string `json:"duration"`           // Duration like "3h45m3s"
-	Scenario  string `json:"scenario"`           // Scenario name
-	Simulated bool   `json:"simulated"`          // Whether decision is simulated
-	CreatedAt string `json:"created_at"`         // Creation timestamp
+	AlertID   int64  `json:"alert_id"`   // ID of the parent alert
+	Origin    string `json:"origin"`     // Source of the decision (crowdsec, cscli, etc.)
+	Type      string `json:"type"`       // Decision type (ban, captcha, etc.)
+	Scope     string `json:"scope"`      // Scope (Ip, Range, etc.)
+	Value     string `json:"value"`      // IP address or range
+	Duration  string `json:"duration"`   // Duration like "3h45m3s"
+	Scenario  string `json:"scenario"`   // Scenario name
+	Simulated bool   `json:"simulated"`  // Whether decision is simulated
+	CreatedAt string `json:"created_at"` // Creation timestamp
 
 	// Legacy/additional fields for backward compatibility
-	Source    string `json:"source,omitempty"`   // Alias for Origin (backward compat)
-	Reason    string `json:"reason,omitempty"`   // Alias for Scenario (some versions use this)
-	Until     string `json:"until,omitempty"`    // Expiration timestamp
-	UUID      string `json:"uuid,omitempty"`     // Unique identifier
+	Source string `json:"source,omitempty"` // Alias for Origin (backward compat)
+	Reason string `json:"reason,omitempty"` // Alias for Scenario (some versions use this)
+	Until  string `json:"until,omitempty"`  // Expiration timestamp
+	UUID   string `json:"uuid,omitempty"`   // Unique identifier
 }
 
 // DecisionRaw is the raw structure from CrowdSec JSON output
@@ -125,7 +125,7 @@ func (d *DecisionRaw) Normalize() Decision {
 			origin = sourceStr
 		}
 	}
-	
+
 	// If we still have unknown source object and no origin, try to be cleaner
 	if origin == "" && sourceStr == "unknown_source_object" {
 		origin = "unknown"
@@ -346,22 +346,22 @@ type AllowlistRemoveEntriesRequest struct {
 type AllowlistInspectResponse struct {
 	Name        string           `json:"name"`
 	Description string           `json:"description"`
-	Items       []AllowlistEntry `json:"items"`      // CrowdSec uses "items", not "entries"
-	CreatedAt   string           `json:"created_at"` // When the allowlist was created
-	UpdatedAt   string           `json:"updated_at"` // When the allowlist was last updated
+	Items       []AllowlistEntry `json:"items"`           // CrowdSec uses "items", not "entries"
+	CreatedAt   string           `json:"created_at"`      // When the allowlist was created
+	UpdatedAt   string           `json:"updated_at"`      // When the allowlist was last updated
 	Count       int              `json:"count,omitempty"` // Number of items
 }
 
 // DiscordConfig represents the configuration for Discord notifications
 type DiscordConfig struct {
-	Enabled           bool   `json:"enabled"`
-	WebhookID         string `json:"webhook_id"`
-	WebhookToken      string `json:"webhook_token"`
-	GeoapifyKey       string `json:"geoapify_key"`
-	CrowdSecCTIKey    string `json:"crowdsec_cti_api_key"`
-	CrowdSecRestarted bool   `json:"crowdsec_restarted,omitempty"` // Status flag
-	ManuallyConfigured bool  `json:"manually_configured,omitempty"` // Indicates if config was manually added by user
-	ConfigSource      string `json:"config_source,omitempty"`       // Where config was found: "database", "container", "both"
+	Enabled            bool   `json:"enabled"`
+	WebhookID          string `json:"webhook_id"`
+	WebhookToken       string `json:"webhook_token"`
+	GeoapifyKey        string `json:"geoapify_key"`
+	CrowdSecCTIKey     string `json:"crowdsec_cti_api_key"`
+	CrowdSecRestarted  bool   `json:"crowdsec_restarted,omitempty"`  // Status flag
+	ManuallyConfigured bool   `json:"manually_configured,omitempty"` // Indicates if config was manually added by user
+	ConfigSource       string `json:"config_source,omitempty"`       // Where config was found: "database", "container", "both"
 }
 
 // ConsoleStatus represents the CrowdSec Console enrollment status
@@ -415,4 +415,27 @@ type ProfileHistory struct {
 	ID        int       `json:"id"`
 	Content   string    `json:"content"`
 	CreatedAt time.Time `json:"created_at"`
+}
+
+// HubItem represents a CrowdSec hub item (scenario, parser, collection, or postoverflow)
+type HubItem struct {
+	Name         string `json:"name"`
+	Status       string `json:"status"`
+	Version      string `json:"version"`
+	LocalVersion string `json:"local_version,omitempty"`
+	LocalPath    string `json:"local_path,omitempty"`
+	Description  string `json:"description,omitempty"`
+	Author       string `json:"author,omitempty"`
+}
+
+// HubActionRequest represents a request to install or remove a hub item
+type HubActionRequest struct {
+	Name string `json:"name" binding:"required"`
+	Type string `json:"type" binding:"required"` // scenarios, parsers, collections, postoverflows
+}
+
+// SimulationRequest represents a request to enable or disable simulation for a scenario
+type SimulationRequest struct {
+	Scenario string `json:"scenario" binding:"required"`
+	Enabled  bool   `json:"enabled"`
 }

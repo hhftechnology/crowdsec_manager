@@ -5,7 +5,7 @@ import api, { CrowdSecAlert } from '@/lib/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { RefreshCw, AlertCircle, Download } from 'lucide-react'
-import { PageHeader, EmptyState, PageLoader, InfoCard, CrowdSecFilterForm, SCOPE_OPTIONS, TYPE_OPTIONS, ORIGIN_OPTIONS } from '@/components/common'
+import { PageHeader, EmptyState, PageLoader, InfoCard, CrowdSecFilterForm, SCOPE_OPTIONS, TYPE_OPTIONS, ORIGIN_OPTIONS, QueryError } from '@/components/common'
 import type { FilterField } from '@/components/common'
 import { AlertCard } from '@/components/alerts/AlertCard'
 import { ChartCard, AreaTimeline, BarDistribution } from '@/components/charts'
@@ -53,7 +53,7 @@ export default function AlertAnalysis() {
   const [activeFilters, setActiveFilters] = useState<AlertFilters>({})
   const [expandedAlert, setExpandedAlert] = useState<number | null>(null)
 
-  const { data: alertsData, isLoading, refetch } = useQuery({
+  const { data: alertsData, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['alerts-analysis', activeFilters],
     queryFn: async () => {
       const response = await api.crowdsec.getAlertsAnalysis(activeFilters)
@@ -119,6 +119,8 @@ export default function AlertAnalysis() {
         title="Alert List Analysis"
         description="Advanced filtering and analysis of CrowdSec alerts"
       />
+
+      {isError && <QueryError error={error} onRetry={refetch} />}
 
       {alertsData?.alerts && alertsData.alerts.length > 0 && (
         <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">

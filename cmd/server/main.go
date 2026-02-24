@@ -115,6 +115,9 @@ func main() {
 	// Register all API route groups under /api prefix
 	apiGroup := router.Group("/api")
 
+	// Add rate limiting middleware (100 requests per minute per IP)
+	apiGroup.Use(middleware.RateLimiter(100))
+
 	// Add Docker host selector middleware for multi-host support
 	apiGroup.Use(middleware.DockerHostSelector(multiHost))
 
@@ -134,6 +137,12 @@ func main() {
 		api.RegisterProfileRoutes(apiGroup, db, cfg, dockerClient)
 		api.RegisterHostRoutes(apiGroup, multiHost)
 		api.RegisterTerminalRoutes(apiGroup, dockerClient)
+
+		// Hub browser routes
+		api.RegisterHubRoutes(apiGroup, dockerClient, cfg)
+
+		// Simulation mode routes
+		api.RegisterSimulationRoutes(apiGroup, dockerClient, cfg)
 
 		// Event routes (hub is always available for SSE/WebSocket)
 		api.RegisterEventRoutes(apiGroup, hub)

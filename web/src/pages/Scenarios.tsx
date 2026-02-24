@@ -3,13 +3,16 @@ import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import api, { Scenario, ScenarioSetupRequest } from '@/lib/api'
+import { simulationAPI } from '@/lib/api/simulation'
+import type { SimulationStatus } from '@/lib/api/simulation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
+import { Switch } from '@/components/ui/switch'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { FileText, Plus, X, CheckCircle2, AlertCircle } from 'lucide-react'
+import { FileText, Plus, X, CheckCircle2, AlertCircle, FlaskConical } from 'lucide-react'
 import { PageHeader, EmptyState, CardSkeleton } from '@/components/common'
 
 interface ScenarioItem {
@@ -166,7 +169,7 @@ export default function Scenarios() {
           {isLoading ? (
             <CardSkeleton lines={3} />
           ) : scenariosList.length > 0 ? (
-            <div className="space-y-2 max-h-[400px] overflow-y-auto">
+            <div className="space-y-2">
               {scenariosList.map((scenario, index) => (
                 <div key={index} className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent/50 transition-colors">
                   <div className="flex-1 min-w-0">
@@ -223,7 +226,7 @@ export default function Scenarios() {
                   <Label htmlFor={`content-${index}`}>Scenario Content (YAML) <span className="text-destructive">*</span></Label>
                   <textarea
                     id={`content-${index}`}
-                    className="w-full min-h-[200px] p-3 text-sm font-mono border rounded-md bg-muted/50"
+                    className="w-full min-h-64 p-3 text-sm font-mono border rounded-md bg-muted/50"
                     placeholder={`type: leaky\nname: custom/http-bruteforce\ndescription: Detect HTTP brute force attempts\nfilter: evt.Meta.log_type == 'http_access-log'\nleakspeed: 10s\ncapacity: 5\ngroupby: evt.Meta.source_ip\nlabels:\n  service: http\n  type: bruteforce\n  remediation: true`}
                     value={scenario.content}
                     onChange={(e) => handleScenarioChange(index, 'content', e.target.value)}
@@ -242,6 +245,9 @@ export default function Scenarios() {
           </CardContent>
         </Card>
       </form>
+
+      {/* Simulation Mode */}
+      <SimulationCard />
 
       <Card>
         <CardHeader>
@@ -267,5 +273,83 @@ labels:
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+function SimulationCard() {
+  const queryClient = useQueryClient()
+
+  const { data: simStatus, isLoading } = useQuery({
+    queryKey: ['simulation-status'],
+    queryFn: async () => {
+      const response = await simulationAPI.getStatus()
+      return response.data.data as SimulationStatus
+    },
+  })
+
+  const toggleMutation = useMutation({
+    mutationFn: ({ scenario, enabled }: { scenario: string; enabled: boolean }) =>
+      simulationAPI.toggle({ scenario, enabled }),
+    onSuccess: () => {
+      toast.success('Simulation mode updated')
+      queryClient.invalidateQueries({ queryKey: ['simulation-status'] })
+    },
+    onError: () => toast.error('Failed to update simulation mode'),
+  })
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center gap-2">
+          <FlaskConical className="h-5 w-5" />
+          <div>
+            <CardTitle>Simulation Mode</CardTitle>
+            <CardDescription>
+              When enabled, scenarios run in simulation mode — alerts are generated but no actual remediation actions are taken
+            </CardDescription>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {isLoading ? (
+          <CardSkeleton lines={2} />
+        ) : (
+          <>
+            <div className="flex items-center justify-between p-3 border rounded-lg">
+              <div>
+                <p className="font-medium text-sm">Global Simulation</p>
+                <p className="text-xs text-muted-foreground">
+                  Toggle simulation mode for all scenarios at once
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge variant={simStatus?.global ? 'default' : 'secondary'}>
+                  {simStatus?.global ? 'Enabled' : 'Disabled'}
+                </Badge>
+                <Switch
+                  checked={simStatus?.global ?? false}
+                  onCheckedChange={(checked) =>
+                    toggleMutation.mutate({ scenario: '*', enabled: checked })
+                  }
+                  disabled={toggleMutation.isPending}
+                />
+              </div>
+            </div>
+            {simStatus?.exclusions && simStatus.exclusions.length > 0 && (
+              <div>
+                <p className="text-sm font-medium mb-2">Exclusions</p>
+                <div className="flex flex-wrap gap-2">
+                  {simStatus.exclusions.map((exc) => (
+                    <Badge key={exc} variant="outline" className="font-mono text-xs">
+                      {exc}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
   )
 }

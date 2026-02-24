@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Clock, Plus, Trash2, AlertCircle } from 'lucide-react'
+import { QueryError } from '@/components/common'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 
 export default function Cron() {
@@ -18,7 +19,7 @@ export default function Cron() {
   const [schedule, setSchedule] = useState('')
   const [task, setTask] = useState('')
 
-  const { data: cronJobs, isLoading } = useQuery({
+  const { data: cronJobs, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['cron-jobs'],
     queryFn: async () => {
       const response = await api.cron.list()
@@ -149,6 +150,8 @@ export default function Cron() {
           </DialogContent>
         </Dialog>
       </div>
+
+      {isError && <QueryError error={error} onRetry={refetch} />}
 
       {/* Cron Jobs Table */}
       <Card>

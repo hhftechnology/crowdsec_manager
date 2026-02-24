@@ -1,6 +1,17 @@
+import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import type { CrowdSecAlert, Decision } from '@/lib/api'
+import { crowdsecAPI } from '@/lib/api/crowdsec'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import {
   Collapsible,
   CollapsibleContent,
@@ -14,7 +25,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { AlertTriangle, Info } from 'lucide-react'
+import { AlertTriangle, Info, Eye } from 'lucide-react'
 
 interface AlertCardProps {
   alert: CrowdSecAlert
@@ -24,7 +35,10 @@ interface AlertCardProps {
 }
 
 function AlertCard({ alert, isExpanded, onToggle }: AlertCardProps) {
+  const [inspectOpen, setInspectOpen] = useState(false)
+
   return (
+    <>
     <Collapsible open={isExpanded} onOpenChange={onToggle}>
       <Card className="border-l-4 border-l-orange-500">
         <CollapsibleTrigger className="w-full">
@@ -136,10 +150,64 @@ function AlertCard({ alert, isExpanded, onToggle }: AlertCardProps) {
                 </div>
               </div>
             )}
+            {alert.id && (
+              <div className="mt-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setInspectOpen(true)
+                  }}
+                >
+                  <Eye className="h-4 w-4 mr-2" />
+                  Inspect Full Alert
+                </Button>
+              </div>
+            )}
           </CardContent>
         </CollapsibleContent>
       </Card>
     </Collapsible>
+    {alert.id && (
+      <AlertInspectDialog
+        alertId={alert.id}
+        open={inspectOpen}
+        onOpenChange={setInspectOpen}
+      />
+    )}
+    </>
+  )
+}
+
+function AlertInspectDialog({ alertId, open, onOpenChange }: { alertId: number; open: boolean; onOpenChange: (open: boolean) => void }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['alert-inspect', alertId],
+    queryFn: async () => {
+      const response = await crowdsecAPI.inspectAlert(alertId)
+      return response.data.data
+    },
+    enabled: open,
+  })
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Alert #{alertId} Details</DialogTitle>
+          <DialogDescription>Full inspection data from CrowdSec LAPI</DialogDescription>
+        </DialogHeader>
+        {isLoading ? (
+          <div className="flex items-center justify-center py-8 text-muted-foreground">Loading...</div>
+        ) : data ? (
+          <pre className="p-4 bg-muted rounded-lg text-xs overflow-x-auto whitespace-pre-wrap font-mono">
+            {JSON.stringify(data, null, 2)}
+          </pre>
+        ) : (
+          <p className="text-muted-foreground text-sm">No data available</p>
+        )}
+      </DialogContent>
+    </Dialog>
   )
 }
 

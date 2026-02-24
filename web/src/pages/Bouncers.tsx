@@ -35,6 +35,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Plus, Trash2, RefreshCw, Copy, Check, Shield, AlertCircle } from 'lucide-react'
 import { toast } from 'sonner'
+import { QueryError } from '@/components/common'
 
 export default function Bouncers() {
   const queryClient = useQueryClient()
@@ -43,7 +44,7 @@ export default function Bouncers() {
   const [createdBouncer, setCreatedBouncer] = useState<{ name: string; api_key: string } | null>(null)
   const [copied, setCopied] = useState(false)
 
-  const { data: bouncers, isLoading } = useQuery({
+  const { data: bouncers, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['bouncers'],
     queryFn: async () => {
       const response = await api.crowdsec.getBouncers()
@@ -202,6 +203,8 @@ export default function Bouncers() {
           </DialogContent>
         </Dialog>
       </div>
+
+      {isError && <QueryError error={error} onRetry={refetch} />}
 
       <Card>
         <CardHeader>

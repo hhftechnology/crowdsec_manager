@@ -26,6 +26,8 @@ const Profiles = lazy(() => import('./pages/Profiles'))
 const Bouncers = lazy(() => import('./pages/Bouncers'))
 const Terminal = lazy(() => import('./pages/Terminal'))
 const ConfigValidation = lazy(() => import('./pages/ConfigValidation'))
+const Hub = lazy(() => import('./pages/Hub'))
+const Metrics = lazy(() => import('./pages/Metrics'))
 
 function App() {
   return (
@@ -55,6 +57,8 @@ function App() {
               <Route path="/bouncers" element={<Bouncers />} />
               <Route path="/terminal" element={<Terminal />} />
               <Route path="/config-validation" element={<ConfigValidation />} />
+              <Route path="/hub" element={<Hub />} />
+              <Route path="/metrics" element={<Metrics />} />
             </Routes>
           </Suspense>
         </Layout>

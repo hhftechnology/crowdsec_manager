@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { FileText, RefreshCw, Activity } from 'lucide-react'
-import { PageHeader } from '@/components/common'
+import { PageHeader, QueryError } from '@/components/common'
 import { TraefikAnalytics } from '@/components/logs/TraefikAnalytics'
 
 export default function Logs() {
@@ -20,7 +20,7 @@ export default function Logs() {
   const logEndRef = useRef<HTMLDivElement>(null)
   const prevStreamLengthRef = useRef<number>(0)
 
-  const { data: crowdsecLogs, isLoading: crowdsecLoading, refetch: refetchCrowdSec } = useQuery({
+  const { data: crowdsecLogs, isLoading: crowdsecLoading, isError: isCrowdsecError, error: crowdsecError, refetch: refetchCrowdSec } = useQuery({
     queryKey: ['logs-crowdsec', tailLines],
     queryFn: async () => {
       const response = await api.logs.getCrowdSec(tailLines)
@@ -122,6 +122,8 @@ export default function Logs() {
   return (
     <div className="space-y-6">
       <PageHeader title="Logs Viewer" description="View and analyze service logs in real-time" />
+
+      {isCrowdsecError && <QueryError error={crowdsecError} onRetry={refetchCrowdSec} />}
 
       <Card>
         <CardHeader>

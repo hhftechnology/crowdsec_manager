@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { XCircle, Shield, Info } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { useEffect } from 'react'
-import { PageHeader } from '@/components/common'
+import { PageHeader, QueryError } from '@/components/common'
 
 export default function Captcha() {
   const queryClient = useQueryClient()
@@ -18,7 +18,7 @@ export default function Captcha() {
   const [siteKey, setSiteKey] = useState('')
   const [secretKey, setSecretKey] = useState('')
 
-  const { data: statusData, isLoading } = useQuery({
+  const { data: statusData, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['captcha-status'],
     queryFn: async () => {
       const response = await api.captcha.getStatus()
@@ -81,6 +81,8 @@ export default function Captcha() {
   return (
     <div className="space-y-6">
       <PageHeader title="Captcha Setup" description="Configure captcha protection for CrowdSec remediation" />
+
+      {isError && <QueryError error={error} onRetry={refetch} />}
 
       {/* Current Status */}
       <Card>

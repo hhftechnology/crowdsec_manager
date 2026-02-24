@@ -23,14 +23,9 @@ func generateDiscordYamlInContainer(dockerClient *docker.Client, cfg *config.Con
 		logger.Warn("Failed to create notifications directory (may already exist)", "error", err)
 	}
 
-	// Escape single quotes in the template for shell command
-	escapedTemplate := strings.ReplaceAll(DiscordTemplate, "'", "'\\''")
-
-	// Write discord.yaml directly to container
-	_, err = dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
-		"sh", "-c", fmt.Sprintf("echo '%s' > %s/discord.yaml", escapedTemplate, cfg.CrowdSecNotificationsDir),
-	})
-	if err != nil {
+	// Write discord.yaml directly to container using Docker copy API (no shell)
+	discordPath := cfg.CrowdSecNotificationsDir + "/discord.yaml"
+	if err = dockerClient.WriteFileToContainer(cfg.CrowdsecContainerName, discordPath, []byte(DiscordTemplate)); err != nil {
 		return fmt.Errorf("failed to write discord.yaml to container: %w", err)
 	}
 

@@ -43,20 +43,20 @@ export default function Layout({ children }: LayoutProps) {
       </div>
 
       {/* Desktop layout */}
-      <div className="grid grid-cols-1 md:grid-cols-[auto_1fr] h-full overflow-hidden">
+      <div className="flex h-full overflow-hidden">
         {/* Desktop sidebar */}
-        <div className="hidden md:block">
+        <div className="hidden md:block shrink-0">
           <Sidebar isCollapsed={isCollapsed} setIsCollapsed={setIsCollapsed} />
         </div>
 
-        <div className="flex flex-col overflow-hidden">
+        <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
           <Header onMenuClick={() => setMobileOpen(true)} />
           <main className="flex-1 overflow-y-auto bg-background p-4 md:p-6">
-            <div className="max-w-[1600px] mx-auto w-full">
+            <div className="max-w-screen-2xl mx-auto w-full h-full">
               {children}
             </div>
           </main>
-          <footer className="border-t border-sidebar-border py-3 text-center text-xs text-muted-foreground bg-background">
+          <footer className="border-t border-sidebar-border py-3 text-center text-xs text-muted-foreground bg-background shrink-0">
             <p>&copy; {new Date().getFullYear()} HHF Technology &middot; Powered by CrowdSec</p>
           </footer>
         </div>

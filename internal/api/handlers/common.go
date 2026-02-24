@@ -14,14 +14,16 @@ import (
 
 // resolveDockerClient returns the per-request Docker client from gin.Context
 // (set by DockerHostSelector middleware), falling back to the default client.
-// This enables multi-host support: handlers call this at the top of their closure.
+// The returned client is scoped to the request context so Docker operations
+// are cancelled when the HTTP request is cancelled.
 func resolveDockerClient(c *gin.Context, fallback *docker.Client) *docker.Client {
+	dc := fallback
 	if val, exists := c.Get("dockerClient"); exists {
 		if client, ok := val.(*docker.Client); ok {
-			return client
+			dc = client
 		}
 	}
-	return fallback
+	return dc.WithContext(c.Request.Context())
 }
 
 // truncateString truncates a string to a maximum length for logging
@@ -65,21 +67,21 @@ func calculateUntil(createdAtStr, durationStr string) *time.Time {
 
 	// Parse created_at timestamp - try multiple formats
 	var createdAt time.Time
-	
+
 	formats := []string{
 		time.RFC3339,
 		"2006-01-02T15:04:05Z",
 		"2006-01-02 15:04:05 +0000 UTC",
 		time.RFC3339Nano,
 	}
-	
+
 	for _, format := range formats {
 		if t, err := time.Parse(format, createdAtStr); err == nil {
 			createdAt = t
 			break
 		}
 	}
-	
+
 	if createdAt.IsZero() {
 		return nil
 	}
@@ -122,20 +124,20 @@ func GetConsoleStatusHelper(dockerClient interface {
 	var status models.ConsoleStatus
 	if err := json.Unmarshal([]byte(output), &status); err != nil {
 		logger.Warn("Failed to parse console status JSON, attempting fallback", "error", err)
-		
+
 		// Fallback to simple string check if JSON parsing fails
 		// This handles cases where older versions might not output valid JSON or other issues
 		// We check for various formats (YAML-like, JSON with/without spaces)
-		status.Enrolled = strings.Contains(output, "enrolled: true") || 
-			strings.Contains(output, `"enrolled":true`) || 
+		status.Enrolled = strings.Contains(output, "enrolled: true") ||
+			strings.Contains(output, `"enrolled":true`) ||
 			strings.Contains(output, `"enrolled": true`)
-			
-		status.Validated = strings.Contains(output, "validated: true") || 
-			strings.Contains(output, `"validated":true`) || 
+
+		status.Validated = strings.Contains(output, "validated: true") ||
+			strings.Contains(output, `"validated":true`) ||
 			strings.Contains(output, `"validated": true`)
-			
-		status.Manual = strings.Contains(output, "manual: true") || 
-			strings.Contains(output, `"manual":true`) || 
+
+		status.Manual = strings.Contains(output, "manual: true") ||
+			strings.Contains(output, `"manual":true`) ||
 			strings.Contains(output, `"manual": true`)
 
 		status.ConsoleManagement = strings.Contains(output, "console_management: true") ||
@@ -151,7 +153,7 @@ func GetConsoleStatusHelper(dockerClient interface {
 	if !status.Validated && status.ConsoleManagement {
 		status.Validated = true
 	}
-	
+
 	// If ConsoleManagement is true, it definitely means it is enrolled too
 	if !status.Enrolled && status.ConsoleManagement {
 		status.Enrolled = true

@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query'
 import api from '@/lib/api'
+import { QueryError } from '@/components/common'
 import { StatCard } from '@/components/charts'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
   CheckCircle2,
   XCircle,
@@ -38,7 +39,7 @@ interface CrowdSecHealthData {
 }
 
 export default function CrowdSecHealth() {
-  const { data: healthData, isLoading, error } = useQuery({
+  const { data: healthData, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['crowdsec-health'],
     queryFn: async () => {
       const response = await api.health.crowdsecHealth()
@@ -115,26 +116,6 @@ export default function CrowdSecHealth() {
     }
   }
 
-  if (error) {
-    return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold">CrowdSec Security Engine Health</h1>
-          <p className="text-muted-foreground mt-2">
-            Real-time health monitoring of CrowdSec Security Engine
-          </p>
-        </div>
-        <Alert variant="destructive">
-          <XCircle className="h-4 w-4" />
-          <AlertTitle>Error</AlertTitle>
-          <AlertDescription>
-            Failed to fetch health status. Please ensure the CrowdSec container is running.
-          </AlertDescription>
-        </Alert>
-      </div>
-    )
-  }
-
   return (
     <div className="space-y-6">
       <div>
@@ -143,6 +124,8 @@ export default function CrowdSecHealth() {
           Real-time health monitoring of CrowdSec Security Engine
         </p>
       </div>
+
+      {isError && <QueryError error={error} onRetry={refetch} />}
 
       {/* Overall Status */}
       <Card>
@@ -237,7 +220,7 @@ export default function CrowdSecHealth() {
                                   <div className="grid grid-cols-1 gap-1">
                                     {Object.entries(value).map(([subKey, subValue]) => (
                                       <div key={subKey} className="flex flex-col sm:flex-row sm:items-center gap-1">
-                                        <span className="text-xs text-muted-foreground min-w-[100px]">{subKey}:</span>
+                                        <span className="text-xs text-muted-foreground min-w-24">{subKey}:</span>
                                         <span className="font-mono font-medium text-xs break-all">
                                           {typeof subValue === 'object' && subValue !== null 
                                             ? JSON.stringify(subValue) 

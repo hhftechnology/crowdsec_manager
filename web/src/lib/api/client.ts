@@ -29,3 +29,20 @@ apiClient.interceptors.request.use((config) => {
   }
   return config
 })
+
+// =============================================================================
+// Response error interceptor — normalise API envelope errors
+// =============================================================================
+
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    // Extract the `error` field from the API envelope when available
+    const apiError: string | undefined =
+      error?.response?.data?.error
+    if (apiError) {
+      error.message = apiError
+    }
+    return Promise.reject(error)
+  },
+)

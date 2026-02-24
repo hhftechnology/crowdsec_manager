@@ -19,7 +19,7 @@ function EmptyState({
   className,
 }: EmptyStateProps) {
   return (
-    <div className={cn('flex min-h-[300px] flex-col items-center justify-center gap-4 p-8 text-center', className)}>
+    <div className={cn('flex min-h-72 flex-col items-center justify-center gap-4 p-8 text-center', className)}>
       <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted">
         <Icon className="h-7 w-7 text-muted-foreground" />
       </div>
@@ -52,7 +52,7 @@ function ErrorState({
   className,
 }: ErrorStateProps) {
   return (
-    <div className={cn('flex min-h-[300px] flex-col items-center justify-center gap-4 p-8 text-center', className)}>
+    <div className={cn('flex min-h-72 flex-col items-center justify-center gap-4 p-8 text-center', className)}>
       <div className="flex h-14 w-14 items-center justify-center rounded-full bg-destructive/10">
         <Icon className="h-7 w-7 text-destructive" />
       </div>

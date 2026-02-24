@@ -25,6 +25,8 @@ import {
   Sun,
   TerminalSquare,
   ShieldCheck,
+  Package,
+  BarChart3,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -60,11 +62,13 @@ export const navigation = [
       { name: 'Alerts', href: '/alerts', icon: AlertTriangle },
       { name: 'Decisions', href: '/decisions', icon: Target },
       { name: 'Remediation Metrics', href: '/crowdsec-health', icon: Activity },
+      { name: 'Engine Metrics', href: '/metrics', icon: BarChart3 },
     ]
   },
   {
     title: "Hub",
     items: [
+      { name: 'Hub Browser', href: '/hub', icon: Package },
       { name: 'Scenarios', href: '/scenarios', icon: FileText },
       { name: 'Captcha', href: '/captcha', icon: ScanFace },
     ]
@@ -115,7 +119,7 @@ export default function Sidebar({ isCollapsed, setIsCollapsed, onNavigate }: Sid
       )}
     >
       {/* Header with Toggle */}
-      <div className={cn("flex items-center p-4 border-b border-sidebar-border", isCollapsed ? "justify-center" : "justify-between")}>
+      <div className={cn("flex items-center h-16 px-4 shrink-0 border-b border-sidebar-border", isCollapsed ? "justify-center" : "justify-between")}>
         {!isCollapsed && (
           <div className="flex items-center gap-2 font-semibold text-lg">
             <Shield className="h-6 w-6 text-primary" />
@@ -179,14 +183,14 @@ export default function Sidebar({ isCollapsed, setIsCollapsed, onNavigate }: Sid
                       to={item.href}
                       onClick={onNavigate}
                       className={cn(
-                        "flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors",
+                        "flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors overflow-hidden",
                         isActive
                           ? "border-l-[3px] border-primary text-primary font-medium"
                           : "text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
                       )}
                     >
-                      <Icon className="h-4 w-4" />
-                      {item.name}
+                      <Icon className="h-4 w-4 shrink-0" />
+                      <span className="truncate">{item.name}</span>
                     </Link>
                   )
                 })}
@@ -205,28 +209,28 @@ export default function Sidebar({ isCollapsed, setIsCollapsed, onNavigate }: Sid
             size={isCollapsed ? "icon" : "default"}
             onClick={toggleTheme}
             className={cn(
-              "w-full justify-start text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
+              "w-full justify-start text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground overflow-hidden",
               isCollapsed && "justify-center"
             )}
           >
             {theme === "dark" ? (
-              <Sun className="h-4 w-4" />
+              <Sun className="h-4 w-4 shrink-0" />
             ) : (
-              <Moon className="h-4 w-4" />
+              <Moon className="h-4 w-4 shrink-0" />
             )}
-            {!isCollapsed && <span className="ml-2">Toggle Theme</span>}
+            {!isCollapsed && <span className="ml-2 truncate">Toggle Theme</span>}
           </Button>
           <Button
             variant="ghost"
             size={isCollapsed ? "icon" : "default"}
             onClick={() => setIsCollapsed(!isCollapsed)}
             className={cn(
-              "w-full justify-start text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
+              "w-full justify-start text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground overflow-hidden",
               isCollapsed && "justify-center"
             )}
           >
-            {isCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
-            {!isCollapsed && <span className="ml-2">Collapse</span>}
+            {isCollapsed ? <PanelLeftOpen className="h-4 w-4 shrink-0" /> : <PanelLeftClose className="h-4 w-4 shrink-0" />}
+            {!isCollapsed && <span className="ml-2 truncate">Collapse</span>}
           </Button>
         </div>
       </div>

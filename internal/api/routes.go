@@ -140,6 +140,7 @@ func RegisterServicesRoutes(router *gin.RouterGroup, dockerClient *docker.Client
 		crowdsec.POST("/decisions/import", handlers.ImportDecisions(dockerClient, cfg))
 		crowdsec.GET("/decisions/analysis", handlers.GetDecisionsAnalysis(dockerClient, cfg))
 		crowdsec.GET("/alerts/analysis", handlers.GetAlertsAnalysis(dockerClient, cfg))
+		crowdsec.GET("/alerts/:id", handlers.InspectAlert(dockerClient, cfg))
 		crowdsec.GET("/metrics", handlers.GetMetrics(dockerClient, cfg))
 		crowdsec.POST("/enroll", handlers.EnrollCrowdSec(dockerClient, cfg))
 		crowdsec.GET("/status", handlers.GetCrowdSecEnrollmentStatus(dockerClient, cfg))
@@ -156,14 +157,7 @@ func RegisterServicesRoutes(router *gin.RouterGroup, dockerClient *docker.Client
 	// Configuration/Settings
 	config := router.Group("/config")
 	{
-		config.GET("/settings", func(c *gin.Context) {
-			settings, err := db.GetSettings()
-			if err != nil {
-				c.JSON(500, gin.H{"error": err.Error()})
-				return
-			}
-			c.JSON(200, gin.H{"success": true, "data": settings})
-		})
+		config.GET("/settings", handlers.GetSettings(db))
 		config.PUT("/settings", handlers.UpdateSettings(db))
 		config.GET("/files/:container/:fileType", handlers.GetFileContent(dockerClient, db))
 	}
@@ -220,6 +214,26 @@ func RegisterConfigValidationRoutes(router *gin.RouterGroup, validator *configva
 		cfgValidation.POST("/restore/:type", handlers.RestoreConfig(validator))
 		cfgValidation.POST("/accept/:type", handlers.AcceptCurrentConfig(validator))
 		cfgValidation.DELETE("/snapshot/:type", handlers.DeleteConfigSnapshot(validator))
+	}
+}
+
+// RegisterHubRoutes configures endpoints for browsing, installing, removing, and upgrading CrowdSec hub items
+func RegisterHubRoutes(router *gin.RouterGroup, dockerClient *docker.Client, cfg *config.Config) {
+	hub := router.Group("/hub")
+	{
+		hub.GET("/list", handlers.ListHubItems(dockerClient, cfg))
+		hub.POST("/install", handlers.InstallHubItem(dockerClient, cfg))
+		hub.POST("/remove", handlers.RemoveHubItem(dockerClient, cfg))
+		hub.POST("/upgrade", handlers.UpgradeAllHub(dockerClient, cfg))
+	}
+}
+
+// RegisterSimulationRoutes configures endpoints for managing CrowdSec simulation mode
+func RegisterSimulationRoutes(router *gin.RouterGroup, dockerClient *docker.Client, cfg *config.Config) {
+	simulation := router.Group("/simulation")
+	{
+		simulation.GET("/status", handlers.GetSimulationStatus(dockerClient, cfg))
+		simulation.POST("/toggle", handlers.ToggleSimulation(dockerClient, cfg))
 	}
 }
 

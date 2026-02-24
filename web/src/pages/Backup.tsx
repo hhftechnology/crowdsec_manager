@@ -9,13 +9,13 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Database, Download, Trash2, RefreshCw, Plus, AlertTriangle } from 'lucide-react'
-import { PageHeader, EmptyState } from '@/components/common'
+import { PageHeader, EmptyState, QueryError } from '@/components/common'
 
 export default function Backup() {
   const queryClient = useQueryClient()
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
 
-  const { data: backups, isLoading } = useQuery({
+  const { data: backups, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['backups'],
     queryFn: async () => {
       const response = await api.backup.list()
@@ -154,6 +154,8 @@ export default function Backup() {
           </>
         }
       />
+
+      {isError && <QueryError error={error} onRetry={refetch} />}
 
       {/* Backups Table */}
       <Card>

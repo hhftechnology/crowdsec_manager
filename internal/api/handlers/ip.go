@@ -34,7 +34,7 @@ func GetPublicIP() gin.HandlerFunc {
 		var lastErr error
 
 		for _, service := range services {
-			resp, err := http.Get(service)
+			resp, err := constants.ExternalHTTPClient.Get(service)
 			if err != nil {
 				lastErr = err
 				continue
@@ -70,7 +70,6 @@ func GetPublicIP() gin.HandlerFunc {
 		})
 	}
 }
-
 
 // IsIPBlocked checks if an IP is blocked
 func IsIPBlocked(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
@@ -227,7 +226,7 @@ func CheckIPSecurity(dockerClient *docker.Client, cfg *config.Config) gin.Handle
 		// Find all files containing "whitelist" in the whitelist directory
 		whitelistDir := filepath.Dir(cfg.CrowdSecWhitelistPath)
 		findWhitelistFiles, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
-			"sh", "-c", "find " + whitelistDir + " -type f -name '*whitelist*.yaml' -o -name '*whitelist*.yml' 2>/dev/null || echo ''",
+			"find", whitelistDir, "-type", "f", "(", "-name", "*whitelist*.yaml", "-o", "-name", "*whitelist*.yml", ")",
 		})
 		if err == nil && findWhitelistFiles != "" {
 			whitelistFiles := strings.Split(strings.TrimSpace(findWhitelistFiles), "\n")
@@ -318,4 +317,3 @@ func UnbanIP(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 		})
 	}
 }
-

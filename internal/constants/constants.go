@@ -1,6 +1,9 @@
 package constants
 
-import "time"
+import (
+	"net/http"
+	"time"
+)
 
 // ExternalIPServices lists public IP lookup services used for reliability via fallback
 var ExternalIPServices = []string{
@@ -26,3 +29,12 @@ const CrowdSecConfigSubdir = "crowdsec"
 
 // DefaultWebSocketBufferSize is the default buffer size for WebSocket read/write operations
 const DefaultWebSocketBufferSize = 4096
+
+// ExternalHTTPTimeout is the timeout for outbound HTTP requests (IP lookups, etc.)
+const ExternalHTTPTimeout = 10 * time.Second
+
+// ExternalHTTPClient is a shared HTTP client with a sensible timeout.
+// Use this instead of http.Get() to prevent goroutine leaks.
+var ExternalHTTPClient = &http.Client{
+	Timeout: ExternalHTTPTimeout,
+}

@@ -19,6 +19,9 @@ import { hostsAPI } from './api/hosts'
 import { terminalAPI } from './api/terminal'
 import { eventsAPI } from './api/events'
 import { configValidationAPI } from './api/config-validation'
+import { profilesAPI } from './api/profiles'
+import { hubAPI } from './api/hub'
+import { simulationAPI } from './api/simulation'
 
 export default {
   health: healthAPI,
@@ -39,4 +42,7 @@ export default {
   terminal: terminalAPI,
   events: eventsAPI,
   configValidation: configValidationAPI,
+  profiles: profilesAPI,
+  hub: hubAPI,
+  simulation: simulationAPI,
 }

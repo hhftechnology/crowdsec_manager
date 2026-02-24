@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import api from '@/lib/api'
+import { QueryError } from '@/components/common'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
@@ -7,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { CheckCircle2, XCircle, Activity, Shield, Globe } from 'lucide-react'
 
 export default function Health() {
-  const { data: diagnostics, isLoading } = useQuery({
+  const { data: diagnostics, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['diagnostics'],
     queryFn: async () => {
       const response = await api.health.completeDiagnostics()
@@ -27,6 +28,8 @@ export default function Health() {
           Complete system diagnostics and health monitoring
         </p>
       </div>
+
+      {isError && <QueryError error={error} onRetry={refetch} />}
 
       {/* System Status Overview */}
       <Card>

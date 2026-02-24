@@ -12,7 +12,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { PageHeader, EmptyState } from '@/components/common'
+import { PageHeader, EmptyState, QueryError } from '@/components/common'
 import { InspectDialog } from '@/components/allowlist/InspectDialog'
 import { ManageEntries } from '@/components/allowlist/ManageEntries'
 
@@ -25,7 +25,7 @@ export default function Allowlist() {
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [showNoAllowlistOption, setShowNoAllowlistOption] = useState(true)
 
-  const { data: allowlistsData, isLoading, refetch } = useQuery({
+  const { data: allowlistsData, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['allowlists'],
     queryFn: async () => {
       const response = await api.allowlist.list()
@@ -140,6 +140,8 @@ export default function Allowlist() {
         title="CrowdSec Allowlist Management"
         description="Manage IP-based allowlists at the LAPI level. Allowlists affect local decisions, blocklist pulls, and WAF/AppSec."
       />
+
+      {isError && <QueryError error={error} onRetry={refetch} />}
 
       <Alert>
         <Info className="h-4 w-4" />

@@ -9,7 +9,7 @@ interface PageLoaderProps {
 
 function PageLoader({ message, className }: PageLoaderProps) {
   return (
-    <div className={cn('flex min-h-[400px] flex-col items-center justify-center gap-4', className)}>
+    <div className={cn('flex min-h-[60vh] flex-col items-center justify-center gap-4', className)}>
       <Loader2 className="h-8 w-8 animate-spin text-primary" />
       {message && (
         <p className="text-sm text-muted-foreground">{message}</p>

@@ -73,7 +73,7 @@ function LogViewer({
       </div>
 
       {/* Log content */}
-      <ScrollArea className="h-[400px]">
+      <ScrollArea className="h-[60vh] w-full">
         <div ref={scrollRef} className="h-full overflow-auto p-3">
           {displayedLogs.length === 0 ? (
             <p className="text-center text-sm text-zinc-500">No logs to display</p>

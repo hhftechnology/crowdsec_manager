@@ -165,11 +165,8 @@ func updateCrowdSecProfiles(dockerClient *docker.Client, cfg *config.Config) err
 		"cp", cfg.CrowdSecProfilesPath, cfg.CrowdSecProfilesPath + ".bak",
 	})
 
-	// Write new profiles.yaml
-	escapedContent := strings.ReplaceAll(string(newProfileBytes), "'", "'\\''")
-	_, err = dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
-		"sh", "-c", fmt.Sprintf("echo '%s' > %s", escapedContent, cfg.CrowdSecProfilesPath),
-	})
+	// Write new profiles.yaml using Docker copy API (no shell interpolation)
+	err = dockerClient.WriteFileToContainer(cfg.CrowdsecContainerName, cfg.CrowdSecProfilesPath, []byte(newProfileBytes))
 	if err != nil {
 		// Restore backup if failed
 		_, _ = dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{

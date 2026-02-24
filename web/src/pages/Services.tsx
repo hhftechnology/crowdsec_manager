@@ -7,13 +7,14 @@ import { Badge } from '@/components/ui/badge'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 import { CheckCircle2, XCircle, Play, Square, RotateCw, Power, Key } from 'lucide-react'
 import EnrollDialog from '@/components/EnrollDialog'
+import { QueryError } from '@/components/common'
 
 export default function Services() {
   const queryClient = useQueryClient()
 
 
 
-  const { data: servicesData, isLoading } = useQuery({
+  const { data: servicesData, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['services'],
     queryFn: async () => {
       const response = await api.services.verify()
@@ -80,6 +81,8 @@ export default function Services() {
           }
         />
       </div>
+
+      {isError && <QueryError error={error} onRetry={refetch} />}
 
       {/* Services Status Grid */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
