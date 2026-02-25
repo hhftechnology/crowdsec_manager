@@ -19,8 +19,6 @@ import {
   Target,
   Bell,
   HeartPulse,
-  Moon,
-  Sun,
   TerminalSquare,
   ShieldCheck,
   Package,
@@ -29,10 +27,8 @@ import {
   ScanSearch,
   AppWindow,
 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
-import { useTheme } from '@/contexts/ThemeContext'
 import {
   Tooltip,
   TooltipContent,
@@ -109,16 +105,11 @@ export const navigation = [
 
 export default function Sidebar({ isCollapsed, setIsCollapsed: _setIsCollapsed, onNavigate }: SidebarProps) {
   const location = useLocation()
-  const { theme, setTheme } = useTheme()
 
   // Persist collapsed state to localStorage
   useEffect(() => {
     localStorage.setItem('sidebar-collapsed', String(isCollapsed))
   }, [isCollapsed])
-
-  const toggleTheme = () => {
-    setTheme(theme === "dark" ? "light" : "dark")
-  }
 
   return (
     <div
@@ -209,30 +200,21 @@ export default function Sidebar({ isCollapsed, setIsCollapsed: _setIsCollapsed, 
         </div>
       </ScrollArea>
 
-      {/* Footer with Theme Toggle and Copyright */}
+      {/* Footer with Copyright */}
       <div className="px-3 py-2 shrink-0">
         <Separator className="mb-3 bg-sidebar-border" />
         <div className={cn("flex items-center", isCollapsed ? "justify-center" : "justify-between gap-2")}>
-          <Button
-            variant="ghost"
-            size={isCollapsed ? "icon" : "sm"}
-            onClick={toggleTheme}
-            className={cn(
-              "text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground shrink-0",
-              isCollapsed ? "h-8 w-8" : "gap-2 px-2"
-            )}
-          >
-            {theme === "dark" ? (
-              <Sun className="h-4 w-4 shrink-0" />
-            ) : (
-              <Moon className="h-4 w-4 shrink-0" />
-            )}
-            {!isCollapsed && <span className="truncate">Toggle Theme</span>}
-          </Button>
           {!isCollapsed && (
-            <p className="text-[10px] text-muted-foreground text-right leading-tight shrink-0">
-              &copy; {new Date().getFullYear()} HHF Technology<br />
-              Powered by CrowdSec
+            <p className="text-[10px] text-muted-foreground text-left leading-tight shrink-0">
+              &copy; {new Date().getFullYear()} Crowdsec Manager by {' '}
+            <a
+            href="https://forum.hhf.technology"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-muted-foreground hover:text-foreground transition-colors"
+          >
+            HHF Technology
+          </a>
             </p>
           )}
         </div>
