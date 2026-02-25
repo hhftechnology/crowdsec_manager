@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react"
+import { useMemo } from "react"
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -17,10 +17,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { User, Settings, Github, Book, Server, Search, Menu, PanelLeftClose, PanelLeftOpen } from "lucide-react"
+import { User, Settings, Github, Book, Server, Menu, PanelLeftClose, PanelLeftOpen } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
 import {
   Select,
   SelectContent,
@@ -32,7 +31,6 @@ import EnrollDialog from "@/components/dialogs/EnrollDialog"
 import { CrowdSecLogo } from "@/components/icons/CrowdSecLogo"
 import { useQuery } from "@tanstack/react-query"
 import { hostsAPI, setSelectedHost, type HostInfo } from "@/lib/api"
-import { useSearch } from "@/contexts/SearchContext"
 
 interface HeaderProps {
   onMenuClick?: () => void
@@ -42,8 +40,6 @@ interface HeaderProps {
 
 export default function Header({ onMenuClick, isCollapsed, onToggleCollapse }: HeaderProps) {
   const location = useLocation()
-  const { query, scope, setQuery } = useSearch()
-  const searchRef = useRef<HTMLInputElement>(null)
 
   const { data: hostsData } = useQuery({
     queryKey: ['docker-hosts'],
@@ -56,7 +52,7 @@ export default function Header({ onMenuClick, isCollapsed, onToggleCollapse }: H
 
   // Generate breadcrumbs from path
   const pathSegments = location.pathname.split('/').filter(Boolean)
-  const breadcrumbs = [
+  const breadcrumbs = useMemo(() => [
     { name: 'Home', href: '/' },
     ...pathSegments.map((segment, index) => {
       const href = `/${pathSegments.slice(0, index + 1).join('/')}`
@@ -65,31 +61,7 @@ export default function Header({ onMenuClick, isCollapsed, onToggleCollapse }: H
         href
       }
     })
-  ]
-
-  const scopeLabel = useMemo(() => {
-    if (scope === 'hub') return 'Hub'
-    if (scope === 'logs') return 'Logs'
-    if (scope === 'scenarios') return 'Scenarios'
-    if (scope === 'bouncers') return 'Bouncers'
-    if (scope === 'alerts') return 'Alerts'
-    if (scope === 'decisions') return 'Decisions'
-    return 'Global'
-  }, [scope])
-
-  useEffect(() => {
-    const handler = (event: KeyboardEvent) => {
-      if (event.key !== '/' || event.defaultPrevented) return
-      const target = event.target as HTMLElement | null
-      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
-        return
-      }
-      event.preventDefault()
-      searchRef.current?.focus()
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [])
+  ], [pathSegments])
 
   return (
     <header className="h-16 border-b border-sidebar-border bg-card px-6 flex items-center justify-between shadow-sm">
@@ -145,21 +117,6 @@ export default function Header({ onMenuClick, isCollapsed, onToggleCollapse }: H
 
       {/* Right Section: Links & User Profile */}
       <div className="flex items-center gap-4">
-        <div className="hidden lg:flex items-center gap-2">
-          <Badge variant="outline" className="text-[10px] uppercase tracking-wide">
-            Searching: {scopeLabel}
-          </Badge>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              ref={searchRef}
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder={`Search ${scopeLabel}...`}
-              className="h-9 w-[240px] pl-9"
-            />
-          </div>
-        </div>
         {/* Host Selector */}
         {showHostSelector && (
           <div className="flex items-center gap-2">

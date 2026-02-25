@@ -45,7 +45,7 @@ func parseBouncersJSON(bouncerOutput string, computeStatus bool) ([]models.Bounc
 		}
 
 		if computeStatus {
-			if time.Since(bouncer.LastPull) <= 5*time.Minute {
+			if bouncer.Valid && time.Since(bouncer.LastPull) <= 60*time.Minute {
 				bouncer.Status = "connected"
 			} else if bouncer.Valid {
 				bouncer.Status = "stale"
@@ -92,7 +92,7 @@ func checkBouncersHealth(dockerClient *docker.Client, containerName string) mode
 
 	activeBouncers := 0
 	for _, b := range bouncers {
-		if time.Since(b.LastPull) <= 5*time.Minute {
+		if b.Valid && time.Since(b.LastPull) <= 60*time.Minute {
 			activeBouncers++
 		}
 	}
