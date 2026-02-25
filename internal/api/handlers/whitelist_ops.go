@@ -116,7 +116,7 @@ func AddToTraefikWhitelist(dockerClient *docker.Client, cfg *config.Config) gin.
 
 		logger.Info("Adding to Traefik whitelist", "ip", req.IP)
 
-		err := dockerClient.AppendLineToFileInContainer(cfg.TraefikContainerName, cfg.TraefikDynamicConfig, "sourceRange:", "        - "+req.IP)
+		err := dockerClient.AppendLineToFileInContainer(cfg.TraefikContainerName, cfg.TraefikDynamicConfig, "sourceRange:", "- "+req.IP)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
@@ -272,7 +272,7 @@ whitelist:
 		}
 
 		// Add to Traefik
-		if err := dockerClient.AppendLineToFileInContainer(cfg.TraefikContainerName, cfg.TraefikDynamicConfig, "sourceRange:", "        - "+ip); err == nil {
+		if err := dockerClient.AppendLineToFileInContainer(cfg.TraefikContainerName, cfg.TraefikDynamicConfig, "sourceRange:", "- "+ip); err == nil {
 			results["traefik"] = true
 		}
 

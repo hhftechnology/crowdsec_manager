@@ -364,8 +364,11 @@ func (c *Client) ReadFileFromContainer(containerName, filePath string) (string, 
 }
 
 // AppendLineToFileInContainer reads a file from a container, appends a line
-// after the first occurrence of `afterLine`, and writes it back. Uses the
-// Docker copy API so no shell interpolation occurs.
+// after the last list item in the block started by `afterLine`, and writes it
+// back. Uses the Docker copy API so no shell interpolation occurs.
+//
+// For YAML list blocks (e.g. sourceRange:), the new entry is inserted after the
+// last existing "- " item in the block so that indentation stays consistent.
 func (c *Client) AppendLineToFileInContainer(containerName, filePath, afterLine, newLine string) error {
 	content, err := c.ReadFileFromContainer(containerName, filePath)
 	if err != nil {
@@ -373,19 +376,57 @@ func (c *Client) AppendLineToFileInContainer(containerName, filePath, afterLine,
 	}
 
 	lines := strings.Split(content, "\n")
-	var result []string
-	inserted := false
-	for _, line := range lines {
-		result = append(result, line)
-		if !inserted && strings.Contains(line, afterLine) {
-			result = append(result, newLine)
-			inserted = true
+
+	// Find the index of the section header.
+	sectionIdx := -1
+	for i, line := range lines {
+		if strings.Contains(line, afterLine) {
+			sectionIdx = i
+			break
+		}
+	}
+	if sectionIdx == -1 {
+		return fmt.Errorf("pattern %q not found in %s", afterLine, filePath)
+	}
+
+	// Scan forward to find the last list item ("- ") in this block.
+	// A line that is non-empty, not a list item, and has less or equal
+	// indentation than the section header signals the end of the block.
+	// The indentation of the first found list item is captured so the new
+	// entry can match it exactly, regardless of what the caller passes.
+	sectionIndent := len(lines[sectionIdx]) - len(strings.TrimLeft(lines[sectionIdx], " \t"))
+	lastListIdx := sectionIdx // insert right after header if no items found
+	detectedIndent := ""
+	for i := sectionIdx + 1; i < len(lines); i++ {
+		trimmed := strings.TrimLeft(lines[i], " \t")
+		if trimmed == "" {
+			continue
+		}
+		lineIndent := len(lines[i]) - len(trimmed)
+		if lineIndent <= sectionIndent {
+			// Left the block.
+			break
+		}
+		if strings.HasPrefix(trimmed, "- ") || trimmed == "-" {
+			lastListIdx = i
+			if detectedIndent == "" {
+				detectedIndent = lines[i][:lineIndent]
+			}
 		}
 	}
 
-	if !inserted {
-		return fmt.Errorf("pattern %q not found in %s", afterLine, filePath)
+	// Apply detected indentation so the new entry always matches existing items.
+	// If the block has no existing items, use newLine verbatim.
+	insertLine := newLine
+	if detectedIndent != "" {
+		insertLine = detectedIndent + strings.TrimLeft(newLine, " \t")
 	}
+
+	// Insert after the last list item (or after the header if none exist).
+	result := make([]string, 0, len(lines)+1)
+	result = append(result, lines[:lastListIdx+1]...)
+	result = append(result, insertLine)
+	result = append(result, lines[lastListIdx+1:]...)
 
 	return c.WriteFileToContainer(containerName, filePath, []byte(strings.Join(result, "\n")))
 }

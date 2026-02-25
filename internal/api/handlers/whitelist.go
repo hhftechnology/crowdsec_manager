@@ -15,6 +15,36 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// appendToYAMLList appends a new list item under a YAML section key, using the
+// same indentation as existing list items in that block. Falls back to 4-space
+// indent if the block has no existing items.
+func appendToYAMLList(content, sectionKey, value string) string {
+	lines := strings.Split(strings.TrimSpace(content), "\n")
+	detectedIndent := "    " // default 4 spaces
+	sectionIndent := -1
+	for _, line := range lines {
+		trimmed := strings.TrimLeft(line, " \t")
+		if strings.HasPrefix(trimmed, sectionKey) {
+			sectionIndent = len(line) - len(trimmed)
+			continue
+		}
+		if sectionIndent < 0 {
+			continue
+		}
+		if trimmed == "" {
+			continue
+		}
+		lineIndent := len(line) - len(trimmed)
+		if lineIndent <= sectionIndent {
+			break
+		}
+		if strings.HasPrefix(trimmed, "- ") || trimmed == "-" {
+			detectedIndent = line[:lineIndent]
+		}
+	}
+	return strings.TrimSpace(content) + "\n" + detectedIndent + "- " + value + "\n"
+}
+
 // =============================================================================
 // 3. WHITELIST MANAGEMENT
 // =============================================================================
@@ -134,8 +164,8 @@ whitelist:
     - %s
 `, req.IP)
 			} else {
-				// Append to existing whitelist
-				whitelistContent = strings.TrimSpace(currentWL) + fmt.Sprintf("\n    - %s\n", req.IP)
+				// Append to existing whitelist, matching its existing indentation
+				whitelistContent = appendToYAMLList(currentWL, "ip:", req.IP)
 			}
 
 			err = dockerClient.WriteFileToContainer(cfg.CrowdsecContainerName, cfg.CrowdSecWhitelistPath, []byte(whitelistContent))
@@ -156,7 +186,7 @@ whitelist:
 
 		if req.AddToTraefik {
 			// Update Traefik dynamic config
-			err := dockerClient.AppendLineToFileInContainer(cfg.TraefikContainerName, cfg.TraefikDynamicConfig, "sourceRange:", "        - "+req.IP)
+			err := dockerClient.AppendLineToFileInContainer(cfg.TraefikContainerName, cfg.TraefikDynamicConfig, "sourceRange:", "- "+req.IP)
 			if err != nil {
 				errMsg := fmt.Sprintf("Failed to add IP to Traefik whitelist: %v", err)
 				logger.Error(errMsg, "error", err)
@@ -231,7 +261,7 @@ whitelist:
 		}
 
 		if req.AddToTraefik {
-			err := dockerClient.AppendLineToFileInContainer(cfg.TraefikContainerName, cfg.TraefikDynamicConfig, "sourceRange:", "        - "+req.CIDR)
+			err := dockerClient.AppendLineToFileInContainer(cfg.TraefikContainerName, cfg.TraefikDynamicConfig, "sourceRange:", "- "+req.CIDR)
 			if err != nil {
 				errMsg := fmt.Sprintf("Failed to add CIDR to Traefik whitelist: %v", err)
 				logger.Error(errMsg, "error", err)

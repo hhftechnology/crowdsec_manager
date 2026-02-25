@@ -293,16 +293,9 @@ export default function Dashboard() {
     <div className="space-y-6">
       <PageHeader
         title="Dashboard"
-        description="System overview, activity, and key metrics"
+        description="System overview, activity, key metrics and threat posture"
         actions={<span className="text-xs text-muted-foreground">{lastUpdatedLabel}</span>}
       />
-      <div>
-        <h1 className="text-3xl font-bold">Dashboard</h1>
-        <p className="text-muted-foreground mt-1">
-          System overview and threat posture
-        </p>
-      </div>
-
       {/* Connection error banner */}
       {isError && (
         <Alert variant="destructive">

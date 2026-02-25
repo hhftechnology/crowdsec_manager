@@ -154,18 +154,25 @@ export default function Whitelist() {
   const ipError = useMemo(() => validateIP(manualIP), [manualIP])
   const cidrError = useMemo(() => validateCIDR(cidr), [cidr])
 
-  // Check for duplicates
+  // Check for duplicates — only true when the value already exists in every
+  // selected destination. If a toggle is off, that destination is ignored.
   const isIPDuplicate = useMemo(() => {
     if (!manualIP || !whitelistData) return false
-    const allIPs = [...(whitelistData.crowdsec || []), ...(whitelistData.traefik || [])]
-    return allIPs.includes(manualIP)
-  }, [manualIP, whitelistData])
+    const inCrowdSec = (whitelistData.crowdsec || []).includes(manualIP)
+    const inTraefik = (whitelistData.traefik || []).includes(manualIP)
+    const crowdSecSatisfied = !addToCrowdSec || inCrowdSec
+    const traefikSatisfied = !addToTraefik || inTraefik
+    return crowdSecSatisfied && traefikSatisfied
+  }, [manualIP, whitelistData, addToCrowdSec, addToTraefik])
 
   const isCIDRDuplicate = useMemo(() => {
     if (!cidr || !whitelistData) return false
-    const allIPs = [...(whitelistData.crowdsec || []), ...(whitelistData.traefik || [])]
-    return allIPs.includes(cidr)
-  }, [cidr, whitelistData])
+    const inCrowdSec = (whitelistData.crowdsec || []).includes(cidr)
+    const inTraefik = (whitelistData.traefik || []).includes(cidr)
+    const crowdSecSatisfied = !addToCrowdSec || inCrowdSec
+    const traefikSatisfied = !addToTraefik || inTraefik
+    return crowdSecSatisfied && traefikSatisfied
+  }, [cidr, whitelistData, addToCrowdSec, addToTraefik])
 
   const handleWhitelistManual = (e: React.FormEvent) => {
     e.preventDefault()
