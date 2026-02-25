@@ -17,7 +17,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { User, Settings, Github, Book, Server, Menu, PanelLeftClose, PanelLeftOpen } from "lucide-react"
+import { User, Settings, Github, Book, Server, Menu, PanelLeftClose, PanelLeftOpen, Sun, Moon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -31,6 +31,7 @@ import EnrollDialog from "@/components/dialogs/EnrollDialog"
 import { CrowdSecLogo } from "@/components/icons/CrowdSecLogo"
 import { useQuery } from "@tanstack/react-query"
 import { hostsAPI, setSelectedHost, type HostInfo } from "@/lib/api"
+import { useTheme } from "@/contexts/ThemeContext"
 
 interface HeaderProps {
   onMenuClick?: () => void
@@ -40,6 +41,7 @@ interface HeaderProps {
 
 export default function Header({ onMenuClick, isCollapsed, onToggleCollapse }: HeaderProps) {
   const location = useLocation()
+  const { theme, setTheme } = useTheme()
 
   const { data: hostsData } = useQuery({
     queryKey: ['docker-hosts'],
@@ -49,6 +51,10 @@ export default function Header({ onMenuClick, isCollapsed, onToggleCollapse }: H
 
   const hosts: HostInfo[] = hostsData?.data?.data ?? []
   const showHostSelector = hosts.length > 1
+
+  const toggleTheme = () => {
+    setTheme(theme === "dark" ? "light" : "dark")
+  }
 
   // Generate breadcrumbs from path
   const pathSegments = location.pathname.split('/').filter(Boolean)
@@ -159,7 +165,6 @@ export default function Header({ onMenuClick, isCollapsed, onToggleCollapse }: H
               target="_blank"
               rel="noopener noreferrer"
             >
-              {/* Discord Icon SVG */}
               <svg
                 role="img"
                 viewBox="0 0 24 24"
@@ -172,6 +177,19 @@ export default function Header({ onMenuClick, isCollapsed, onToggleCollapse }: H
             </a>
           </Button>
         </div>
+
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={toggleTheme}
+          className="text-muted-foreground hover:bg-accent hover:text-accent-foreground shrink-0"
+        >
+          {theme === "dark" ? (
+            <Sun className="h-5 w-5" />
+          ) : (
+            <Moon className="h-5 w-5" />
+          )}
+        </Button>
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
