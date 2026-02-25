@@ -17,6 +17,47 @@ import (
 // numericIDPattern validates that an alert ID contains only digits.
 var numericIDPattern = regexp.MustCompile(`^\d+$`)
 
+// DeleteAlert removes a single alert by ID
+func DeleteAlert(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		dockerClient = resolveDockerClient(c, dockerClient)
+
+		alertID := c.Param("id")
+		if alertID == "" {
+			c.JSON(http.StatusBadRequest, models.Response{
+				Success: false,
+				Error:   "Alert ID is required",
+			})
+			return
+		}
+
+		if !numericIDPattern.MatchString(alertID) {
+			c.JSON(http.StatusBadRequest, models.Response{
+				Success: false,
+				Error:   "Alert ID must be numeric",
+			})
+			return
+		}
+
+		cmd := []string{"cscli", "alerts", "delete", "--id", alertID}
+		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, cmd)
+		if err != nil {
+			logger.Error("Failed to delete alert", "alertID", alertID, "error", err)
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to delete alert %s: %v", alertID, err),
+			})
+			return
+		}
+
+		logger.Info("Alert deleted", "alertID", alertID, "output", output)
+		c.JSON(http.StatusOK, models.Response{
+			Success: true,
+			Message: fmt.Sprintf("Alert %s deleted successfully", alertID),
+		})
+	}
+}
+
 // InspectAlert returns detailed alert info including events
 func InspectAlert(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {

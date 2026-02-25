@@ -142,6 +142,7 @@ func RegisterServicesRoutes(router *gin.RouterGroup, dockerClient *docker.Client
 		crowdsec.GET("/decisions/analysis", handlers.GetDecisionsAnalysis(dockerClient, cfg))
 		crowdsec.GET("/alerts/analysis", handlers.GetAlertsAnalysis(dockerClient, cfg))
 		crowdsec.GET("/alerts/:id", handlers.InspectAlert(dockerClient, cfg))
+		crowdsec.DELETE("/alerts/:id", handlers.DeleteAlert(dockerClient, cfg))
 		crowdsec.GET("/metrics", handlers.GetMetrics(dockerClient, cfg))
 		crowdsec.POST("/enroll", handlers.EnrollCrowdSec(dockerClient, db, cfg))
 		crowdsec.POST("/enroll/finalize", handlers.FinalizeCrowdSecEnrollment(dockerClient, cfg))
@@ -223,13 +224,21 @@ func RegisterConfigValidationRoutes(router *gin.RouterGroup, validator *configva
 }
 
 // RegisterHubRoutes configures endpoints for browsing, installing, removing, and upgrading CrowdSec hub items
-func RegisterHubRoutes(router *gin.RouterGroup, dockerClient *docker.Client, cfg *config.Config) {
+func RegisterHubRoutes(router *gin.RouterGroup, dockerClient *docker.Client, db *database.Database, cfg *config.Config) {
 	hub := router.Group("/hub")
 	{
 		hub.GET("/list", handlers.ListHubItems(dockerClient, cfg))
-		hub.POST("/install", handlers.InstallHubItem(dockerClient, cfg))
-		hub.POST("/remove", handlers.RemoveHubItem(dockerClient, cfg))
-		hub.POST("/upgrade", handlers.UpgradeAllHub(dockerClient, cfg))
+		hub.POST("/upgrade", handlers.UpgradeAllHub(dockerClient, db, cfg))
+		hub.GET("/categories", handlers.ListHubCategories())
+		hub.GET("/:category/items", handlers.ListHubItemsByCategory(dockerClient, cfg))
+		hub.POST("/:category/install", handlers.InstallHubItemByCategory(dockerClient, db, cfg))
+		hub.POST("/:category/remove", handlers.RemoveHubItemByCategory(dockerClient, db, cfg))
+		hub.POST("/:category/manual-apply", handlers.ManualApplyHubYAML(dockerClient, db, cfg))
+		hub.GET("/preferences", handlers.GetHubPreferences(db))
+		hub.GET("/preferences/:category", handlers.GetHubPreferenceByCategory(db))
+		hub.PUT("/preferences/:category", handlers.UpdateHubPreference(db))
+		hub.GET("/history", handlers.ListHubOperationHistory(db))
+		hub.GET("/history/:id", handlers.GetHubOperationByID(db))
 	}
 }
 

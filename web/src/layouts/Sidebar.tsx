@@ -25,6 +25,9 @@ import {
   ShieldCheck,
   Package,
   BarChart3,
+  ShieldAlert,
+  ScanSearch,
+  AppWindow,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -66,7 +69,15 @@ export const navigation = [
   {
     title: "Hub",
     items: [
-      { name: 'Hub Browser', href: '/hub', icon: Package },
+      { name: 'Home', href: '/hub', icon: Package },
+      { name: 'Hub Browser', href: '/hub/browser', icon: Package },
+      { name: 'Collections', href: '/hub/collections', icon: Package },
+      { name: 'Attack scenarios', href: '/hub/scenarios', icon: ShieldAlert },
+      { name: 'Log parsers', href: '/hub/parsers', icon: ScanSearch },
+      { name: 'Postoverflows', href: '/hub/postoverflows', icon: ListChecks },
+      { name: 'Remediation components', href: '/hub/remediations', icon: Shield },
+      { name: 'AppSec configurations', href: '/hub/appsec-configs', icon: AppWindow },
+      { name: 'AppSec rules', href: '/hub/appsec-rules', icon: ShieldAlert },
       { name: 'Scenarios', href: '/scenarios', icon: FileText },
       { name: 'Captcha', href: '/captcha', icon: ScanFace },
     ]

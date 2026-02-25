@@ -29,3 +29,6 @@ export type { QueryErrorProps } from './QueryError'
 
 export { ScenarioName } from './ScenarioName'
 export { TimeDisplay, formatDuration, expiresIn } from './TimeDisplay'
+
+export { CountryFlag } from './CountryFlag'
+export type { CountryFlagProps } from './CountryFlag'

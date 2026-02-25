@@ -76,6 +76,15 @@ export { configValidationAPI } from './config-validation'
 export type { ConfigSnapshot, ConfigValidationResult, ConfigValidationReport } from './config-validation'
 export { profilesAPI } from './profiles'
 export { hubAPI } from './hub'
-export type { HubItem, HubActionRequest } from './hub'
+export type {
+  HubCategoryKey,
+  HubCategory,
+  HubCategoryItem,
+  HubCategoryItemsResponse,
+  HubCategoryActionRequest,
+  HubManualApplyRequest,
+  HubPreference,
+  HubOperationRecord,
+} from './hub'
 export { simulationAPI } from './simulation'
 export type { SimulationStatus, SimulationToggleRequest } from './simulation'

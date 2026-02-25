@@ -31,7 +31,7 @@ export function AddDecisionDialog({ onSuccess }: AddDecisionDialogProps) {
   const [open, setOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
 
-  const { control, register, handleSubmit, reset, formState: { errors } } = useForm<AddDecisionRequest>({
+  const { control, register, handleSubmit, reset, setValue, formState: { errors } } = useForm<AddDecisionRequest>({
     defaultValues: {
       type: 'ban',
       scope: 'ip',
@@ -126,10 +126,31 @@ export function AddDecisionDialog({ onSuccess }: AddDecisionDialogProps) {
 
           <div className="space-y-2">
             <Label htmlFor="duration">Duration</Label>
-            <Input 
-              id="duration" 
-              placeholder="4h" 
-              {...register('duration')} 
+            <div className="flex flex-wrap gap-1.5 pb-1">
+              {[
+                { label: '1h', value: '1h' },
+                { label: '4h', value: '4h' },
+                { label: '24h', value: '24h' },
+                { label: '7d', value: '7d' },
+                { label: '30d', value: '30d' },
+                { label: 'Permanent', value: '0' },
+              ].map((preset) => (
+                <Button
+                  key={preset.value}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs px-2"
+                  onClick={() => setValue('duration', preset.value)}
+                >
+                  {preset.label}
+                </Button>
+              ))}
+            </div>
+            <Input
+              id="duration"
+              placeholder="4h"
+              {...register('duration')}
             />
           </div>
 

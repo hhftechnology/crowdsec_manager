@@ -139,7 +139,7 @@ func main() {
 		api.RegisterTerminalRoutes(apiGroup, dockerClient)
 
 		// Hub browser routes
-		api.RegisterHubRoutes(apiGroup, dockerClient, cfg)
+		api.RegisterHubRoutes(apiGroup, dockerClient, db, cfg)
 
 		// Simulation mode routes
 		api.RegisterSimulationRoutes(apiGroup, dockerClient, cfg)

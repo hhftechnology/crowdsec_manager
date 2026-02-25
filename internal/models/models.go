@@ -445,6 +445,52 @@ type HubActionRequest struct {
 	Type string `json:"type" binding:"required"` // scenarios, parsers, collections, postoverflows
 }
 
+// HubCategoryActionRequest represents a category-aware hub action request.
+type HubCategoryActionRequest struct {
+	ItemName string `json:"item_name" binding:"required"`
+}
+
+// HubManualApplyRequest writes YAML directly into the CrowdSec container.
+type HubManualApplyRequest struct {
+	Filename   string `json:"filename" binding:"required"`
+	YAML       string `json:"yaml" binding:"required"`
+	TargetPath string `json:"target_path,omitempty"`
+}
+
+// HubPreference stores per-category defaults for hub operations.
+type HubPreference struct {
+	Category        string `json:"category"`
+	DefaultMode     string `json:"default_mode"`
+	DefaultYAMLPath string `json:"default_yaml_path,omitempty"`
+	LastItemName    string `json:"last_item_name,omitempty"`
+	UpdatedAt       string `json:"updated_at,omitempty"`
+}
+
+// HubOperationRecord stores auditable operation history.
+type HubOperationRecord struct {
+	ID          int64  `json:"id"`
+	Category    string `json:"category"`
+	Mode        string `json:"mode"`
+	Action      string `json:"action"`
+	ItemName    string `json:"item_name,omitempty"`
+	YAMLPath    string `json:"yaml_path,omitempty"`
+	YAMLContent string `json:"yaml_content,omitempty"`
+	Command     string `json:"command,omitempty"`
+	Success     bool   `json:"success"`
+	Output      string `json:"output,omitempty"`
+	Error       string `json:"error,omitempty"`
+	CreatedAt   string `json:"created_at,omitempty"`
+}
+
+// HubOperationFilter narrows history queries.
+type HubOperationFilter struct {
+	Category string
+	Mode     string
+	Success  *bool
+	Limit    int
+	Offset   int
+}
+
 // SimulationRequest represents a request to enable or disable simulation for a scenario
 type SimulationRequest struct {
 	Scenario string `json:"scenario" binding:"required"`

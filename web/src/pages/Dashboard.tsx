@@ -1,12 +1,22 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import api, { Container as ContainerType, Decision, CrowdSecAlert } from '@/lib/api'
-import { PageHeader, QueryError, ScenarioName } from '@/components/common'
+import { PageHeader, QueryError, ScenarioName, CountryFlag } from '@/components/common'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Shield, Users, Container, Activity, AlertTriangle, RefreshCw } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import {
+  Shield,
+  Users,
+  Container,
+  Activity,
+  AlertTriangle,
+  RefreshCw,
+  Globe,
+  Radio,
+} from 'lucide-react'
 import { StatCard, ChartCard, AreaTimeline, PieBreakdown, BarDistribution } from '@/components/charts'
 import { groupByField, CHART_COLORS } from '@/lib/chart-utils'
 import {
@@ -20,6 +30,8 @@ import {
   ResponsiveContainer,
 } from 'recharts'
 
+type Granularity = 'hour' | 'day'
+
 interface ActivityBucket {
   date: string
   alerts: number
@@ -32,8 +44,115 @@ function getThresholdBorder(value: number, greenMax: number, yellowMax: number):
   return 'border-l-4 border-l-red-500'
 }
 
+/**
+ * Group alerts by a nested source field (e.g. source.cn or source.as_name).
+ * Returns top N entries sorted by count descending.
+ */
+function groupBySourceField(
+  alerts: CrowdSecAlert[],
+  field: 'cn' | 'as_name',
+  limit: number,
+): { name: string; value: number }[] {
+  const counts = new Map<string, number>()
+
+  for (const alert of alerts) {
+    const raw = alert.source?.[field]
+    if (!raw) continue
+    const key = raw.trim()
+    if (!key) continue
+    counts.set(key, (counts.get(key) ?? 0) + 1)
+  }
+
+  const sorted = Array.from(counts.entries())
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value)
+
+  if (sorted.length <= limit) return sorted
+
+  const top = sorted.slice(0, limit)
+  const otherValue = sorted.slice(limit).reduce((sum, item) => sum + item.value, 0)
+  if (otherValue > 0) {
+    top.push({ name: 'Other', value: otherValue })
+  }
+  return top
+}
+
+/**
+ * Build combined activity buckets at either hourly or daily granularity.
+ */
+function buildActivityBuckets(
+  alerts: CrowdSecAlert[],
+  decisions: Decision[],
+  granularity: Granularity,
+): ActivityBucket[] {
+  const now = new Date()
+  const buckets: Record<string, ActivityBucket> = {}
+
+  if (granularity === 'hour') {
+    // Last 24 hours, one bucket per hour
+    for (let i = 23; i >= 0; i--) {
+      const d = new Date(now)
+      d.setHours(d.getHours() - i, 0, 0, 0)
+      const key = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
+      buckets[key] = { date: key, alerts: 0, decisions: 0 }
+    }
+
+    const cutoff = new Date(now)
+    cutoff.setHours(cutoff.getHours() - 24)
+
+    for (const alert of alerts) {
+      const ts = new Date(alert.start_at)
+      if (ts < cutoff) continue
+      const rounded = new Date(ts)
+      rounded.setMinutes(0, 0, 0)
+      const key = rounded.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
+      if (buckets[key]) {
+        buckets[key].alerts += 1
+      }
+    }
+
+    for (const decision of decisions) {
+      if (!decision.created_at) continue
+      const ts = new Date(decision.created_at)
+      if (ts < cutoff) continue
+      const rounded = new Date(ts)
+      rounded.setMinutes(0, 0, 0)
+      const key = rounded.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
+      if (buckets[key]) {
+        buckets[key].decisions += 1
+      }
+    }
+  } else {
+    // Last 7 days, one bucket per day
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now)
+      d.setDate(d.getDate() - i)
+      const key = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      buckets[key] = { date: key, alerts: 0, decisions: 0 }
+    }
+
+    for (const alert of alerts) {
+      const dateKey = new Date(alert.start_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      if (buckets[dateKey]) {
+        buckets[dateKey].alerts += 1
+      }
+    }
+
+    for (const decision of decisions) {
+      if (!decision.created_at) continue
+      const dateKey = new Date(decision.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      if (buckets[dateKey]) {
+        buckets[dateKey].decisions += 1
+      }
+    }
+  }
+
+  return Object.values(buckets)
+}
+
 export default function Dashboard() {
   const navigate = useNavigate()
+  const [granularity, setGranularity] = useState<Granularity>('day')
 
   const { data: healthData, isLoading: healthLoading, isError, error, refetch: refetchHealth, dataUpdatedAt: healthUpdatedAt } = useQuery({
     queryKey: ['health'],
@@ -134,41 +253,26 @@ export default function Dashboard() {
       .slice(-7)
   }, [decisions])
 
-  const combinedActivityData = useMemo<ActivityBucket[]>(() => {
-    const now = new Date()
-    const buckets: Record<string, ActivityBucket> = {}
-
-    // Initialize last 7 days
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(now)
-      d.setDate(d.getDate() - i)
-      const key = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-      buckets[key] = { date: key, alerts: 0, decisions: 0 }
-    }
-
-    // Bucket alerts
-    for (const alert of alerts) {
-      const dateKey = new Date(alert.start_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-      if (buckets[dateKey]) {
-        buckets[dateKey].alerts += 1
-      }
-    }
-
-    // Bucket decisions
-    for (const decision of decisions) {
-      if (!decision.created_at) continue
-      const dateKey = new Date(decision.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-      if (buckets[dateKey]) {
-        buckets[dateKey].decisions += 1
-      }
-    }
-
-    return Object.values(buckets)
-  }, [alerts, decisions])
+  const combinedActivityData = useMemo<ActivityBucket[]>(
+    () => buildActivityBuckets(alerts, decisions, granularity),
+    [alerts, decisions, granularity],
+  )
 
   const topScenarios = useMemo(() => {
     if (alerts.length === 0) return []
     return groupByField(alerts, 'scenario', 5)
+  }, [alerts])
+
+  // -- New: Top Countries from alert source data --
+  const topCountries = useMemo(() => {
+    if (alerts.length === 0) return []
+    return groupBySourceField(alerts, 'cn', 5)
+  }, [alerts])
+
+  // -- New: Top Autonomous Systems from alert source data --
+  const topAS = useMemo(() => {
+    if (alerts.length === 0) return []
+    return groupBySourceField(alerts, 'as_name', 5)
   }, [alerts])
 
   const lastUpdatedAt = useMemo(() => {
@@ -176,6 +280,14 @@ export default function Dashboard() {
     if (timestamps.length === 0) return null
     return Math.max(...timestamps)
   }, [healthUpdatedAt, decisionsUpdatedAt, bouncersUpdatedAt, alertsUpdatedAt])
+
+  const activityTitle = granularity === 'hour'
+    ? 'Activity History (24h)'
+    : 'Activity History (7d)'
+
+  const activityDescription = granularity === 'hour'
+    ? 'Alerts and decisions over the last 24 hours (hourly)'
+    : 'Alerts and decisions over the last 7 days (daily)'
 
   return (
     <div className="space-y-6">
@@ -245,13 +357,41 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Row 2: Combined Activity History */}
-      <ChartCard title="Activity History (7d)" description="Alerts and decisions over the last 7 days">
+      {/* Row 2: Combined Activity History with Granularity Toggle */}
+      <ChartCard
+        title={activityTitle}
+        description={activityDescription}
+        action={
+          <div className="inline-flex items-center rounded-md border border-border bg-muted p-0.5">
+            <Button
+              variant={granularity === 'hour' ? 'secondary' : 'ghost'}
+              size="sm"
+              className="h-7 px-3 text-xs"
+              onClick={() => setGranularity('hour')}
+            >
+              Hour
+            </Button>
+            <Button
+              variant={granularity === 'day' ? 'secondary' : 'ghost'}
+              size="sm"
+              className="h-7 px-3 text-xs"
+              onClick={() => setGranularity('day')}
+            >
+              Day
+            </Button>
+          </div>
+        }
+      >
         {combinedActivityData.some((b) => b.alerts > 0 || b.decisions > 0) ? (
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={combinedActivityData}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-              <XAxis dataKey="date" className="text-xs" tick={{ fontSize: 12 }} />
+              <XAxis
+                dataKey="date"
+                className="text-xs"
+                tick={{ fontSize: 12 }}
+                interval={granularity === 'hour' ? 2 : 0}
+              />
               <YAxis allowDecimals={false} className="text-xs" tick={{ fontSize: 12 }} />
               <Tooltip
                 contentStyle={{
@@ -273,7 +413,86 @@ export default function Dashboard() {
         )}
       </ChartCard>
 
-      {/* Row 3: Decisions Over Time + Type Distribution */}
+      {/* Row 3: Top Countries + Top Autonomous Systems */}
+      <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
+        {/* Top Countries */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Globe className="h-5 w-5" />
+              Top Countries (7d)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {topCountries.length > 0 ? (
+              <div className="space-y-3">
+                {topCountries.map((item) => (
+                  <div
+                    key={item.name}
+                    className={
+                      item.name === 'Other'
+                        ? 'flex items-center justify-between py-1'
+                        : 'flex items-center justify-between py-1 cursor-pointer rounded-md px-2 -mx-2 hover:bg-muted/50 transition-colors'
+                    }
+                    onClick={
+                      item.name !== 'Other'
+                        ? () => navigate(`/alerts?country=${item.name}`)
+                        : undefined
+                    }
+                  >
+                    <div className="flex items-center gap-2">
+                      {item.name === 'Other' ? (
+                        <span className="text-sm text-muted-foreground">Other</span>
+                      ) : (
+                        <CountryFlag code={item.name} showName />
+                      )}
+                    </div>
+                    <Badge variant="secondary" className="tabular-nums">
+                      {item.value}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-muted-foreground text-sm text-center py-4">
+                No country data available
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Top Autonomous Systems */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Radio className="h-5 w-5" />
+              Top Autonomous Systems (7d)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {topAS.length > 0 ? (
+              <div className="space-y-3">
+                {topAS.map((item) => (
+                  <div key={item.name} className="flex items-center justify-between py-1">
+                    <span className="text-sm truncate max-w-[70%]" title={item.name}>
+                      {item.name}
+                    </span>
+                    <Badge variant="secondary" className="tabular-nums ml-2 flex-shrink-0">
+                      {item.value}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-muted-foreground text-sm text-center py-4">
+                No AS data available
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Row 4: Decisions Over Time + Type Distribution */}
       <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
         <ChartCard title="Decisions Over Time" description="Recent decision activity">
           {decisionsOverTime.length > 0 ? (
@@ -295,7 +514,7 @@ export default function Dashboard() {
         </ChartCard>
       </div>
 
-      {/* Row 4: Top Scenarios + Top Blocked IPs */}
+      {/* Row 5: Top Scenarios + Top Blocked IPs */}
       <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
         {/* Top Scenarios */}
         <Card>
@@ -344,7 +563,7 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* Row 5: Container Status */}
+      {/* Row 6: Container Status */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-lg">

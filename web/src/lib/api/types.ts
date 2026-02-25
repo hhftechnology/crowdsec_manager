@@ -249,6 +249,24 @@ export interface ServiceInfo {
   id?: string
 }
 
+export interface AlertSource {
+  cn?: string        // ISO country code (e.g., "FR", "US")
+  as_name?: string   // Autonomous System name
+  as_number?: string // AS number
+  ip?: string
+  range?: string
+  latitude?: number
+  longitude?: number
+  scope?: string
+  value?: string
+}
+
+export interface AlertEvent {
+  timestamp: string
+  meta?: Record<string, string>[]
+  [key: string]: unknown
+}
+
 export interface CrowdSecAlert {
   id: number
   scenario: string
@@ -264,6 +282,8 @@ export interface CrowdSecAlert {
   simulated?: boolean
   message?: string
   decisions?: Decision[]
+  source?: AlertSource
+  events?: AlertEvent[]
 }
 
 export interface AxiosErrorResponse {

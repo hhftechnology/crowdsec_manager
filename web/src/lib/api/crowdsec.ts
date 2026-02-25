@@ -53,6 +53,9 @@ export const crowdsecAPI = {
   inspectAlert: (id: number) =>
     apiClient.get<ApiResponse<CrowdSecAlert>>(`/crowdsec/alerts/${id}`),
 
+  deleteAlert: (id: number) =>
+    apiClient.delete<ApiResponse>(`/crowdsec/alerts/${id}`),
+
   addDecision: (data: AddDecisionRequest) =>
     apiClient.post<ApiResponse>('/crowdsec/decisions', data),
 

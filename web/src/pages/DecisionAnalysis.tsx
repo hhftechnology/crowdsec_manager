@@ -1,15 +1,16 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import api, { Decision } from '@/lib/api'
+import type { AlertSource } from '@/lib/api/types'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Switch } from '@/components/ui/switch'
-import { RefreshCw, AlertCircle, Download, Trash2, Search } from 'lucide-react'
+import { RefreshCw, AlertCircle, Download, Trash2, Search, Shield } from 'lucide-react'
 import { AddDecisionDialog } from '@/components/decisions/AddDecisionDialog'
 import { ImportDecisionsDialog } from '@/components/decisions/ImportDecisionsDialog'
 import {
@@ -22,7 +23,7 @@ import {
 import {
   PageHeader, EmptyState, PageLoader, InfoCard, CrowdSecFilterForm, ResultsSummary,
   SCOPE_OPTIONS, TYPE_OPTIONS, ORIGIN_OPTIONS, QueryError,
-  ScenarioName, TimeDisplay, formatDuration, expiresIn,
+  ScenarioName, TimeDisplay, formatDuration, expiresIn, CountryFlag,
 } from '@/components/common'
 import type { FilterField } from '@/components/common'
 import { ChartCard, AreaTimeline, PieBreakdown, BarDistribution } from '@/components/charts'
@@ -86,6 +87,12 @@ function escapeCSVField(field: unknown): string {
   return str
 }
 
+/** Check whether a decision's `until` timestamp is in the past */
+function isExpired(until?: string): boolean {
+  if (!until) return false
+  return new Date(until).getTime() < Date.now()
+}
+
 function parseFiltersFromParams(searchParams: URLSearchParams): DecisionFilters {
   const filters: DecisionFilters = {}
   for (const key of FILTER_PARAM_KEYS) {
@@ -124,6 +131,7 @@ export default function DecisionAnalysis() {
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [hideDuplicates, setHideDuplicates] = useState(false)
+  const [hideExpired, setHideExpired] = useState(true)
   const { query, setQuery } = useSearch()
 
   const { data: decisionsData, isLoading, isError, error, refetch } = useQuery({
@@ -134,6 +142,38 @@ export default function DecisionAnalysis() {
     },
     refetchInterval: 30000,
   })
+
+  // Fetch alerts to enrich decisions with geo/AS data
+  const { data: alertsData } = useQuery({
+    queryKey: ['alerts-geo-enrichment', activeFilters],
+    queryFn: async () => {
+      const response = await api.crowdsec.getAlertsAnalysis({
+        since: activeFilters.since,
+        until: activeFilters.until,
+        scenario: activeFilters.scenario,
+        origin: activeFilters.origin,
+        scope: activeFilters.scope,
+        value: activeFilters.value,
+        ip: activeFilters.ip,
+        range: activeFilters.range,
+        includeAll: activeFilters.includeAll,
+      })
+      return response.data.data
+    },
+    refetchInterval: 60000,
+  })
+
+  // Build a lookup map: alert_id -> AlertSource
+  const alertSourceMap = useMemo(() => {
+    const map = new Map<number, AlertSource>()
+    if (!alertsData?.alerts) return map
+    for (const alert of alertsData.alerts) {
+      if (alert.source) {
+        map.set(alert.id, alert.source)
+      }
+    }
+    return map
+  }, [alertsData])
 
   // Sync active filters to URL whenever they change
   useEffect(() => {
@@ -168,10 +208,16 @@ export default function DecisionAnalysis() {
     return groupByField(decisionsData.decisions, 'value', 8)
   }, [decisionsData])
 
-  // --- Client-side search filtering ---
+  // --- Client-side filtering (search + expired) ---
 
   const searchFiltered = useMemo(() => {
-    const decisions = decisionsData?.decisions ?? []
+    let decisions = decisionsData?.decisions ?? []
+
+    // Filter out expired decisions when toggle is on
+    if (hideExpired) {
+      decisions = decisions.filter((d: Decision) => !isExpired(d.until))
+    }
+
     if (!searchQuery.trim()) return decisions
     const q = searchQuery.toLowerCase()
     return decisions.filter((d: Decision) =>
@@ -179,7 +225,7 @@ export default function DecisionAnalysis() {
       d.scenario?.toLowerCase().includes(q) ||
       d.origin?.toLowerCase().includes(q)
     )
-  }, [decisionsData, searchQuery])
+  }, [decisionsData, searchQuery, hideExpired])
 
   // --- Collapse duplicates ---
 
@@ -233,7 +279,7 @@ export default function DecisionAnalysis() {
   // Clear selection when data changes
   useEffect(() => {
     setSelectedIds(new Set())
-  }, [decisionsData, searchQuery, hideDuplicates])
+  }, [decisionsData, searchQuery, hideDuplicates, hideExpired])
 
   // --- Delete handlers ---
 
@@ -315,14 +361,15 @@ export default function DecisionAnalysis() {
       toast.error('No data to export')
       return
     }
-    const headers = ['ID', 'Alert ID', 'Type', 'Scope', 'Value', 'Origin', 'Scenario', 'Duration', 'Created At']
+    const headers = ['ID', 'Alert ID', 'Type', 'Scope', 'Value', 'Origin', 'Scenario', 'Duration', 'Created At', 'Country', 'AS']
     const csvContent = [
       headers.map(escapeCSVField).join(','),
-      ...decisionsData.decisions.map((d: Decision) =>
-        [d.id, d.alert_id, d.type, d.scope, d.value, d.origin, d.scenario, d.duration, d.created_at]
+      ...decisionsData.decisions.map((d: Decision) => {
+        const source = alertSourceMap.get(d.alert_id)
+        return [d.id, d.alert_id, d.type, d.scope, d.value, d.origin, d.scenario, d.duration, d.created_at, source?.cn ?? '', source?.as_name ?? '']
           .map(escapeCSVField)
           .join(',')
-      ),
+      }),
     ].join('\n')
     const blob = new Blob([csvContent], { type: 'text/csv' })
     const url = window.URL.createObjectURL(blob)
@@ -426,9 +473,9 @@ export default function DecisionAnalysis() {
             </div>
           </div>
 
-          {/* Search and hide-duplicates controls */}
-          <div className="flex items-center gap-4 pt-2">
-            <div className="relative flex-1 max-w-sm">
+          {/* Search, hide-duplicates, and hide-expired controls */}
+          <div className="flex items-center gap-4 pt-2 flex-wrap">
+            <div className="relative flex-1 min-w-[200px] max-w-sm">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search by IP, scenario, origin..."
@@ -451,6 +498,19 @@ export default function DecisionAnalysis() {
                 className="text-sm text-muted-foreground cursor-pointer select-none"
               >
                 Hide duplicates
+              </label>
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch
+                id="hide-expired"
+                checked={hideExpired}
+                onCheckedChange={setHideExpired}
+              />
+              <label
+                htmlFor="hide-expired"
+                className="text-sm text-muted-foreground cursor-pointer select-none"
+              >
+                Hide expired
               </label>
             </div>
           </div>
@@ -478,9 +538,12 @@ export default function DecisionAnalysis() {
                         />
                       </TableHead>
                       <TableHead>ID</TableHead>
+                      <TableHead>Alert</TableHead>
                       <TableHead>Type</TableHead>
                       <TableHead>Scope</TableHead>
                       <TableHead>Value</TableHead>
+                      <TableHead>Country</TableHead>
+                      <TableHead>AS</TableHead>
                       <TableHead>Origin</TableHead>
                       <TableHead>Scenario</TableHead>
                       <TableHead>Duration</TableHead>
@@ -490,48 +553,81 @@ export default function DecisionAnalysis() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {visibleDecisions.map((decision, index) => (
-                      <TableRow key={decision.id || index}>
-                        <TableCell>
-                          <Checkbox
-                            checked={selectedIds.has(decision.id)}
-                            onCheckedChange={() => toggleSelected(decision.id)}
-                            aria-label={`Select decision ${decision.id}`}
-                          />
-                        </TableCell>
-                        <TableCell className="font-mono text-xs">{decision.id}</TableCell>
-                        <TableCell>
-                          <Badge variant={decision.type === 'ban' ? 'destructive' : 'default'}>{decision.type}</Badge>
-                        </TableCell>
-                        <TableCell><Badge variant="outline">{decision.scope}</Badge></TableCell>
-                        <TableCell className="font-mono text-sm">
-                          <span className="inline-flex items-center gap-1.5">
-                            {decision.value}
-                            {hideDuplicates && decision._count > 1 && (
-                              <Badge variant="secondary" className="text-[10px] px-1 py-0">
-                                x{decision._count}
-                              </Badge>
-                            )}
-                          </span>
-                        </TableCell>
-                        <TableCell><Badge variant="secondary">{decision.origin}</Badge></TableCell>
-                        <TableCell className="text-sm">
-                          <ScenarioName scenario={decision.scenario} />
-                        </TableCell>
-                        <TableCell className="text-sm">{formatDuration(decision.duration)}</TableCell>
-                        <TableCell className="text-sm">
-                          {decision.until ? expiresIn(decision.until) : 'N/A'}
-                        </TableCell>
-                        <TableCell className="text-sm">
-                          <TimeDisplay date={decision.created_at} />
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setDeleteId(decision.id)}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {visibleDecisions.map((decision, index) => {
+                      const expired = isExpired(decision.until)
+                      const source = alertSourceMap.get(decision.alert_id)
+
+                      return (
+                        <TableRow key={decision.id || index} className={expired ? 'opacity-60' : undefined}>
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedIds.has(decision.id)}
+                              onCheckedChange={() => toggleSelected(decision.id)}
+                              aria-label={`Select decision ${decision.id}`}
+                            />
+                          </TableCell>
+                          <TableCell className="font-mono text-xs">{decision.id}</TableCell>
+                          <TableCell>
+                            <Link
+                              to={`/alerts?id=${decision.alert_id}`}
+                              className="inline-flex items-center gap-1 text-primary hover:underline font-mono text-xs"
+                              title={`View alert #${decision.alert_id}`}
+                            >
+                              <Shield className="h-3.5 w-3.5" />
+                              {decision.alert_id}
+                            </Link>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={decision.type === 'ban' ? 'destructive' : 'default'}>{decision.type}</Badge>
+                          </TableCell>
+                          <TableCell><Badge variant="outline">{decision.scope}</Badge></TableCell>
+                          <TableCell className="font-mono text-sm">
+                            <span className="inline-flex items-center gap-1.5">
+                              {decision.value}
+                              {hideDuplicates && decision._count > 1 && (
+                                <Badge variant="secondary" className="text-[10px] px-1 py-0">
+                                  x{decision._count}
+                                </Badge>
+                              )}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <CountryFlag code={source?.cn} showName={false} />
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate" title={source?.as_name ?? undefined}>
+                            {source?.as_name
+                              ? <span>{source.as_number ? `AS${source.as_number} ` : ''}{source.as_name}</span>
+                              : <span className="text-muted-foreground">-</span>
+                            }
+                          </TableCell>
+                          <TableCell><Badge variant="secondary">{decision.origin}</Badge></TableCell>
+                          <TableCell className="text-sm">
+                            <ScenarioName scenario={decision.scenario} />
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            <span className="inline-flex items-center gap-1.5">
+                              {formatDuration(decision.duration)}
+                              {expired && (
+                                <Badge variant="destructive" className="text-[10px] px-1 py-0">
+                                  Expired
+                                </Badge>
+                              )}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            {decision.until ? expiresIn(decision.until) : 'N/A'}
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            <TimeDisplay date={decision.created_at} />
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setDeleteId(decision.id)}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
                   </TableBody>
                 </Table>
               </div>
