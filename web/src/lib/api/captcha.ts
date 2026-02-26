@@ -20,6 +20,8 @@ export const captchaAPI = {
   saveConfig: (data: CaptchaConfigRequest) =>
     apiClient.post<ApiResponse<{ provider: string; saved: boolean; next_steps: string[] }>>('/captcha/config', data),
 
-  applyConfig: () =>
-    apiClient.post<ApiResponse<{ steps: StepResult[]; applied: boolean; provider: string }>>('/captcha/apply'),
+  applyConfig: (step?: number) =>
+    apiClient.post<ApiResponse<{ steps: StepResult[]; applied: boolean; provider: string }>>(
+      `/captcha/apply${step ? `?step=${step}` : ''}`
+    ),
 }

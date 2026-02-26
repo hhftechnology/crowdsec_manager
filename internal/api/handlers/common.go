@@ -187,3 +187,11 @@ func GetConsoleStatusHelper(dockerClient interface {
 
 	return status, nil
 }
+
+// errString safely converts an error to a string, returning "" for nil.
+func errString(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
+}
