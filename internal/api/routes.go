@@ -80,6 +80,9 @@ func RegisterCaptchaRoutes(router *gin.RouterGroup, dockerClient *docker.Client,
 	{
 		captcha.POST("/setup", handlers.SetupCaptcha(dockerClient, cfg))
 		captcha.GET("/status", handlers.GetCaptchaStatus(dockerClient, db, cfg))
+		captcha.GET("/detect", handlers.DetectCaptchaConfig(dockerClient, db, cfg))
+		captcha.POST("/config", handlers.SaveCaptchaConfig(db))
+		captcha.POST("/apply", handlers.ApplyCaptchaConfig(dockerClient, db, cfg))
 	}
 }
 
@@ -175,6 +178,9 @@ func RegisterNotificationRoutes(router *gin.RouterGroup, dockerClient *docker.Cl
 		notifications.GET("/discord", handlers.GetDiscordConfig(db, cfg, dockerClient))
 		notifications.POST("/discord", handlers.UpdateDiscordConfig(db, cfg, dockerClient))
 		notifications.GET("/discord/preview", handlers.PreviewDiscordConfig(cfg, dockerClient))
+		notifications.GET("/discord/detect", handlers.DetectDiscordConfig(dockerClient, db, cfg))
+		notifications.POST("/discord/config", handlers.SaveDiscordConfig(db))
+		notifications.POST("/discord/apply", handlers.ApplyDiscordConfig(dockerClient, db, cfg))
 	}
 }
 

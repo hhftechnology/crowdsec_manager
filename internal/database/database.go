@@ -129,6 +129,22 @@ func (d *Database) initSchema() error {
 		return fmt.Errorf("failed to create hub tables: %w", err)
 	}
 
+	createFeatureConfigTable := `
+CREATE TABLE IF NOT EXISTS feature_configs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    feature TEXT NOT NULL,
+    config_json TEXT NOT NULL DEFAULT '{}',
+    source TEXT NOT NULL DEFAULT 'user',
+    applied INTEGER NOT NULL DEFAULT 0,
+    applied_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_feature_configs_feature ON feature_configs(feature);`
+	if _, err := d.db.Exec(createFeatureConfigTable); err != nil {
+		return fmt.Errorf("failed to create feature_configs table: %w", err)
+	}
+
 	// Apply migrations for existing databases with older schemas
 	// Errors are intentionally ignored since columns may already exist
 	migrations := []string{
@@ -482,4 +498,50 @@ func (d *Database) GetHubOperationByID(id int64) (*models.HubOperationRecord, er
 	}
 	record.Success = success == 1
 	return &record, nil
+}
+
+// GetFeatureConfig retrieves a feature configuration by feature name.
+// Returns nil, nil when no row exists (not an error condition).
+func (d *Database) GetFeatureConfig(feature string) (*models.FeatureConfig, error) {
+	cfg := &models.FeatureConfig{}
+	var applied int
+	err := d.db.QueryRow(`
+		SELECT id, feature, config_json, source, applied, COALESCE(applied_at, ''), created_at, updated_at
+		FROM feature_configs WHERE feature = ?
+	`, feature).Scan(&cfg.ID, &cfg.Feature, &cfg.ConfigJSON, &cfg.Source, &applied, &cfg.AppliedAt, &cfg.CreatedAt, &cfg.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	cfg.Applied = applied == 1
+	return cfg, nil
+}
+
+// SaveFeatureConfig upserts a feature configuration keyed on the feature name.
+// Resets the applied flag so that changes require a re-apply.
+func (d *Database) SaveFeatureConfig(feature, configJSON, source string) error {
+	_, err := d.db.Exec(`
+		INSERT INTO feature_configs (feature, config_json, source, applied)
+		VALUES (?, ?, ?, 0)
+		ON CONFLICT(feature) DO UPDATE SET
+			config_json = excluded.config_json,
+			source      = excluded.source,
+			applied     = 0,
+			updated_at  = CURRENT_TIMESTAMP
+	`, feature, configJSON, source)
+	return err
+}
+
+// MarkFeatureApplied marks a feature config as successfully applied with a timestamp.
+func (d *Database) MarkFeatureApplied(feature string) error {
+	_, err := d.db.Exec(`
+		UPDATE feature_configs
+		SET applied    = 1,
+		    applied_at = CURRENT_TIMESTAMP,
+		    updated_at = CURRENT_TIMESTAMP
+		WHERE feature = ?
+	`, feature)
+	return err
 }

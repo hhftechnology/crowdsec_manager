@@ -390,3 +390,29 @@ export interface StructuredLogEntry {
   fields?: Record<string, string>
   raw: string
 }
+
+export interface FeatureConfig {
+  id: number
+  feature: string
+  config_json: string
+  source: string
+  applied: boolean
+  applied_at?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface FeatureDetectionResult {
+  detected_values: Record<string, unknown>
+  sources: Record<string, boolean>
+  db_config: FeatureConfig | null
+  status: 'not_configured' | 'partially_configured' | 'configured' | 'applied'
+}
+
+export interface StepResult {
+  step: number
+  name: string
+  success: boolean
+  error?: string
+  skipped?: boolean
+}

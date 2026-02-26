@@ -496,3 +496,24 @@ type SimulationRequest struct {
 	Scenario string `json:"scenario" binding:"required"`
 	Enabled  bool   `json:"enabled"`
 }
+
+// FeatureConfig stores configuration for features like captcha and notifications.
+// Config is saved to DB before being applied to files, surviving container rebuilds.
+type FeatureConfig struct {
+	ID         int    `json:"id"`
+	Feature    string `json:"feature"`     // "captcha" | "discord_notifications"
+	ConfigJSON string `json:"config_json"` // Full config as JSON
+	Source     string `json:"source"`      // "user" | "detected" | "imported"
+	Applied    bool   `json:"applied"`
+	AppliedAt  string `json:"applied_at,omitempty"`
+	CreatedAt  string `json:"created_at"`
+	UpdatedAt  string `json:"updated_at"`
+}
+
+// FeatureDetectionResult represents what was found when scanning for existing config.
+type FeatureDetectionResult struct {
+	DetectedValues map[string]interface{} `json:"detected_values"`
+	Sources        map[string]bool        `json:"sources"`
+	DBConfig       *FeatureConfig         `json:"db_config"`
+	Status         string                 `json:"status"` // "not_configured" | "partially_configured" | "configured" | "applied"
+}

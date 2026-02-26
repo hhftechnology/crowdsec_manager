@@ -88,3 +88,6 @@ export type {
 } from './hub'
 export { simulationAPI } from './simulation'
 export type { SimulationStatus, SimulationToggleRequest } from './simulation'
+export { notificationsAPI } from './notifications'
+export type { NotificationConfig } from './notifications'
+export type { FeatureDetectionResult, FeatureConfig, StepResult } from './types'

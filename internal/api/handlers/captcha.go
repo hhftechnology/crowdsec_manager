@@ -17,6 +17,55 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// createCaptchaHTML writes the captcha.html file to the host filesystem under cfg.ConfigDir.
+// It returns the absolute path of the written file, or an error.
+func createCaptchaHTML(cfg *config.Config, provider, siteKey string) error {
+	captchaHTML := strings.ReplaceAll(captchaHTMLTemplate, "{{.SiteKey}}", siteKey)
+	captchaHTML = strings.ReplaceAll(captchaHTML, "{{.RedirectURL}}", "")
+	captchaHTML = strings.ReplaceAll(captchaHTML, "{{.CaptchaValue}}", "")
+
+	traefikConfigDir := filepath.Join(cfg.ConfigDir, "traefik")
+	if _, err := os.Stat(traefikConfigDir); err != nil {
+		return fmt.Errorf("traefik configuration directory not found: %w", err)
+	}
+
+	confDir := filepath.Join(traefikConfigDir, "conf")
+	if err := os.MkdirAll(confDir, 0755); err != nil {
+		return fmt.Errorf("failed to create conf directory: %w", err)
+	}
+
+	captchaHTMLPath := filepath.Join(confDir, "captcha.html")
+	if err := os.WriteFile(captchaHTMLPath, []byte(captchaHTML), 0644); err != nil {
+		return fmt.Errorf("failed to write captcha.html: %w", err)
+	}
+
+	logger.Info("Captcha HTML file created", "path", captchaHTMLPath, "provider", provider)
+	return nil
+}
+
+// restartTraefikContainer performs a clean stop+start of the Traefik container.
+func restartTraefikContainer(dockerClient *docker.Client, cfg *config.Config) error {
+	if err := dockerClient.StopContainer(cfg.TraefikContainerName); err != nil {
+		logger.Warn("Failed to stop Traefik (continuing)", "error", err)
+	} else {
+		time.Sleep(1 * time.Second)
+	}
+	if err := dockerClient.StartContainer(cfg.TraefikContainerName); err != nil {
+		return fmt.Errorf("failed to start Traefik: %w", err)
+	}
+	time.Sleep(3 * time.Second)
+	return nil
+}
+
+// restartCrowdSecContainer restarts the CrowdSec container.
+func restartCrowdSecContainer(dockerClient *docker.Client, cfg *config.Config) error {
+	if err := dockerClient.RestartContainer(cfg.CrowdsecContainerName); err != nil {
+		return fmt.Errorf("failed to restart CrowdSec: %w", err)
+	}
+	time.Sleep(3 * time.Second)
+	return nil
+}
+
 // SetupCaptcha sets up Cloudflare Turnstile captcha
 func SetupCaptcha(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -43,49 +92,19 @@ func SetupCaptcha(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFu
 
 		// STEP 1: Create captcha.html file on host
 		logger.Info("Creating captcha.html file")
-		captchaHTML := strings.ReplaceAll(captchaHTMLTemplate, "{{.SiteKey}}", req.SiteKey)
-		captchaHTML = strings.ReplaceAll(captchaHTML, "{{.RedirectURL}}", "")
-		captchaHTML = strings.ReplaceAll(captchaHTML, "{{.CaptchaValue}}", "")
-
-		// Use local path for Traefik config directory (mapped via /app/config)
-		traefikConfigDir := filepath.Join(cfg.ConfigDir, "traefik")
-
-		// Verify the directory exists
-		if _, err := os.Stat(traefikConfigDir); err != nil {
-			logger.Error("Traefik config directory not found", "path", traefikConfigDir, "error", err)
-			c.JSON(http.StatusInternalServerError, models.Response{
-				Success: false,
-				Error:   "Traefik configuration directory not found",
-			})
-			return
-		}
-
-		// Create conf directory if it doesn't exist
-		confDir := filepath.Join(traefikConfigDir, "conf")
-		if err := os.MkdirAll(confDir, 0755); err != nil {
-			logger.Error("Failed to create conf directory", "error", err, "path", confDir)
-			c.JSON(http.StatusInternalServerError, models.Response{
-				Success: false,
-				Error:   fmt.Sprintf("Failed to create conf directory: %v", err),
-			})
-			return
-		}
-		logger.Info("Ensured conf directory exists", "path", confDir)
-
-		// Write captcha.html to conf directory
-		captchaHTMLPath := filepath.Join(confDir, "captcha.html")
-		if err := os.WriteFile(captchaHTMLPath, []byte(captchaHTML), 0644); err != nil {
-			logger.Error("Failed to write captcha.html", "error", err, "path", captchaHTMLPath)
+		if err := createCaptchaHTML(cfg, req.Provider, req.SiteKey); err != nil {
+			logger.Error("Failed to create captcha.html", "error", err)
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
 				Error:   fmt.Sprintf("Failed to create captcha.html: %v", err),
 			})
 			return
 		}
-		logger.Info("Captcha HTML file created", "path", captchaHTMLPath)
+		captchaHTMLPath := filepath.Join(cfg.ConfigDir, "traefik", "conf", "captcha.html")
 
 		// STEP 2: Update Traefik dynamic_config.yml
 		logger.Info("Updating Traefik dynamic configuration")
+		traefikConfigDir := filepath.Join(cfg.ConfigDir, "traefik")
 		if err := updateTraefikCaptchaConfig(dockerClient, cfg, req, traefikConfigDir); err != nil {
 			logger.Error("Failed to update Traefik config", "error", err)
 			c.JSON(http.StatusInternalServerError, models.Response{
@@ -107,33 +126,23 @@ func SetupCaptcha(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFu
 		}
 
 		// STEP 4: Stop and Start Traefik container (for clean reload)
-		logger.Info("Stopping Traefik container")
-		if err := dockerClient.StopContainer(cfg.TraefikContainerName); err != nil {
-			logger.Warn("Failed to stop Traefik", "error", err)
-		} else {
-			logger.Info("Traefik stopped successfully")
-			time.Sleep(1 * time.Second)
-		}
-
-		logger.Info("Starting Traefik container")
-		if err := dockerClient.StartContainer(cfg.TraefikContainerName); err != nil {
-			logger.Error("Failed to start Traefik", "error", err)
+		logger.Info("Restarting Traefik container")
+		if err := restartTraefikContainer(dockerClient, cfg); err != nil {
+			logger.Error("Failed to restart Traefik", "error", err)
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
-				Error:   fmt.Sprintf("Failed to start Traefik after configuration update: %v", err),
+				Error:   fmt.Sprintf("Failed to restart Traefik after configuration update: %v", err),
 			})
 			return
 		}
-		logger.Info("Traefik started successfully")
-		time.Sleep(3 * time.Second)
+		logger.Info("Traefik restarted successfully")
 
 		// STEP 5: Restart CrowdSec container
 		logger.Info("Restarting CrowdSec container")
-		if err := dockerClient.RestartContainer(cfg.CrowdsecContainerName); err != nil {
+		if err := restartCrowdSecContainer(dockerClient, cfg); err != nil {
 			logger.Warn("Failed to restart CrowdSec", "error", err)
 		} else {
 			logger.Info("CrowdSec restarted successfully")
-			time.Sleep(3 * time.Second)
 		}
 
 		// STEP 6: Verify setup
@@ -147,13 +156,13 @@ func SetupCaptcha(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFu
 			Success: true,
 			Message: "Captcha configured successfully",
 			Data: gin.H{
-				"captcha_html_created":   true,
-				"traefik_config_updated": true,
+				"captcha_html_created":    true,
+				"traefik_config_updated":  true,
 				"crowdsec_config_updated": true,
-				"traefik_restarted":      true,
-				"crowdsec_restarted":     true,
-				"verified":               verified,
-				"captcha_html_path":      captchaHTMLPath,
+				"traefik_restarted":       true,
+				"crowdsec_restarted":      true,
+				"verified":                verified,
+				"captcha_html_path":       captchaHTMLPath,
 			},
 		})
 	}
