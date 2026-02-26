@@ -31,7 +31,7 @@ export function AddDecisionDialog({ onSuccess }: AddDecisionDialogProps) {
   const [open, setOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
 
-  const { control, register, handleSubmit, reset, formState: { errors } } = useForm<AddDecisionRequest>({
+  const { control, register, handleSubmit, reset, setValue, formState: { errors } } = useForm<AddDecisionRequest>({
     defaultValues: {
       type: 'ban',
       scope: 'ip',
@@ -48,8 +48,9 @@ export function AddDecisionDialog({ onSuccess }: AddDecisionDialogProps) {
       setOpen(false)
       reset()
       onSuccess()
-    } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Failed to add decision')
+    } catch (error: unknown) {
+      const axiosError = error as { response?: { data?: { error?: string } } }
+      toast.error(axiosError.response?.data?.error || 'Failed to add decision')
     } finally {
       setIsLoading(false)
     }
@@ -59,7 +60,7 @@ export function AddDecisionDialog({ onSuccess }: AddDecisionDialogProps) {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button>
-          <Plus className="mr-2 h-4 w-4" />
+          <Plus className="h-4 w-4" />
           Add Decision
         </Button>
       </DialogTrigger>
@@ -125,10 +126,31 @@ export function AddDecisionDialog({ onSuccess }: AddDecisionDialogProps) {
 
           <div className="space-y-2">
             <Label htmlFor="duration">Duration</Label>
-            <Input 
-              id="duration" 
-              placeholder="4h" 
-              {...register('duration')} 
+            <div className="flex flex-wrap gap-1.5 pb-1">
+              {[
+                { label: '1h', value: '1h' },
+                { label: '4h', value: '4h' },
+                { label: '24h', value: '24h' },
+                { label: '7d', value: '7d' },
+                { label: '30d', value: '30d' },
+                { label: 'Permanent', value: '0' },
+              ].map((preset) => (
+                <Button
+                  key={preset.value}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs px-2"
+                  onClick={() => setValue('duration', preset.value)}
+                >
+                  {preset.label}
+                </Button>
+              ))}
+            </div>
+            <Input
+              id="duration"
+              placeholder="4h"
+              {...register('duration')}
             />
           </div>
 
@@ -143,7 +165,7 @@ export function AddDecisionDialog({ onSuccess }: AddDecisionDialogProps) {
 
           <DialogFooter>
             <Button type="submit" disabled={isLoading}>
-              {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
               Add Decision
             </Button>
           </DialogFooter>

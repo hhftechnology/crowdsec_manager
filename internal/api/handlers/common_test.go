@@ -21,34 +21,60 @@ func TestGetConsoleStatusHelper_Mapping(t *testing.T) {
 	logger.Init("info", "")
 
 	tests := []struct {
-		name           string
-		output         string
-		expectEnrolled bool
+		name            string
+		output          string
+		expectEnrolled  bool
 		expectValidated bool
+		expectApproved  bool
+		expectPhase     string
 	}{
 		{
-			name:           "Standard JSON",
-			output:         `{"enrolled": true, "validated": true}`,
-			expectEnrolled: true,
+			name:            "Standard JSON",
+			output:          `{"enrolled": true, "validated": true}`,
+			expectEnrolled:  true,
 			expectValidated: true,
+			expectApproved:  true,
+			expectPhase:     "approved",
 		},
 		{
-			name:           "Manual only (User case)",
-			output:         `{"manual": true, "console_management": false}`,
-			expectEnrolled: false,
+			name:            "Manual only (not approved)",
+			output:          `{"manual": true, "console_management": false}`,
+			expectEnrolled:  false,
 			expectValidated: false,
+			expectApproved:  false,
+			expectPhase:     "pending_approval",
 		},
 		{
-			name:           "Manual and Console Management",
-			output:         `{"manual": true, "console_management": true}`,
-			expectEnrolled: true,
+			name:            "Manual and Console Management",
+			output:          `{"manual": true, "console_management": true}`,
+			expectEnrolled:  true,
 			expectValidated: true,
+			expectApproved:  true,
+			expectPhase:     "management_enabled",
 		},
 		{
-			name:           "Not enrolled",
-			output:         `{"enrolled": false, "manual": false}`,
-			expectEnrolled: false,
+			name:            "Not enrolled",
+			output:          `{"enrolled": false, "manual": false}`,
+			expectEnrolled:  false,
 			expectValidated: false,
+			expectApproved:  false,
+			expectPhase:     "not_enrolled",
+		},
+		{
+			name:            "User pre-enrollment output",
+			output:          `{"console_management": false, "context": false, "custom": true, "manual": false, "tainted": true}`,
+			expectEnrolled:  false,
+			expectValidated: false,
+			expectApproved:  false,
+			expectPhase:     "not_enrolled",
+		},
+		{
+			name:            "User post-approval output",
+			output:          `{"console_management": false, "context": true, "custom": true, "manual": true, "tainted": true}`,
+			expectEnrolled:  true,
+			expectValidated: true,
+			expectApproved:  true,
+			expectPhase:     "approved",
 		},
 	}
 
@@ -56,7 +82,7 @@ func TestGetConsoleStatusHelper_Mapping(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mockClient := &MockDockerClient{Output: tt.output}
 			status, err := GetConsoleStatusHelper(mockClient, "crowdsec")
-			
+
 			t.Logf("Raw Output: %s", tt.output)
 			if err != nil {
 				t.Fatalf("Unexpected error: %v", err)
@@ -68,6 +94,12 @@ func TestGetConsoleStatusHelper_Mapping(t *testing.T) {
 			}
 			if status.Validated != tt.expectValidated {
 				t.Errorf("Validated: got %v, want %v. Status: %+v", status.Validated, tt.expectValidated, status)
+			}
+			if status.Approved != tt.expectApproved {
+				t.Errorf("Approved: got %v, want %v. Status: %+v", status.Approved, tt.expectApproved, status)
+			}
+			if status.Phase != tt.expectPhase {
+				t.Errorf("Phase: got %q, want %q. Status: %+v", status.Phase, tt.expectPhase, status)
 			}
 		})
 	}

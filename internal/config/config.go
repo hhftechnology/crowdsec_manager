@@ -19,6 +19,7 @@ type Config struct {
 
 	// Docker configuration
 	DockerHost  string
+	DockerHosts string // Multi-host format: "id:endpoint,id:endpoint"
 	ComposeFile string
 	PangolinDir string
 	ConfigDir   string
@@ -32,6 +33,21 @@ type Config struct {
 	TraefikAccessLog     string
 	TraefikErrorLog      string
 	CrowdSecAcquisFile   string
+
+	// CrowdSec container-internal paths and URLs
+	CrowdSecWhitelistPath      string
+	CrowdSecProfilesPath       string
+	CrowdSecNotificationsDir   string
+	CrowdSecScenariosDir       string
+	CrowdSecMetricsURL         string
+	CrowdSecConsoleURL         string
+	CrowdSecCTIURLPattern      string
+
+	// Traefik container-internal paths
+	TraefikCaptchaHTMLPath     string
+	TraefikCaptchaEnvPath      string
+	TraefikDynamicConfigSearch []string // fallback paths to search for dynamic config
+	CaptchaGracePeriod         int
 
 	// Backup configuration
 	BackupDir     string
@@ -52,6 +68,11 @@ type Config struct {
 	IncludePangolin      bool
 	IncludeGerbil        bool
 
+	// NATS Messaging (optional)
+	NatsURL     string
+	NatsToken   string
+	NatsEnabled bool
+
 	// Timeouts
 	ShutdownTimeout time.Duration
 	ReadTimeout     time.Duration
@@ -67,6 +88,7 @@ func Load() (*Config, error) {
 		LogLevel:              getEnv("LOG_LEVEL", "info"),
 		LogFile:               getEnv("LOG_FILE", "./logs/crowdsec-manager.log"),
 		DockerHost:            getEnv("DOCKER_HOST", ""),
+		DockerHosts:           getEnv("DOCKER_HOSTS", ""),
 		ComposeFile:           getEnv("COMPOSE_FILE", "./docker-compose.yml"),
 		PangolinDir:           getEnv("PANGOLIN_DIR", "."),
 		ConfigDir:             getEnv("CONFIG_DIR", "./config"),
@@ -75,8 +97,23 @@ func Load() (*Config, error) {
 		TraefikStaticConfig:   getEnv("TRAEFIK_STATIC_CONFIG", "/etc/traefik/traefik_config.yml"),
 		TraefikAccessLog:      getEnv("TRAEFIK_ACCESS_LOG", "/var/log/traefik/access.log"),
 		TraefikErrorLog:       getEnv("TRAEFIK_ERROR_LOG", "/var/log/traefik/traefik.log"),
-		CrowdSecAcquisFile:    getEnv("CROWDSEC_ACQUIS_FILE", "/etc/crowdsec/acquis.yaml"),
-		BackupDir:             getEnv("BACKUP_DIR", "./backups"),
+		CrowdSecAcquisFile:     getEnv("CROWDSEC_ACQUIS_FILE", "/etc/crowdsec/acquis.yaml"),
+		CrowdSecWhitelistPath:      getEnv("CROWDSEC_WHITELIST_PATH", "/etc/crowdsec/parsers/s02-enrich/mywhitelists.yaml"),
+		CrowdSecProfilesPath:       getEnv("CROWDSEC_PROFILES_PATH", "/etc/crowdsec/profiles.yaml"),
+		CrowdSecNotificationsDir:   getEnv("CROWDSEC_NOTIFICATIONS_DIR", "/etc/crowdsec/notifications"),
+		CrowdSecScenariosDir:       getEnv("CROWDSEC_SCENARIOS_DIR", "/etc/crowdsec/scenarios"),
+		CrowdSecMetricsURL:         getEnv("CROWDSEC_METRICS_URL", "http://localhost:6060/metrics"),
+		CrowdSecConsoleURL:         getEnv("CROWDSEC_CONSOLE_URL", "https://app.crowdsec.net/"),
+		CrowdSecCTIURLPattern:      getEnv("CROWDSEC_CTI_URL_PATTERN", "https://app.crowdsec.net/cti/{{.Value}}"),
+		TraefikCaptchaHTMLPath:     getEnv("TRAEFIK_CAPTCHA_HTML_PATH", "/etc/traefik/conf/captcha.html"),
+		TraefikCaptchaEnvPath:      getEnv("TRAEFIK_CAPTCHA_ENV_PATH", "/etc/traefik/captcha.env"),
+		TraefikDynamicConfigSearch: []string{
+			"/etc/traefik/config/dynamic_config.yml",
+			"/etc/traefik/dynamic_config.yaml",
+			"/etc/traefik/config/dynamic_config.yaml",
+		},
+		CaptchaGracePeriod:         getEnvAsInt("CAPTCHA_GRACE_PERIOD", 1800),
+		BackupDir:              getEnv("BACKUP_DIR", "./backups"),
 		RetentionDays:         getEnvAsInt("RETENTION_DAYS", 60),
 		BackupItems:           []string{"docker-compose.yml", "config"},
 		CrowdsecContainerName: getEnv("CROWDSEC_CONTAINER_NAME", "crowdsec"),
@@ -86,6 +123,9 @@ func Load() (*Config, error) {
 		IncludeCrowdsec:       getEnvAsBool("INCLUDE_CROWDSEC", true),
 		IncludePangolin:       getEnvAsBool("INCLUDE_PANGOLIN", true),
 		IncludeGerbil:         getEnvAsBool("INCLUDE_GERBIL", true),
+		NatsURL:               getEnv("NATS_URL", ""),
+		NatsToken:             getEnv("NATS_TOKEN", ""),
+		NatsEnabled:           getEnvAsBool("NATS_ENABLED", false),
 		ShutdownTimeout:       time.Duration(getEnvAsInt("SHUTDOWN_TIMEOUT", 30)) * time.Second,
 		ReadTimeout:           time.Duration(getEnvAsInt("READ_TIMEOUT", 15)) * time.Second,
 		WriteTimeout:          time.Duration(getEnvAsInt("WRITE_TIMEOUT", 15)) * time.Second,

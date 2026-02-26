@@ -1,0 +1,1 @@
+export { CrowdSecLogo } from './CrowdSecLogo'

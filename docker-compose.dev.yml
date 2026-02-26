@@ -53,7 +53,7 @@ services:
         cd /app &&
         go install github.com/cosmtrek/air@latest &&
         cd /app/web && npm install && npm run dev &
-        cd /app && air
+        cd /app && air -c configs/.air.toml
       "
 
   # Pangolin service

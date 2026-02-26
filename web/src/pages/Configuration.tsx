@@ -2,11 +2,13 @@ import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import api, { ConfigPathRequest, ConfigPathResponse } from '@/lib/api'
+import { ErrorContexts, getErrorMessage } from '@/lib/api/errors'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Settings, FileCode } from 'lucide-react'
+import { PageHeader } from '@/components/common'
 
 export default function Configuration() {
   const queryClient = useQueryClient()
@@ -33,8 +35,8 @@ export default function Configuration() {
       toast.success('Configuration path updated successfully')
       queryClient.invalidateQueries({ queryKey: ['traefik-config-path'] })
     },
-    onError: () => {
-      toast.error('Failed to update configuration path')
+    onError: (error) => {
+      toast.error(getErrorMessage(error, 'Failed to update configuration path', ErrorContexts.TraefikConfigPathUpdate))
     },
   })
 
@@ -51,12 +53,10 @@ export default function Configuration() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Configuration</h1>
-        <p className="text-muted-foreground mt-2">
-          Manage system configuration and file paths
-        </p>
-      </div>
+      <PageHeader
+        title="Configuration"
+        description="Manage system configuration and file paths"
+      />
 
       {/* Traefik Configuration Path */}
       <Card>

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import api, { UpdateRequest } from '@/lib/api'
+import { ErrorContexts, getErrorMessage } from '@/lib/api/errors'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -9,6 +10,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 import { RefreshCw, AlertTriangle, Info, Package, AlertCircle, ArrowUpCircle } from 'lucide-react'
+import { PageHeader, QueryError } from '@/components/common'
 
 export default function Update() {
   const queryClient = useQueryClient()
@@ -17,7 +19,7 @@ export default function Update() {
   const [traefikTag, setTraefikTag] = useState('')
   const [crowdsecTag, setCrowdsecTag] = useState('')
 
-  const { data: updateStatus, isLoading } = useQuery({
+  const { data: updateStatus, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['update-check'],
     queryFn: async () => {
       const response = await api.update.checkForUpdates()
@@ -36,8 +38,8 @@ export default function Update() {
       setTraefikTag('')
       setCrowdsecTag('')
     },
-    onError: () => {
-      toast.error('Failed to update with CrowdSec')
+    onError: (error) => {
+      toast.error(getErrorMessage(error, 'Failed to update with CrowdSec', ErrorContexts.UpdateWithCrowdSec))
     },
   })
 
@@ -51,8 +53,8 @@ export default function Update() {
       setGerbilTag('')
       setTraefikTag('')
     },
-    onError: () => {
-      toast.error('Failed to update without CrowdSec')
+    onError: (error) => {
+      toast.error(getErrorMessage(error, 'Failed to update without CrowdSec', ErrorContexts.UpdateWithoutCrowdSec))
     },
   })
 
@@ -83,12 +85,9 @@ export default function Update() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">System Update</h1>
-        <p className="text-muted-foreground mt-2">
-          Update Docker image tags for system components
-        </p>
-      </div>
+      <PageHeader title="System Update" description="Update Docker image tags for system components" />
+
+      {isError && <QueryError error={error} onRetry={refetch} />}
 
       {/* Current Tags */}
       <Card>
@@ -115,7 +114,7 @@ export default function Update() {
                     <p className="text-sm font-medium capitalize">{service}</p>
                     <div className="flex gap-2">
                       {status.update_available && (
-                        <Badge variant="default" className="bg-green-500 hover:bg-green-600">
+                        <Badge variant="success">
                           <ArrowUpCircle className="w-3 h-3 mr-1" />
                           Update Available
                         </Badge>
@@ -135,7 +134,7 @@ export default function Update() {
                   </div>
                   
                   {status.error && (
-                    <p className="text-xs text-red-500 mt-2">{status.error}</p>
+                    <p className="text-xs text-destructive mt-2">{status.error}</p>
                   )}
                 </div>
               ))}
@@ -219,7 +218,7 @@ export default function Update() {
                   className="flex-1"
                   disabled={isUpdating}
                 >
-                  <RefreshCw className="mr-2 h-4 w-4" />
+                  <RefreshCw className="h-4 w-4" />
                   Update with CrowdSec
                 </Button>
               </AlertDialogTrigger>
@@ -263,7 +262,7 @@ export default function Update() {
                   className="flex-1"
                   disabled={isUpdating}
                 >
-                  <RefreshCw className="mr-2 h-4 w-4" />
+                  <RefreshCw className="h-4 w-4" />
                   Update without CrowdSec
                 </Button>
               </AlertDialogTrigger>

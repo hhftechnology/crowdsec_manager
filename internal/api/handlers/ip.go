@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"crowdsec-manager/internal/config"
+	"crowdsec-manager/internal/constants"
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
 	"crowdsec-manager/internal/models"
@@ -10,6 +11,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"path/filepath"
 	"strings"
 
 	"github.com/buger/jsonparser"
@@ -26,17 +28,13 @@ func GetPublicIP() gin.HandlerFunc {
 		logger.Info("Getting public IP")
 
 		// Try multiple services for reliability
-		services := []string{
-			"https://api.ipify.org",
-			"https://ifconfig.me/ip",
-			"https://icanhazip.com",
-		}
+		services := constants.ExternalIPServices
 
 		var publicIP string
 		var lastErr error
 
 		for _, service := range services {
-			resp, err := http.Get(service)
+			resp, err := constants.ExternalHTTPClient.Get(service)
 			if err != nil {
 				lastErr = err
 				continue
@@ -73,10 +71,10 @@ func GetPublicIP() gin.HandlerFunc {
 	}
 }
 
-
 // IsIPBlocked checks if an IP is blocked
 func IsIPBlocked(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		dockerClient = resolveDockerClient(c, dockerClient)
 		ip := c.Param("ip")
 		if ip == "" {
 			c.JSON(http.StatusBadRequest, models.Response{
@@ -149,6 +147,7 @@ func IsIPBlocked(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFun
 // CheckIPSecurity provides comprehensive security information about an IP
 func CheckIPSecurity(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		dockerClient = resolveDockerClient(c, dockerClient)
 		ip := c.Param("ip")
 		if ip == "" {
 			c.JSON(http.StatusBadRequest, models.Response{
@@ -224,9 +223,10 @@ func CheckIPSecurity(dockerClient *docker.Client, cfg *config.Config) gin.Handle
 		}
 
 		// 3. Check CrowdSec parsers whitelist
-		// Find all files containing "whitelist" in /etc/crowdsec/parsers/s02-enrich/
+		// Find all files containing "whitelist" in the whitelist directory
+		whitelistDir := filepath.Dir(cfg.CrowdSecWhitelistPath)
 		findWhitelistFiles, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
-			"sh", "-c", "find /etc/crowdsec/parsers/s02-enrich/ -type f -name '*whitelist*.yaml' -o -name '*whitelist*.yml' 2>/dev/null || echo ''",
+			"find", whitelistDir, "-type", "f", "(", "-name", "*whitelist*.yaml", "-o", "-name", "*whitelist*.yml", ")",
 		})
 		if err == nil && findWhitelistFiles != "" {
 			whitelistFiles := strings.Split(strings.TrimSpace(findWhitelistFiles), "\n")
@@ -248,12 +248,7 @@ func CheckIPSecurity(dockerClient *docker.Client, cfg *config.Config) gin.Handle
 
 		// 4. Check Traefik dynamic_config.yml for ipWhiteList
 		// Read Traefik dynamic configuration
-		dynamicConfigPaths := []string{
-			"/etc/traefik/dynamic_config.yml",
-			"/etc/traefik/config/dynamic_config.yml",
-			"/etc/traefik/dynamic_config.yaml",
-			"/etc/traefik/config/dynamic_config.yaml",
-		}
+		dynamicConfigPaths := append([]string{cfg.TraefikDynamicConfig}, cfg.TraefikDynamicConfigSearch...)
 
 		for _, configPath := range dynamicConfigPaths {
 			traefikData, err := dockerClient.ExecCommand(cfg.TraefikContainerName, []string{
@@ -287,6 +282,7 @@ func CheckIPSecurity(dockerClient *docker.Client, cfg *config.Config) gin.Handle
 // UnbanIP unbans an IP address
 func UnbanIP(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		dockerClient = resolveDockerClient(c, dockerClient)
 		var req models.UnbanRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, models.Response{
@@ -320,54 +316,4 @@ func UnbanIP(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 			Data:    gin.H{"output": output},
 		})
 	}
-}
-
-// Helper function to check if an IP is in any CIDR range from the YAML content
-func checkIPInCIDRList(ip, yamlContent string) bool {
-	// Parse the target IP
-	targetIP := net.ParseIP(ip)
-	if targetIP == nil {
-		return false
-	}
-
-	// Extract CIDR ranges from sourceRange list in YAML
-	// Look for patterns like "- 10.0.0.0/8"
-	lines := strings.Split(yamlContent, "\n")
-	inSourceRange := false
-
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-
-		// Check if we're in a sourceRange section
-		if strings.Contains(trimmed, "sourceRange:") {
-			inSourceRange = true
-			continue
-		}
-
-		// If we're in sourceRange and find a list item
-		if inSourceRange && strings.HasPrefix(trimmed, "- ") {
-			cidr := strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))
-			// Remove quotes if present
-			cidr = strings.Trim(cidr, "\"'")
-
-			// Check if it's a CIDR range (contains /)
-			if strings.Contains(cidr, "/") {
-				// Use net.ParseCIDR for proper CIDR matching
-				_, ipNet, err := net.ParseCIDR(cidr)
-				if err == nil && ipNet.Contains(targetIP) {
-					return true
-				}
-			} else {
-				// Exact IP match (no CIDR notation)
-				if cidr == ip {
-					return true
-				}
-			}
-		} else if inSourceRange && !strings.HasPrefix(trimmed, "- ") && trimmed != "" {
-			// Exit sourceRange section if we hit something else
-			inSourceRange = false
-		}
-	}
-
-	return false
 }

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import api, { UnbanRequest } from '@/lib/api'
+import { ErrorContexts, getErrorMessage } from '@/lib/api/errors'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Input } from '@/components/ui/input'
@@ -9,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Globe, Shield, AlertTriangle, CheckCircle2, XCircle } from 'lucide-react'
+import { PageHeader, InfoCard } from '@/components/common'
 
 export default function IPManagement() {
   const queryClient = useQueryClient()
@@ -32,8 +34,8 @@ export default function IPManagement() {
       setBlockedCheckResult(response.data.data)
       toast.success('IP check completed')
     },
-    onError: () => {
-      toast.error('Failed to check IP status')
+    onError: (error) => {
+      toast.error(getErrorMessage(error, 'Failed to check IP status', ErrorContexts.IPCheckBlocked))
       setBlockedCheckResult(null)
     },
   })
@@ -44,8 +46,8 @@ export default function IPManagement() {
       setSecurityCheckResult(response.data.data)
       toast.success('Security check completed')
     },
-    onError: () => {
-      toast.error('Failed to check IP security')
+    onError: (error) => {
+      toast.error(getErrorMessage(error, 'Failed to check IP security', ErrorContexts.IPCheckSecurity))
       setSecurityCheckResult(null)
     },
   })
@@ -57,8 +59,8 @@ export default function IPManagement() {
       setUnbanIP('')
       queryClient.invalidateQueries({ queryKey: ['publicIP'] })
     },
-    onError: () => {
-      toast.error('Failed to unban IP')
+    onError: (error) => {
+      toast.error(getErrorMessage(error, 'Failed to unban IP', ErrorContexts.IPUnban))
     },
   })
 
@@ -91,12 +93,7 @@ export default function IPManagement() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">IP Management</h1>
-        <p className="text-muted-foreground mt-2">
-          Manage IP addresses, check status, and unban blocked IPs
-        </p>
-      </div>
+      <PageHeader title="IP Management" description="Manage IP addresses, check status, and unban blocked IPs" />
 
       {/* Public IP Display */}
       <Card>
@@ -335,28 +332,15 @@ export default function IPManagement() {
         </TabsContent>
       </Tabs>
 
-      {/* Information */}
-      <Card>
-        <CardHeader>
-          <CardTitle>IP Management Information</CardTitle>
-          <CardDescription>
-            Understanding IP operations and security
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-2 text-sm text-muted-foreground">
-          <p>
-            <strong>Block Status:</strong> Check if an IP is currently blocked by CrowdSec or Traefik.
-          </p>
-          <p>
-            <strong>Security Check:</strong> Get comprehensive security information including whitelist
-            status and presence in both CrowdSec and Traefik systems.
-          </p>
-          <p>
-            <strong>Unban:</strong> Remove an IP from all blocklists. Use this carefully as it will
-            immediately allow traffic from that IP address.
-          </p>
-        </CardContent>
-      </Card>
+      <InfoCard
+        title="IP Management Information"
+        description="Understanding IP operations and security"
+        items={[
+          { label: 'Block Status', text: 'Check if an IP is currently blocked by CrowdSec or Traefik.' },
+          { label: 'Security Check', text: 'Get comprehensive security information including whitelist status and presence in both CrowdSec and Traefik systems.' },
+          { label: 'Unban', text: 'Remove an IP from all blocklists. Use this carefully as it will immediately allow traffic from that IP address.' },
+        ]}
+      />
     </div>
   )
 }

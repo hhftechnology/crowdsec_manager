@@ -19,6 +19,7 @@ import (
 // GetBouncers retrieves CrowdSec bouncers
 func GetBouncers(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		dockerClient = resolveDockerClient(c, dockerClient)
 		logger.Info("Getting CrowdSec bouncers")
 
 		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
@@ -49,14 +50,14 @@ func GetBouncers(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFun
 
 		// Compute status for each bouncer
 		for i := range bouncers {
-			// Primary indicator: if last pull was recent (within 5 minutes), bouncer is connected
-			if time.Since(bouncers[i].LastPull) <= 5*time.Minute {
+			// Primary indicator: valid key + pulled within 60 minutes = connected
+			if bouncers[i].Valid && time.Since(bouncers[i].LastPull) <= 60*time.Minute {
 				bouncers[i].Status = "connected"
 			} else if bouncers[i].Valid {
-				// Last pull is old but key is valid - bouncer exists but inactive
+				// Valid key but hasn't pulled recently - stale but registered
 				bouncers[i].Status = "stale"
 			} else {
-				// Key is invalid - bouncer is disconnected
+				// Key is invalid/revoked - bouncer is disconnected
 				bouncers[i].Status = "disconnected"
 			}
 		}
@@ -74,6 +75,7 @@ func GetBouncers(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFun
 // AddBouncer adds a new bouncer with a generated API key
 func AddBouncer(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		dockerClient = resolveDockerClient(c, dockerClient)
 		var req struct {
 			Name string `json:"name" binding:"required"`
 		}
@@ -144,6 +146,7 @@ func generateBouncerAPIKey() (string, error) {
 // DeleteBouncer deletes a bouncer
 func DeleteBouncer(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		dockerClient = resolveDockerClient(c, dockerClient)
 		name := strings.TrimSpace(c.Param("name"))
 		if name == "" {
 			c.JSON(http.StatusBadRequest, models.Response{
@@ -158,7 +161,7 @@ func DeleteBouncer(dockerClient *docker.Client, cfg *config.Config) gin.HandlerF
 		// Execute delete command
 		cmd := []string{"cscli", "bouncers", "delete", name}
 		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, cmd)
-		
+
 		// Log the output for debugging
 		logger.Info("Delete command executed", "cmd", cmd, "output", output, "error", err)
 
