@@ -52,12 +52,15 @@ export default function Bouncers() {
     queryKey: ['bouncers'],
     queryFn: async () => {
       const response = await api.crowdsec.getBouncers()
-      return response.data.data
-    },
-    select: (data) => {
-      if (Array.isArray(data)) return data as Bouncer[]
-      if (data && Array.isArray((data as { bouncers: Bouncer[] }).bouncers)) {
-        return (data as { bouncers: Bouncer[] }).bouncers
+      const raw = response.data.data
+      // Adapt to whatever shape the backend returns
+      if (Array.isArray(raw)) return raw as Bouncer[]
+      if (raw && typeof raw === 'object') {
+        // Backend wraps as { bouncers: [...], count: N }
+        const obj = raw as Record<string, unknown>
+        for (const val of Object.values(obj)) {
+          if (Array.isArray(val)) return val as Bouncer[]
+        }
       }
       return [] as Bouncer[]
     },
