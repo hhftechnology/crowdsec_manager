@@ -62,6 +62,7 @@ export default function Notifications() {
 
   // Wizard state
   const [applySteps, setApplySteps] = useState<StepResult[]>([])
+  const [retryingStep, setRetryingStep] = useState<number | undefined>()
   const [completedSteps, setCompletedSteps] = useState<Set<string>>(new Set())
   const [errorSteps, setErrorSteps] = useState<Set<string>>(new Set())
 
@@ -200,7 +201,50 @@ export default function Notifications() {
     onError: () => toast.error('Failed to apply configuration'),
   })
 
-  const isProcessing = saveMutation.isPending || applyMutation.isPending || detecting
+  // ── Retry a single failed step ──────────────────────────────────────────────
+  const handleRetryStep = async (stepNum: number) => {
+    setRetryingStep(stepNum)
+    try {
+      const res = await notificationsAPI.applyConfig(stepNum)
+      const data = res.data.data
+      if (data?.steps) {
+        // Merge the retried step result back into the full list.
+        setApplySteps((prev) =>
+          prev.map((s) => {
+            const updated = data.steps.find((u: StepResult) => u.step === s.step)
+            return updated ?? s
+          })
+        )
+        const retried = data.steps[0]
+        if (retried?.success) {
+          toast.success(`Step ${stepNum} succeeded`)
+          // If all steps now pass, mark apply as completed.
+          setApplySteps((prev) => {
+            const allOk = prev.every((s) => s.success || s.skipped)
+            if (allOk) {
+              setCompletedSteps((p) => new Set([...p, 'apply']))
+              setErrorSteps((p) => {
+                const n = new Set(p)
+                n.delete('apply')
+                return n
+              })
+            }
+            return prev
+          })
+        } else {
+          toast.error(`Step ${stepNum} failed: ${retried?.error || 'Unknown error'}`)
+        }
+      }
+    } catch {
+      toast.error(`Failed to retry step ${stepNum}`)
+    } finally {
+      setRetryingStep(undefined)
+      queryClient.invalidateQueries({ queryKey: ['notifications-discord-config'] })
+      queryClient.invalidateQueries({ queryKey: ['notifications-detect'] })
+    }
+  }
+
+  const isProcessing = saveMutation.isPending || applyMutation.isPending || retryingStep !== undefined || detecting
 
   // ── Wizard steps ───────────────────────────────────────────────────────────
   const steps: WizardStep[] = useMemo(
@@ -533,7 +577,11 @@ export default function Notifications() {
         content: (
           <div className="space-y-4">
             {applySteps.length > 0 ? (
-              <StepProgress steps={applySteps} />
+              <StepProgress
+                steps={applySteps}
+                retryingStep={retryingStep}
+                onRetryStep={handleRetryStep}
+              />
             ) : (
               <div className="text-center py-8 space-y-4">
                 <Rocket className="h-12 w-12 mx-auto text-muted-foreground" />
@@ -576,7 +624,7 @@ export default function Notifications() {
               <div className="space-y-4">
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="flex items-center gap-3 rounded-lg border p-4">
-                    {currentConfig.enabled ? (
+                    {(enabled && applySteps.find((s) => s.name === 'Update CrowdSec profiles.yaml')?.success) || currentConfig.enabled ? (
                       <CheckCircle className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                     ) : (
                       <AlertCircle className="h-5 w-5 text-muted-foreground" />
@@ -584,7 +632,9 @@ export default function Notifications() {
                     <div>
                       <p className="text-sm font-medium">Notifications Enabled</p>
                       <p className="text-xs text-muted-foreground">
-                        {currentConfig.enabled ? 'Active' : 'Disabled'}
+                        {(enabled && applySteps.find((s) => s.name === 'Update CrowdSec profiles.yaml')?.success) || currentConfig.enabled
+                          ? 'Active'
+                          : 'Disabled'}
                       </p>
                     </div>
                   </div>
@@ -618,7 +668,7 @@ export default function Notifications() {
                   </div>
 
                   <div className="flex items-center gap-3 rounded-lg border p-4">
-                    {currentConfig.crowdsec_restarted ? (
+                    {applySteps.find((s) => s.name === 'Restart CrowdSec')?.success ? (
                       <CheckCircle className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                     ) : (
                       <AlertCircle className="h-5 w-5 text-muted-foreground" />
@@ -626,9 +676,9 @@ export default function Notifications() {
                     <div>
                       <p className="text-sm font-medium">CrowdSec Restarted</p>
                       <p className="text-xs text-muted-foreground">
-                        {currentConfig.crowdsec_restarted
+                        {applySteps.find((s) => s.name === 'Restart CrowdSec')?.success
                           ? 'Plugin loaded'
-                          : 'Restart may be needed'}
+                          : 'Restart pending'}
                       </p>
                     </div>
                   </div>

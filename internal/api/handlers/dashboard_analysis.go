@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
+	"crowdsec-manager/internal/cache"
 	"crowdsec-manager/internal/config"
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
@@ -69,9 +71,17 @@ func GetDecisionsAnalysis(dockerClient *docker.Client, cfg *config.Config) gin.H
 			return
 		}
 
-		// Parse alerts using jsonparser
+		// Parse alerts using normalized CLI JSON output.
 		var decisions []models.Decision
-		dataBytes := []byte(output)
+		dataBytes, parseErr := parseCLIJSONToBytes(output)
+		if parseErr != nil {
+			logger.Error("Failed to normalize decisions analysis JSON", "error", parseErr, "output_preview", truncateString(output, 200))
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to parse decisions JSON: %v", parseErr),
+			})
+			return
+		}
 
 		_, err = jsonparser.ArrayEach(dataBytes, func(alertValue []byte, alertType jsonparser.ValueType, alertOffset int, alertErr error) {
 			// Get alert's created_at for fallback
@@ -87,48 +97,29 @@ func GetDecisionsAnalysis(dockerClient *docker.Client, cfg *config.Config) gin.H
 			}
 
 			// Parse decisions array within this alert
+			foundNested := false
 			jsonparser.ArrayEach(alertValue, func(decisionValue []byte, decisionType jsonparser.ValueType, decisionOffset int, decisionErr error) {
-				var decision models.Decision
-
-				// Extract decision fields
-				if id, err := jsonparser.GetInt(decisionValue, "id"); err == nil {
-					decision.ID = id
-				}
-				if origin, err := jsonparser.GetString(decisionValue, "origin"); err == nil {
-					decision.Origin = origin
-				}
-				if decisionType, err := jsonparser.GetString(decisionValue, "type"); err == nil {
-					decision.Type = decisionType
-				}
-				if scope, err := jsonparser.GetString(decisionValue, "scope"); err == nil {
-					decision.Scope = scope
-				}
-				if value, err := jsonparser.GetString(decisionValue, "value"); err == nil {
-					decision.Value = value
-				}
-				if duration, err := jsonparser.GetString(decisionValue, "duration"); err == nil {
-					decision.Duration = duration
-				}
-				if scenario, err := jsonparser.GetString(decisionValue, "scenario"); err == nil {
-					decision.Scenario = scenario
-				}
-				if simulated, err := jsonparser.GetBoolean(decisionValue, "simulated"); err == nil {
-					decision.Simulated = simulated
-				}
-				if createdAt, err := jsonparser.GetString(decisionValue, "created_at"); err == nil {
-					decision.CreatedAt = createdAt
-				}
-
-				// Set created_at from alert if not present in decision
+				foundNested = true
+				decision := parseDecisionNode(decisionValue)
 				if decision.CreatedAt == "" {
 					decision.CreatedAt = alertCreatedAt
 				}
-
-				// Set AlertID
 				decision.AlertID = alertID
-
 				decisions = append(decisions, decision)
 			}, "decisions")
+
+			// Fallback: if no nested decisions found, check if the top-level
+			// item itself has decision fields (manual decisions via cscli decisions add)
+			if !foundNested {
+				if _, _, _, err := jsonparser.Get(alertValue, "type"); err == nil {
+					decision := parseDecisionNode(alertValue)
+					if decision.CreatedAt == "" {
+						decision.CreatedAt = alertCreatedAt
+					}
+					decision.AlertID = alertID
+					decisions = append(decisions, decision)
+				}
+			}
 		})
 
 		if err != nil {
@@ -152,9 +143,22 @@ func GetDecisionsAnalysis(dockerClient *docker.Client, cfg *config.Config) gin.H
 }
 
 // GetAlertsAnalysis retrieves CrowdSec alerts with advanced filtering
-func GetAlertsAnalysis(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
+func GetAlertsAnalysis(dockerClient *docker.Client, cfg *config.Config, ttlCache ...*cache.TTLCache) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		dockerClient = resolveDockerClient(c, dockerClient)
+
+		// Cache key includes the "since" param to differentiate dashboard vs analysis queries
+		cacheKey := "alerts-analysis-" + c.Query("since")
+		if len(ttlCache) > 0 && ttlCache[0] != nil {
+			if cached, ok := ttlCache[0].Get(cacheKey); ok {
+				c.JSON(http.StatusOK, models.Response{
+					Success: true,
+					Data:    cached,
+				})
+				return
+			}
+		}
+
 		logger.Info("Getting CrowdSec alerts analysis via cscli")
 
 		var cmd []string
@@ -207,11 +211,27 @@ func GetAlertsAnalysis(dockerClient *docker.Client, cfg *config.Config) gin.Hand
 		}
 
 		// Parse JSON
+		dataBytes, parseErr := parseCLIJSONToBytes(output)
+		if parseErr != nil {
+			if output == "null" || output == "" {
+				c.JSON(http.StatusOK, models.Response{
+					Success: true,
+					Data:    gin.H{"alerts": []interface{}{}, "count": 0},
+				})
+				return
+			}
+			logger.Warn("Failed to normalize alerts JSON", "error", parseErr)
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to parse alerts: %v", parseErr),
+			})
+			return
+		}
 		var alerts []interface{}
-		if err := json.Unmarshal([]byte(output), &alerts); err != nil {
+		if err := json.Unmarshal(dataBytes, &alerts); err != nil {
 			// If unmarshaling as list fails, try as a single object (behavior for inspect command)
 			var singleAlert interface{}
-			if errSingle := json.Unmarshal([]byte(output), &singleAlert); errSingle == nil {
+			if errSingle := json.Unmarshal(dataBytes, &singleAlert); errSingle == nil {
 				alerts = []interface{}{singleAlert}
 			} else {
 				if output == "null" || output == "" {
@@ -233,9 +253,14 @@ func GetAlertsAnalysis(dockerClient *docker.Client, cfg *config.Config) gin.Hand
 
 		logger.Info("Alerts analysis retrieved successfully", "count", len(alerts))
 
+		result := gin.H{"alerts": alerts, "count": len(alerts)}
+		if len(ttlCache) > 0 && ttlCache[0] != nil {
+			ttlCache[0].Set(cacheKey, result, 30*time.Second)
+		}
+
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
-			Data:    gin.H{"alerts": alerts, "count": len(alerts)},
+			Data:    result,
 		})
 	}
 }

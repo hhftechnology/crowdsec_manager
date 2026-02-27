@@ -44,9 +44,17 @@ func ListAllowlists(dockerClient *docker.Client, cfg *config.Config) gin.Handler
 			return
 		}
 
-		// Parse allowlists using jsonparser
+		// Parse allowlists using normalized CLI JSON output.
 		var allowlists []models.Allowlist
-		dataBytes := []byte(output)
+		dataBytes, parseErr := parseCLIJSONToBytes(output)
+		if parseErr != nil {
+			logger.Error("Failed to normalize allowlists JSON", "error", parseErr, "output", output)
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to parse allowlists: %v", parseErr),
+			})
+			return
+		}
 
 		_, err = jsonparser.ArrayEach(dataBytes, func(value []byte, dataType jsonparser.ValueType, offset int, err error) {
 			var allowlist models.Allowlist
@@ -111,7 +119,6 @@ func ListAllowlists(dockerClient *docker.Client, cfg *config.Config) gin.Handler
 	}
 }
 
-
 // CreateAllowlist creates a new CrowdSec allowlist
 func CreateAllowlist(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -167,8 +174,16 @@ func InspectAllowlist(dockerClient *docker.Client, cfg *config.Config) gin.Handl
 			return
 		}
 
-		// Parse response using jsonparser
-		dataBytes := []byte(output)
+		// Parse response using normalized CLI JSON output.
+		dataBytes, parseErr := parseCLIJSONToBytes(output)
+		if parseErr != nil {
+			logger.Error("Failed to normalize allowlist inspect JSON", "name", name, "error", parseErr)
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to parse allowlist response: %v", parseErr),
+			})
+			return
+		}
 		var response models.AllowlistInspectResponse
 
 		// Extract top-level fields
@@ -225,7 +240,6 @@ func InspectAllowlist(dockerClient *docker.Client, cfg *config.Config) gin.Handl
 		})
 	}
 }
-
 
 // AddAllowlistEntries adds entries to an allowlist
 func AddAllowlistEntries(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
@@ -329,4 +343,3 @@ func DeleteAllowlist(dockerClient *docker.Client, cfg *config.Config) gin.Handle
 		})
 	}
 }
-

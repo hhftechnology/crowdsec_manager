@@ -102,8 +102,9 @@ func InspectAlert(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFu
 
 		// Parse the JSON output
 		var alertData interface{}
-		if err := json.Unmarshal([]byte(output), &alertData); err != nil {
-			logger.Warn("Failed to parse alert inspect JSON", "alertID", alertID, "error", err)
+		dataBytes, parseErr := parseCLIJSONToBytes(output)
+		if parseErr != nil || json.Unmarshal(dataBytes, &alertData) != nil {
+			logger.Warn("Failed to parse alert inspect JSON", "alertID", alertID, "error", parseErr)
 			// Return raw output if parsing fails
 			c.JSON(http.StatusOK, models.Response{
 				Success: true,

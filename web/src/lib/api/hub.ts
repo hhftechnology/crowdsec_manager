@@ -9,6 +9,7 @@ export type HubCategoryKey =
   | 'remediations'
   | 'appsec-configs'
   | 'appsec-rules'
+  | 'contexts'
 
 export interface HubCategory {
   key: HubCategoryKey

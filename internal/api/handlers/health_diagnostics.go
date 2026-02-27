@@ -18,9 +18,12 @@ import (
 // parseBouncersJSON parses bouncers JSON output and returns bouncer list with status
 func parseBouncersJSON(bouncerOutput string, computeStatus bool) ([]models.Bouncer, error) {
 	var bouncers []models.Bouncer
-	dataBytes := []byte(bouncerOutput)
+	dataBytes, err := parseCLIJSONToBytes(bouncerOutput)
+	if err != nil {
+		return bouncers, err
+	}
 
-	_, err := jsonparser.ArrayEach(dataBytes, func(value []byte, dataType jsonparser.ValueType, offset int, parseErr error) {
+	_, err = jsonparser.ArrayEach(dataBytes, func(value []byte, dataType jsonparser.ValueType, offset int, parseErr error) {
 		var bouncer models.Bouncer
 
 		if name, err := jsonparser.GetString(value, "name"); err == nil {
@@ -118,7 +121,7 @@ func checkMetricsHealth(dockerClient *docker.Client, containerName string, metri
 	}
 
 	var metricsData map[string]interface{}
-	if err := json.Unmarshal([]byte(metricsOutput), &metricsData); err == nil {
+	if dataBytes, parseErr := parseCLIJSONToBytes(metricsOutput); parseErr == nil && json.Unmarshal(dataBytes, &metricsData) == nil {
 		return models.HealthCheckItem{
 			Status:  "healthy",
 			Message: "Metrics endpoint is accessible",
@@ -175,7 +178,15 @@ func parseDiagnosticDecisions(decisionOutput string) []models.Decision {
 	var decisions []models.Decision
 
 	var rawDecisions []map[string]interface{}
-	if err := json.Unmarshal([]byte(decisionOutput), &rawDecisions); err != nil {
+	dataBytes, parseErr := parseCLIJSONToBytes(decisionOutput)
+	if parseErr != nil {
+		logger.Warn("Failed to normalize decisions JSON",
+			"error", parseErr,
+			"output_length", len(decisionOutput),
+			"output_preview", truncateString(decisionOutput, 100))
+		return decisions
+	}
+	if err := json.Unmarshal(dataBytes, &rawDecisions); err != nil {
 		logger.Warn("Failed to parse decisions JSON",
 			"error", err,
 			"output_length", len(decisionOutput),

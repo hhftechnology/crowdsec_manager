@@ -32,7 +32,7 @@ export default function Logs() {
     queryKey: ['logs-crowdsec', tailLines],
     queryFn: async () => {
       const response = await api.logs.getCrowdSec(tailLines)
-      return response.data.data
+      return response.data.data ?? null
     },
     enabled: selectedService === 'crowdsec' && !isStreaming,
   })
@@ -41,7 +41,7 @@ export default function Logs() {
     queryKey: ['logs-traefik', tailLines],
     queryFn: async () => {
       const response = await api.logs.getTraefik(tailLines)
-      return response.data.data
+      return response.data.data ?? null
     },
     enabled: selectedService === 'traefik' && !isStreaming,
   })
@@ -264,7 +264,7 @@ export default function Logs() {
       </Card>
 
       {selectedService === 'traefik' && (
-        <TraefikAnalytics stats={traefikStats} isLoading={statsLoading} onRefresh={() => refetchStats()} />
+        <TraefikAnalytics stats={traefikStats || undefined} isLoading={statsLoading} onRefresh={() => refetchStats()} />
       )}
     </div>
   )

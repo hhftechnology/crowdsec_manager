@@ -2,13 +2,17 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
+	"io"
 	"strings"
 	"time"
 
+	"crowdsec-manager/internal/constants"
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
 	"crowdsec-manager/internal/models"
 
+	"github.com/buger/jsonparser"
 	"github.com/gin-gonic/gin"
 )
 
@@ -32,6 +36,18 @@ func truncateString(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen] + "... (truncated)"
+}
+
+func parseCLIJSONToBytes(output string) ([]byte, error) {
+	parsed, err := parseCLIJSONOutput(output)
+	if err != nil {
+		return nil, err
+	}
+	data, err := json.Marshal(parsed)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal parsed CLI JSON: %w", err)
+	}
+	return data, nil
 }
 
 // Helper functions for safe type conversion from map[string]interface{}
@@ -122,8 +138,15 @@ func GetConsoleStatusHelper(dockerClient interface {
 	logger.Info("Console status raw output", "output", output)
 
 	var status models.ConsoleStatus
-	if err := json.Unmarshal([]byte(output), &status); err != nil {
-		logger.Warn("Failed to parse console status JSON, attempting fallback", "error", err)
+	dataBytes, parseErr := parseCLIJSONToBytes(output)
+	if parseErr == nil {
+		if err := json.Unmarshal(dataBytes, &status); err != nil {
+			parseErr = err
+		}
+	}
+
+	if parseErr != nil {
+		logger.Warn("Failed to parse console status JSON, attempting fallback", "error", parseErr)
 
 		// Fallback to simple string check if JSON parsing fails
 		// This handles cases where older versions might not output valid JSON or other issues
@@ -186,4 +209,90 @@ func GetConsoleStatusHelper(dockerClient interface {
 	}
 
 	return status, nil
+}
+
+// errString safely converts an error to a string, returning "" for nil.
+func errString(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
+}
+
+// parseDecisionNode extracts a models.Decision from a jsonparser byte slice.
+// Used by both GetDecisions and GetDecisionsAnalysis to avoid duplicating
+// field-extraction logic.
+func parseDecisionNode(data []byte) models.Decision {
+	var d models.Decision
+	if id, err := jsonparser.GetInt(data, "id"); err == nil {
+		d.ID = id
+	}
+	if v, err := jsonparser.GetString(data, "origin"); err == nil {
+		d.Origin = v
+	}
+	if v, err := jsonparser.GetString(data, "type"); err == nil {
+		d.Type = v
+	}
+	if v, err := jsonparser.GetString(data, "scope"); err == nil {
+		d.Scope = v
+	}
+	if v, err := jsonparser.GetString(data, "value"); err == nil {
+		d.Value = v
+	}
+	if v, err := jsonparser.GetString(data, "duration"); err == nil {
+		d.Duration = v
+	}
+	if v, err := jsonparser.GetString(data, "scenario"); err == nil {
+		d.Scenario = v
+	}
+	if v, err := jsonparser.GetBoolean(data, "simulated"); err == nil {
+		d.Simulated = v
+	}
+	if v, err := jsonparser.GetString(data, "created_at"); err == nil {
+		d.CreatedAt = v
+	}
+	return d
+}
+
+// CLIFlag represents a CLI flag and its value for building cscli commands.
+type CLIFlag struct {
+	Flag  string
+	Value string
+}
+
+// appendCLIFlags appends non-empty flag/value pairs to a command slice.
+// Returns the extended command and the number of flags added.
+func appendCLIFlags(cmd []string, flags []CLIFlag) ([]string, int) {
+	count := 0
+	for _, f := range flags {
+		if f.Value != "" {
+			cmd = append(cmd, f.Flag, f.Value)
+			count++
+		}
+	}
+	return cmd, count
+}
+
+// getExternalIP tries each external IP service in order and returns the first
+// successful result. Used by both GetPublicIP and WhitelistCurrentIP.
+func getExternalIP() (string, error) {
+	var lastErr error
+	for _, service := range constants.ExternalIPServices {
+		resp, err := constants.ExternalHTTPClient.Get(service)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		ip := strings.TrimSpace(string(body))
+		if ip != "" {
+			return ip, nil
+		}
+	}
+	return "", fmt.Errorf("all IP services failed: %w", lastErr)
 }

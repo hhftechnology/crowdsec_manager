@@ -34,6 +34,7 @@ export default function Captcha() {
   const [siteKey, setSiteKey] = useState('')
   const [secretKey, setSecretKey] = useState('')
   const [applySteps, setApplySteps] = useState<StepResult[]>([])
+  const [retryingStep, setRetryingStep] = useState<number | undefined>()
   const [completedSteps, setCompletedSteps] = useState<Set<string>>(new Set())
   const [errorSteps, setErrorSteps] = useState<Set<string>>(new Set())
 
@@ -107,8 +108,49 @@ export default function Captcha() {
     onError: () => toast.error('Failed to apply configuration'),
   })
 
+  // ── Retry a single failed step ──────────────────────────────────────────────
+  const handleRetryStep = async (stepNum: number) => {
+    setRetryingStep(stepNum)
+    try {
+      const res = await captchaAPI.applyConfig(stepNum)
+      const data = res.data.data
+      if (data?.steps) {
+        setApplySteps((prev) =>
+          prev.map((s) => {
+            const updated = data.steps.find((u: StepResult) => u.step === s.step)
+            return updated ?? s
+          })
+        )
+        const retried = data.steps[0]
+        if (retried?.success) {
+          toast.success(`Step ${stepNum} succeeded`)
+          setApplySteps((prev) => {
+            const allOk = prev.every((s) => s.success || s.skipped)
+            if (allOk) {
+              setCompletedSteps((p) => new Set([...p, 'apply']))
+              setErrorSteps((p) => {
+                const n = new Set(p)
+                n.delete('apply')
+                return n
+              })
+            }
+            return prev
+          })
+        } else {
+          toast.error(`Step ${stepNum} failed: ${retried?.error || 'Unknown error'}`)
+        }
+      }
+    } catch {
+      toast.error(`Failed to retry step ${stepNum}`)
+    } finally {
+      setRetryingStep(undefined)
+      queryClient.invalidateQueries({ queryKey: ['captcha-status'] })
+      queryClient.invalidateQueries({ queryKey: ['captcha-detect'] })
+    }
+  }
+
   const selectedProvider = PROVIDER_OPTIONS.find((p) => p.value === provider)
-  const isProcessing = saveMutation.isPending || applyMutation.isPending || detecting
+  const isProcessing = saveMutation.isPending || applyMutation.isPending || retryingStep !== undefined || detecting
 
   const steps: WizardStep[] = useMemo(
     () => [
@@ -353,7 +395,11 @@ export default function Captcha() {
         content: (
           <div className="space-y-4">
             {applySteps.length > 0 ? (
-              <StepProgress steps={applySteps} />
+              <StepProgress
+                steps={applySteps}
+                retryingStep={retryingStep}
+                onRetryStep={handleRetryStep}
+              />
             ) : (
               <div className="text-center py-8 space-y-4">
                 <Rocket className="h-12 w-12 mx-auto text-muted-foreground" />

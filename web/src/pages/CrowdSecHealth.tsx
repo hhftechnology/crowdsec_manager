@@ -43,7 +43,7 @@ export default function CrowdSecHealth() {
     queryKey: ['crowdsec-health'],
     queryFn: async () => {
       const response = await api.health.crowdsecHealth()
-      return response.data.data as CrowdSecHealthData
+      return response.data.data as CrowdSecHealthData | null
     },
     refetchInterval: 5000, // Refresh every 5 seconds
   })

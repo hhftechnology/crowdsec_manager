@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -131,7 +132,7 @@ func GetServiceLogs(dockerClient *docker.Client) gin.HandlerFunc {
 	}
 }
 
-// StreamLogs streams logs via WebSocket
+// StreamLogs streams logs via WebSocket using Docker's native Follow mode
 func StreamLogs(dockerClient *docker.Client) gin.HandlerFunc {
 	var upgrader = websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool {
@@ -160,19 +161,10 @@ func StreamLogs(dockerClient *docker.Client) gin.HandlerFunc {
 			return nil
 		})
 
-		// Start ping ticker
 		pingTicker := time.NewTicker(30 * time.Second)
 		defer pingTicker.Stop()
 
-		// Stream logs in real-time
-		logTicker := time.NewTicker(500 * time.Millisecond)
-		defer logTicker.Stop()
-
 		done := make(chan struct{})
-
-		// Track last sent log lines to avoid sending duplicates
-		var lastSentHash string
-		lastLogLines := make([]string, 0)
 
 		// Read messages from client (to detect disconnection)
 		go func() {
@@ -186,6 +178,45 @@ func StreamLogs(dockerClient *docker.Client) gin.HandlerFunc {
 			}
 		}()
 
+		// Start Docker follow stream
+		since := time.Now().Add(-5 * time.Minute).Format(time.RFC3339)
+		logStream, err := dockerClient.FollowContainerLogs(service, since)
+		if err != nil {
+			ws.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("Error starting log stream: %v", err)))
+			return
+		}
+		defer logStream.Close()
+
+		// Stream log lines from Docker to WebSocket in a goroutine
+		logLines := make(chan string, 64)
+		logErr := make(chan error, 1)
+
+		go func() {
+			defer close(logLines)
+			// Docker multiplexed stream: 8-byte header + payload per frame.
+			// Header: [type(1)][0][0][0][size(4 big-endian)]
+			header := make([]byte, 8)
+			for {
+				if _, err := io.ReadFull(logStream, header); err != nil {
+					logErr <- err
+					return
+				}
+				size := int(header[4])<<24 | int(header[5])<<16 | int(header[6])<<8 | int(header[7])
+				if size <= 0 {
+					continue
+				}
+				payload := make([]byte, size)
+				if _, err := io.ReadFull(logStream, payload); err != nil {
+					logErr <- err
+					return
+				}
+				line := strings.TrimRight(string(payload), "\r\n")
+				if line != "" {
+					logLines <- line
+				}
+			}
+		}()
+
 		for {
 			select {
 			case <-done:
@@ -195,96 +226,21 @@ func StreamLogs(dockerClient *docker.Client) gin.HandlerFunc {
 					logger.Debug("WebSocket ping error", "error", err)
 					return
 				}
-			case <-logTicker.C:
-				// Check if container is running before attempting to get logs
-				isRunning, err := dockerClient.IsContainerRunning(service)
-				if err != nil {
-					// Only send error once per unique error
-					errorMsg := fmt.Sprintf("Error checking container status: %v", err)
-					if lastSentHash != errorMsg {
-						ws.WriteMessage(websocket.TextMessage, []byte(errorMsg))
-						lastSentHash = errorMsg
-					}
-					continue
-				}
-
-				if !isRunning {
-					// Only send status message once
-					statusMsg := fmt.Sprintf("Container '%s' is not running (restarting or stopped)", service)
-					if lastSentHash != statusMsg {
-						ws.WriteMessage(websocket.TextMessage, []byte(statusMsg))
-						lastSentHash = statusMsg
-					}
-					continue
-				}
-
-				logs, err := dockerClient.GetContainerLogs(service, "100")
-				if err != nil {
-					errorMsg := fmt.Sprintf("Error fetching logs: %v", err)
-					if lastSentHash != errorMsg {
-						ws.WriteMessage(websocket.TextMessage, []byte(errorMsg))
-						lastSentHash = errorMsg
-					}
-					continue
-				}
-
-				// Clean the logs
-				logs = strings.TrimSpace(logs)
-				if logs == "" {
-					continue // Skip empty logs
-				}
-
-				// Split logs into lines
-				currentLines := strings.Split(logs, "\n")
-				if len(currentLines) == 0 {
-					continue
-				}
-
-				// Calculate hash of last few lines to detect if content changed
-				var currentHash string
-				if len(currentLines) > 0 {
-					// Use last 10 lines for hash comparison
-					lastLines := currentLines
-					if len(lastLines) > 10 {
-						lastLines = lastLines[len(lastLines)-10:]
-					}
-					currentHash = strings.Join(lastLines, "\n")
-				}
-
-				// Only send new lines if content has changed
-				if currentHash != lastSentHash && currentHash != "" {
-					// Find new lines that weren't in the previous batch
-					var newLines []string
-					if len(lastLogLines) == 0 {
-						// First batch, send all lines
-						newLines = currentLines
-					} else {
-						// Find lines that are new compared to last batch
-						lastLineMap := make(map[string]bool)
-						for _, line := range lastLogLines {
-							lastLineMap[line] = true
+			case line, ok := <-logLines:
+				if !ok {
+					// Stream ended; check for error
+					select {
+					case streamErr := <-logErr:
+						if streamErr != nil && streamErr != io.EOF {
+							ws.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("Log stream ended: %v", streamErr)))
 						}
-						for _, line := range currentLines {
-							if !lastLineMap[line] {
-								newLines = append(newLines, line)
-							}
-						}
+					default:
 					}
-
-					// Only send if there are actual new lines
-					if len(newLines) > 0 {
-						newContent := strings.Join(newLines, "\n")
-						if err := ws.WriteMessage(websocket.TextMessage, []byte(newContent)); err != nil {
-							logger.Debug("WebSocket write error", "error", err)
-							return
-						}
-						lastSentHash = currentHash
-						lastLogLines = currentLines
-						// Keep only last 50 lines to avoid memory growth
-						if len(lastLogLines) > 50 {
-							lastLogLines = lastLogLines[len(lastLogLines)-50:]
-						}
-					}
+					return
+				}
+				if err := ws.WriteMessage(websocket.TextMessage, []byte(line)); err != nil {
+					logger.Debug("WebSocket write error", "error", err)
+					return
 				}
 			}
 		}
@@ -331,4 +287,3 @@ func GetStructuredLogs(dockerClient *docker.Client, cfg *config.Config) gin.Hand
 		})
 	}
 }
-

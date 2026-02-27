@@ -200,13 +200,12 @@ func updateProfilesYaml(path string, enable bool) error {
 			if notificationsNode == nil {
 				keyNode := &yaml.Node{Kind: yaml.ScalarNode, Value: "notifications"}
 				notificationsNode = &yaml.Node{
-					Kind:  yaml.SequenceNode,
-					Style: yaml.FlowStyle,
+					Kind: yaml.SequenceNode,
 				}
 				profileNode.Content = append(profileNode.Content, keyNode, notificationsNode)
 			} else if notificationsNode.Kind != yaml.SequenceNode {
 				notificationsNode.Kind = yaml.SequenceNode
-				notificationsNode.Style = yaml.FlowStyle
+				notificationsNode.Style = 0
 				notificationsNode.Content = []*yaml.Node{}
 				profileNode.Content[notifIdx] = notificationsNode
 			}
@@ -295,7 +294,7 @@ func updateProfilesYaml(path string, enable bool) error {
 				}},
 
 				{Kind: yaml.ScalarNode, Value: "notifications"},
-				{Kind: yaml.SequenceNode, Style: yaml.FlowStyle, Content: []*yaml.Node{
+				{Kind: yaml.SequenceNode, Content: []*yaml.Node{
 					{Kind: yaml.ScalarNode, Value: "discord"},
 				}},
 
@@ -311,25 +310,24 @@ func updateProfilesYaml(path string, enable bool) error {
 		documents = append(documents, newDoc)
 	}
 
-	// Write all documents back to file
+	// Write all documents back to file, preserving multi-document format.
+	// yaml.Encoder adds "---\n" before each document automatically,
+	// so we just encode sequentially and clean up the leading separator.
 	var buf bytes.Buffer
 	encoder := yaml.NewEncoder(&buf)
-	encoder.SetIndent(2)
+	encoder.SetIndent(1)
 
 	for i, doc := range documents {
-		if i > 0 {
-			buf.WriteString("\n---\n")
-		}
 		if err := encoder.Encode(doc); err != nil {
 			return fmt.Errorf("failed to marshal profiles.yaml document %d: %v", i, err)
 		}
 	}
 	encoder.Close()
 
-	// Clean up the output - remove the extra "---" that encoder adds at the start
+	// The encoder outputs "---\n<content>\n" per document.
+	// Strip only the very first "---\n" to match CrowdSec's expected format.
 	output := buf.Bytes()
 	output = bytes.TrimPrefix(output, []byte("---\n"))
 
 	return os.WriteFile(path, output, 0644)
 }
-

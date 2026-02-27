@@ -195,6 +195,41 @@ func upsertHubPreference(db *database.Database, category, mode, defaultPath, las
 	}
 }
 
+func firstCLIJSONStartIndex(output string) int {
+	objectStart := strings.Index(output, "{")
+	arrayStart := strings.Index(output, "[")
+
+	switch {
+	case objectStart == -1:
+		return arrayStart
+	case arrayStart == -1:
+		return objectStart
+	case objectStart < arrayStart:
+		return objectStart
+	default:
+		return arrayStart
+	}
+}
+
+// parseCLIJSONOutput extracts the first JSON value from mixed CLI output.
+// cscli may print informational preamble/trailing lines around the JSON body.
+func parseCLIJSONOutput(output string) (interface{}, error) {
+	start := firstCLIJSONStartIndex(output)
+	if start < 0 {
+		return nil, fmt.Errorf("no JSON payload found")
+	}
+
+	decoder := json.NewDecoder(strings.NewReader(output[start:]))
+	decoder.UseNumber()
+
+	var parsed interface{}
+	if err := decoder.Decode(&parsed); err != nil {
+		return nil, err
+	}
+
+	return parsed, nil
+}
+
 // ListHubCategories returns the supported category metadata.
 func ListHubCategories() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -221,8 +256,9 @@ func ListHubItems(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFu
 			return
 		}
 
-		var parsed interface{}
-		if err := json.Unmarshal([]byte(output), &parsed); err != nil {
+		parsed, err := parseCLIJSONOutput(output)
+		if err != nil {
+			logger.Warn("Failed to parse hub list JSON", "error", err, "output_preview", truncateString(output, 200))
 			c.JSON(http.StatusOK, models.Response{
 				Success: true,
 				Data:    output,
@@ -256,8 +292,8 @@ func ListHubItemsByCategory(dockerClient *docker.Client, cfg *config.Config) gin
 			return
 		}
 
-		var parsed interface{}
-		if err := json.Unmarshal([]byte(output), &parsed); err != nil {
+		parsed, err := parseCLIJSONOutput(output)
+		if err != nil {
 			c.JSON(http.StatusOK, models.Response{Success: true, Data: gin.H{"category": spec, "raw_output": output}})
 			return
 		}

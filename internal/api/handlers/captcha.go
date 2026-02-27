@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"crowdsec-manager/internal/config"
 	"crowdsec-manager/internal/database"
@@ -43,26 +42,20 @@ func createCaptchaHTML(cfg *config.Config, provider, siteKey string) error {
 	return nil
 }
 
-// restartTraefikContainer performs a clean stop+start of the Traefik container.
+// restartTraefikContainer restarts the Traefik container with a short timeout
+// to avoid exceeding the HTTP write deadline.
 func restartTraefikContainer(dockerClient *docker.Client, cfg *config.Config) error {
-	if err := dockerClient.StopContainer(cfg.TraefikContainerName); err != nil {
-		logger.Warn("Failed to stop Traefik (continuing)", "error", err)
-	} else {
-		time.Sleep(1 * time.Second)
+	if err := dockerClient.RestartContainerWithTimeout(cfg.TraefikContainerName, 10); err != nil {
+		return fmt.Errorf("failed to restart Traefik: %w", err)
 	}
-	if err := dockerClient.StartContainer(cfg.TraefikContainerName); err != nil {
-		return fmt.Errorf("failed to start Traefik: %w", err)
-	}
-	time.Sleep(3 * time.Second)
 	return nil
 }
 
-// restartCrowdSecContainer restarts the CrowdSec container.
+// restartCrowdSecContainer restarts the CrowdSec container with a short timeout.
 func restartCrowdSecContainer(dockerClient *docker.Client, cfg *config.Config) error {
-	if err := dockerClient.RestartContainer(cfg.CrowdsecContainerName); err != nil {
+	if err := dockerClient.RestartContainerWithTimeout(cfg.CrowdsecContainerName, 10); err != nil {
 		return fmt.Errorf("failed to restart CrowdSec: %w", err)
 	}
-	time.Sleep(3 * time.Second)
 	return nil
 }
 

@@ -18,6 +18,7 @@ import (
 	"crowdsec-manager/internal/api/handlers"
 	"crowdsec-manager/internal/api/middleware"
 	"crowdsec-manager/internal/backup"
+	"crowdsec-manager/internal/cache"
 	"crowdsec-manager/internal/config"
 	"crowdsec-manager/internal/configvalidator"
 	"crowdsec-manager/internal/cron"
@@ -132,7 +133,8 @@ func main() {
 		api.RegisterBackupRoutes(apiGroup, backupManager, dockerClient)
 		api.RegisterUpdateRoutes(apiGroup, dockerClient, cfg)
 		api.RegisterCronRoutes(apiGroup, cronScheduler)
-		api.RegisterServicesRoutes(apiGroup, dockerClient, db, cfg)
+		ttlCache := cache.New()
+		api.RegisterServicesRoutes(apiGroup, dockerClient, db, cfg, ttlCache)
 		api.RegisterNotificationRoutes(apiGroup, dockerClient, db, cfg)
 		api.RegisterProfileRoutes(apiGroup, db, cfg, dockerClient)
 		api.RegisterHostRoutes(apiGroup, multiHost)
@@ -158,12 +160,20 @@ func main() {
 	// Suppress unused variable warnings — publisher will be used by handlers in Phase 4
 	_ = publisher
 
-	// Serve React frontend static assets and handle client-side routing
+	// Serve React frontend static assets and handle client-side routing.
+	// Assets use content-hashed filenames so they can be cached indefinitely.
 	router.Static("/assets", "./web/dist/assets")
-	router.StaticFile("/", "./web/dist/index.html")
-	router.NoRoute(func(c *gin.Context) {
+	// index.html must not be cached — it references hashed asset URLs that
+	// change on each build. Without no-cache the browser may serve a stale
+	// copy (304) that points to old, non-existent JS chunks.
+	serveIndex := func(c *gin.Context) {
+		c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
+		c.Header("Pragma", "no-cache")
+		c.Header("Expires", "0")
 		c.File("./web/dist/index.html")
-	})
+	}
+	router.GET("/", func(c *gin.Context) { serveIndex(c) })
+	router.NoRoute(serveIndex)
 
 	// Create HTTP server with production-ready timeouts to prevent resource exhaustion
 	srv := &http.Server{

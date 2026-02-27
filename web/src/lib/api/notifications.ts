@@ -27,6 +27,8 @@ export const notificationsAPI = {
   saveConfig: (data: NotificationConfig) =>
     apiClient.post<ApiResponse<{ saved: boolean; next_steps: string[] }>>('/notifications/discord/config', data),
 
-  applyConfig: () =>
-    apiClient.post<ApiResponse<{ steps: StepResult[]; applied: boolean }>>('/notifications/discord/apply'),
+  applyConfig: (step?: number) =>
+    apiClient.post<ApiResponse<{ steps: StepResult[]; applied: boolean }>>(
+      `/notifications/discord/apply${step ? `?step=${step}` : ''}`
+    ),
 }

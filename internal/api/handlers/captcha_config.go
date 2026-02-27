@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"path/filepath"
+	"strconv"
 
 	"crowdsec-manager/internal/config"
 	"crowdsec-manager/internal/database"
@@ -69,8 +70,18 @@ func SaveCaptchaConfig(db *database.Database) gin.HandlerFunc {
 	}
 }
 
+// captchaApplyStep is a named step in the captcha apply pipeline.
+type captchaApplyStep struct {
+	Num  int
+	Name string
+	Run  func(req models.CaptchaSetupRequest) error
+}
+
 // ApplyCaptchaConfig reads the captcha configuration saved by SaveCaptchaConfig and applies it
 // to all systems: captcha HTML, Traefik dynamic config, CrowdSec profiles, and container restarts.
+//
+// Supports an optional "step" query parameter to re-run a single step (e.g. ?step=4).
+// When step is omitted, all steps run sequentially.
 func ApplyCaptchaConfig(dockerClient *docker.Client, db *database.Database, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		dockerClient = resolveDockerClient(c, dockerClient)
@@ -94,91 +105,119 @@ func ApplyCaptchaConfig(dockerClient *docker.Client, db *database.Database, cfg 
 			return
 		}
 
-		steps := []gin.H{}
+		// Parse optional step filter.
+		var onlyStep int
+		if stepStr := c.Query("step"); stepStr != "" {
+			parsed, parseErr := strconv.Atoi(stepStr)
+			if parseErr != nil || parsed < 1 || parsed > 6 {
+				c.JSON(http.StatusBadRequest, models.Response{
+					Success: false,
+					Error:   "Invalid step parameter. Must be 1-6.",
+				})
+				return
+			}
+			onlyStep = parsed
+		}
 
-		// Step 1: Write captcha.html to host filesystem.
-		htmlErr := createCaptchaHTML(cfg, req.Provider, req.SiteKey)
-		steps = append(steps, gin.H{
-			"step":    1,
-			"name":    "Create captcha HTML page",
-			"success": htmlErr == nil,
-			"error":   errString(htmlErr),
-		})
-
-		// Step 2: Update Traefik dynamic_config.yml.
+		// Define the pipeline of steps.
 		traefikConfigDir := filepath.Join(cfg.ConfigDir, "traefik")
-		traefikErr := updateTraefikCaptchaConfig(dockerClient, cfg, req, traefikConfigDir)
-		steps = append(steps, gin.H{
-			"step":    2,
-			"name":    "Update Traefik dynamic config",
-			"success": traefikErr == nil,
-			"error":   errString(traefikErr),
-		})
 
-		// Step 3: Update CrowdSec profiles.yaml.
-		profilesErr := updateCrowdSecProfiles(dockerClient, cfg)
-		steps = append(steps, gin.H{
-			"step":    3,
-			"name":    "Update CrowdSec profiles",
-			"success": profilesErr == nil,
-			"error":   errString(profilesErr),
-		})
+		pipeline := []captchaApplyStep{
+			{
+				Num:  1,
+				Name: "Create captcha HTML page",
+				Run: func(r models.CaptchaSetupRequest) error {
+					return createCaptchaHTML(cfg, r.Provider, r.SiteKey)
+				},
+			},
+			{
+				Num:  2,
+				Name: "Update Traefik dynamic config",
+				Run: func(r models.CaptchaSetupRequest) error {
+					return updateTraefikCaptchaConfig(dockerClient, cfg, r, traefikConfigDir)
+				},
+			},
+			{
+				Num:  3,
+				Name: "Update CrowdSec profiles",
+				Run: func(_ models.CaptchaSetupRequest) error {
+					return updateCrowdSecProfiles(dockerClient, cfg)
+				},
+			},
+			{
+				Num:  4,
+				Name: "Restart Traefik",
+				Run: func(_ models.CaptchaSetupRequest) error {
+					return restartTraefikContainer(dockerClient, cfg)
+				},
+			},
+			{
+				Num:  5,
+				Name: "Restart CrowdSec",
+				Run: func(_ models.CaptchaSetupRequest) error {
+					return restartCrowdSecContainer(dockerClient, cfg)
+				},
+			},
+			{
+				Num:  6,
+				Name: "Verify setup",
+				Run: func(_ models.CaptchaSetupRequest) error {
+					// Verification is implicit — if we got here, previous steps ran.
+					return nil
+				},
+			},
+		}
 
-		// Step 4: Restart Traefik (stop + start for clean config reload).
-		traefikRestartErr := restartTraefikContainer(dockerClient, cfg)
-		steps = append(steps, gin.H{
-			"step":    4,
-			"name":    "Restart Traefik",
-			"success": traefikRestartErr == nil,
-			"error":   errString(traefikRestartErr),
-		})
+		// Execute steps.
+		steps := []gin.H{}
+		allOK := true
 
-		// Step 5: Restart CrowdSec.
-		csRestartErr := restartCrowdSecContainer(dockerClient, cfg)
-		steps = append(steps, gin.H{
-			"step":    5,
-			"name":    "Restart CrowdSec",
-			"success": csRestartErr == nil,
-			"error":   errString(csRestartErr),
-		})
+		for _, s := range pipeline {
+			if onlyStep > 0 && s.Num != onlyStep {
+				continue
+			}
 
-		// Step 6: Verify the full setup.
-		verified := htmlErr == nil && traefikErr == nil && profilesErr == nil
-		steps = append(steps, gin.H{
-			"step":    6,
-			"name":    "Verify setup",
-			"success": verified,
-		})
+			stepErr := s.Run(req)
+			success := stepErr == nil
+			if !success {
+				allOK = false
+			}
 
-		// Mark as applied in DB when all critical steps (HTML + Traefik + profiles) passed.
-		allCriticalOK := htmlErr == nil && traefikErr == nil && profilesErr == nil
-		if allCriticalOK {
+			steps = append(steps, gin.H{
+				"step":    s.Num,
+				"name":    s.Name,
+				"success": success,
+				"error":   errString(stepErr),
+			})
+		}
+
+		// Mark as applied in DB when all steps pass in a full run.
+		if onlyStep == 0 && allOK {
 			if markErr := db.MarkFeatureApplied("captcha"); markErr != nil {
 				logger.Warn("Failed to mark captcha as applied in DB", "error", markErr)
 			}
 		}
 
 		message := "Captcha applied successfully"
-		if !allCriticalOK {
+		if !allOK {
 			message = "Captcha applied with some errors — check step details"
+		}
+		if onlyStep > 0 {
+			if allOK {
+				message = "Step re-run succeeded"
+			} else {
+				message = "Step re-run failed — check details"
+			}
 		}
 
 		c.JSON(http.StatusOK, models.Response{
-			Success: allCriticalOK,
+			Success: allOK,
 			Message: message,
 			Data: gin.H{
 				"steps":    steps,
-				"applied":  allCriticalOK,
+				"applied":  allOK,
 				"provider": req.Provider,
 			},
 		})
 	}
-}
-
-// errString safely converts an error to a string, returning "" for nil.
-func errString(err error) string {
-	if err == nil {
-		return ""
-	}
-	return err.Error()
 }

@@ -158,18 +158,27 @@ export default function Dashboard() {
     queryKey: ['health'],
     queryFn: async () => {
       const response = await api.health.checkStack()
-      return response.data.data
+      return response.data.data ?? null
     },
-    refetchInterval: 5000,
+    refetchInterval: 15000,
   })
 
-  const { data: decisionsData, isLoading: decisionsLoading, dataUpdatedAt: decisionsUpdatedAt } = useQuery({
+  const { data: decisionsSummary, isLoading: decisionsLoading, dataUpdatedAt: decisionsUpdatedAt } = useQuery({
+    queryKey: ['decisions-summary'],
+    queryFn: async () => {
+      const response = await api.crowdsec.getDecisionsSummary()
+      return response.data.data
+    },
+    refetchInterval: 30000,
+  })
+
+  const { data: decisionsData } = useQuery({
     queryKey: ['decisions'],
     queryFn: async () => {
       const response = await api.crowdsec.getDecisions()
       return response.data.data
     },
-    refetchInterval: 10000,
+    refetchInterval: 60000,
   })
 
   const { data: bouncersData, isLoading: bouncersLoading, dataUpdatedAt: bouncersUpdatedAt } = useQuery({
@@ -205,10 +214,11 @@ export default function Dashboard() {
   }, [decisionsData])
 
   const decisionsCount = useMemo(() => {
+    if (decisionsSummary && typeof decisionsSummary.count === 'number') return decisionsSummary.count
     if (!decisionsData) return 0
     if (typeof decisionsData.count === 'number') return decisionsData.count
     return decisions.length
-  }, [decisionsData, decisions])
+  }, [decisionsSummary, decisionsData, decisions])
 
   const bouncersCount = useMemo(() => {
     if (!bouncersData) return 0
@@ -604,10 +614,10 @@ export default function Dashboard() {
         <RefreshCw className="h-3 w-3" />
         {lastUpdatedAt ? (
           <span>
-            Last updated: {new Date(lastUpdatedAt).toLocaleTimeString()} — Auto-refreshing every 5-30s
+            Last updated: {new Date(lastUpdatedAt).toLocaleTimeString()} — Auto-refreshing every 15-30s
           </span>
         ) : (
-          <span>Auto-refreshing every 5-30s</span>
+          <span>Auto-refreshing every 15-30s</span>
         )}
       </div>
     </div>

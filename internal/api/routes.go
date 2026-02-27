@@ -3,6 +3,7 @@ package api
 import (
 	"crowdsec-manager/internal/api/handlers"
 	"crowdsec-manager/internal/backup"
+	"crowdsec-manager/internal/cache"
 	"crowdsec-manager/internal/config"
 	"crowdsec-manager/internal/configvalidator"
 	"crowdsec-manager/internal/cron"
@@ -123,7 +124,11 @@ func RegisterUpdateRoutes(router *gin.RouterGroup, dockerClient *docker.Client, 
 }
 
 // RegisterServicesRoutes configures endpoints for Docker service management, CrowdSec operations, and Traefik config
-func RegisterServicesRoutes(router *gin.RouterGroup, dockerClient *docker.Client, db *database.Database, cfg *config.Config) {
+func RegisterServicesRoutes(router *gin.RouterGroup, dockerClient *docker.Client, db *database.Database, cfg *config.Config, ttlCache ...*cache.TTLCache) {
+	var c *cache.TTLCache
+	if len(ttlCache) > 0 {
+		c = ttlCache[0]
+	}
 	services := router.Group("/services")
 	{
 		services.GET("/verify", handlers.VerifyServices(dockerClient, cfg))
@@ -138,15 +143,15 @@ func RegisterServicesRoutes(router *gin.RouterGroup, dockerClient *docker.Client
 		crowdsec.GET("/bouncers", handlers.GetBouncers(dockerClient, cfg))
 		crowdsec.POST("/bouncers", handlers.AddBouncer(dockerClient, cfg))
 		crowdsec.DELETE("/bouncers/:name", handlers.DeleteBouncer(dockerClient, cfg))
-		crowdsec.GET("/decisions", handlers.GetDecisions(dockerClient, cfg))
+		crowdsec.GET("/decisions", handlers.GetDecisions(dockerClient, cfg, c))
 		crowdsec.POST("/decisions", handlers.AddDecision(dockerClient, cfg))
 		crowdsec.DELETE("/decisions", handlers.DeleteDecision(dockerClient, cfg))
 		crowdsec.POST("/decisions/import", handlers.ImportDecisions(dockerClient, cfg))
 		crowdsec.GET("/decisions/analysis", handlers.GetDecisionsAnalysis(dockerClient, cfg))
-		crowdsec.GET("/alerts/analysis", handlers.GetAlertsAnalysis(dockerClient, cfg))
+		crowdsec.GET("/alerts/analysis", handlers.GetAlertsAnalysis(dockerClient, cfg, c))
 		crowdsec.GET("/alerts/:id", handlers.InspectAlert(dockerClient, cfg))
 		crowdsec.DELETE("/alerts/:id", handlers.DeleteAlert(dockerClient, cfg))
-		crowdsec.GET("/metrics", handlers.GetMetrics(dockerClient, cfg))
+		crowdsec.GET("/metrics", handlers.GetMetrics(dockerClient, cfg, c))
 		crowdsec.POST("/enroll", handlers.EnrollCrowdSec(dockerClient, db, cfg))
 		crowdsec.POST("/enroll/finalize", handlers.FinalizeCrowdSecEnrollment(dockerClient, cfg))
 		crowdsec.GET("/enroll/preferences", handlers.GetCrowdSecEnrollmentPreferences(db))

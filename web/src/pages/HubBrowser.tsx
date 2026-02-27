@@ -15,7 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Search, Download, Trash2, RefreshCw, Package, Info } from 'lucide-react'
 import { PageHeader, EmptyState, PageLoader, QueryError, ResultsSummary } from '@/components/common'
 
-type HubItemType = 'scenarios' | 'parsers' | 'collections' | 'postoverflows'
+type HubItemType = 'collections' | 'scenarios' | 'parsers' | 'postoverflows' | 'appsec-configs' | 'appsec-rules' | 'contexts'
 
 type HubBrowserItem = {
   name: string
@@ -25,20 +25,27 @@ type HubBrowserItem = {
   local_path?: string
   description?: string
   author?: string
+  utf8_status?: string
 }
 
 const HUB_TABS: { value: HubItemType; label: string }[] = [
+  { value: 'collections', label: 'Collections' },
   { value: 'scenarios', label: 'Scenarios' },
   { value: 'parsers', label: 'Parsers' },
-  { value: 'collections', label: 'Collections' },
   { value: 'postoverflows', label: 'Postoverflows' },
+  { value: 'appsec-configs', label: 'AppSec Configs' },
+  { value: 'appsec-rules', label: 'AppSec Rules' },
+  { value: 'contexts', label: 'Contexts' },
 ]
 
 const EMPTY_HUB_ITEMS: Record<HubItemType, HubBrowserItem[]> = {
+  collections: [],
   scenarios: [],
   parsers: [],
-  collections: [],
   postoverflows: [],
+  'appsec-configs': [],
+  'appsec-rules': [],
+  contexts: [],
 }
 
 function statusBadge(status: string) {
@@ -52,6 +59,50 @@ type ParsedHubItems = {
   rawParseError: boolean
 }
 
+function extractHubArray(record: Record<string, unknown>, ...keys: string[]): HubBrowserItem[] {
+  for (const key of keys) {
+    if (Array.isArray(record[key])) return record[key] as HubBrowserItem[]
+  }
+  return []
+}
+
+function parseHubJSONString(raw: string): unknown {
+  const trimmed = raw.trim()
+  if (!trimmed) return null
+
+  try {
+    return JSON.parse(trimmed)
+  } catch {
+    // Continue with robust fallback below.
+  }
+
+  const firstObject = trimmed.indexOf('{')
+  const firstArray = trimmed.indexOf('[')
+
+  let start = -1
+  if (firstObject >= 0 && firstArray >= 0) start = Math.min(firstObject, firstArray)
+  else if (firstObject >= 0) start = firstObject
+  else if (firstArray >= 0) start = firstArray
+
+  if (start < 0) {
+    throw new Error('No JSON payload found in hub response')
+  }
+
+  const openChar = trimmed[start]
+  const closeChar = openChar === '{' ? '}' : ']'
+  for (let end = trimmed.length - 1; end > start; end -= 1) {
+    if (trimmed[end] !== closeChar) continue
+    const candidate = trimmed.slice(start, end + 1)
+    try {
+      return JSON.parse(candidate)
+    } catch {
+      // Keep shrinking until we find a parseable payload.
+    }
+  }
+
+  throw new Error('Unable to parse JSON payload from hub response')
+}
+
 function parseHubItems(data: unknown): ParsedHubItems {
   if (!data) return { items: EMPTY_HUB_ITEMS, rawParseError: false }
   if (Array.isArray(data)) {
@@ -59,7 +110,7 @@ function parseHubItems(data: unknown): ParsedHubItems {
   }
   if (typeof data === 'string') {
     try {
-      const parsed = JSON.parse(data)
+      const parsed = parseHubJSONString(data)
       return parseHubItems(parsed)
     } catch {
       return { items: EMPTY_HUB_ITEMS, rawParseError: true }
@@ -70,10 +121,13 @@ function parseHubItems(data: unknown): ParsedHubItems {
     return {
       rawParseError: false,
       items: {
-        scenarios: Array.isArray(record.scenarios) ? (record.scenarios as HubBrowserItem[]) : [],
-        parsers: Array.isArray(record.parsers) ? (record.parsers as HubBrowserItem[]) : [],
-        collections: Array.isArray(record.collections) ? (record.collections as HubBrowserItem[]) : [],
-        postoverflows: Array.isArray(record.postoverflows) ? (record.postoverflows as HubBrowserItem[]) : [],
+        collections: extractHubArray(record, 'collections'),
+        scenarios: extractHubArray(record, 'scenarios'),
+        parsers: extractHubArray(record, 'parsers'),
+        postoverflows: extractHubArray(record, 'postoverflows'),
+        'appsec-configs': extractHubArray(record, 'appsec-configs', 'appsec_configs'),
+        'appsec-rules': extractHubArray(record, 'appsec-rules', 'appsec_rules'),
+        contexts: extractHubArray(record, 'contexts'),
       },
     }
   }
@@ -86,7 +140,7 @@ export default function HubBrowser() {
   const { query, setQuery } = useSearch()
   const [activeTab, setActiveTab] = useState<HubItemType>(() => {
     const tab = searchParams.get('tab') as HubItemType | null
-    return tab && HUB_TABS.some((entry) => entry.value === tab) ? tab : 'scenarios'
+    return tab && HUB_TABS.some((entry) => entry.value === tab) ? tab : 'collections'
   })
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set())
 
