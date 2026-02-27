@@ -26,6 +26,9 @@ export const crowdsecAPI = {
   getDecisions: () =>
     apiClient.get<ApiResponse<{ decisions: Decision[]; count: number }>>('/crowdsec/decisions'),
 
+  getDecisionsSummary: () =>
+    apiClient.get<ApiResponse<{ count: number; types: Record<string, number>; scenarios: Record<string, number> }>>('/crowdsec/decisions', { params: { summary: 'true' } }),
+
   getDecisionsAnalysis: (filters: DecisionFilters) =>
     apiClient.get<ApiResponse<{ decisions: Decision[]; count: number }>>('/crowdsec/decisions/analysis', { params: filters }),
 

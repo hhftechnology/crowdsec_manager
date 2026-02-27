@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
+	"crowdsec-manager/internal/cache"
 	"crowdsec-manager/internal/config"
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
@@ -152,9 +154,22 @@ func GetDecisionsAnalysis(dockerClient *docker.Client, cfg *config.Config) gin.H
 }
 
 // GetAlertsAnalysis retrieves CrowdSec alerts with advanced filtering
-func GetAlertsAnalysis(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
+func GetAlertsAnalysis(dockerClient *docker.Client, cfg *config.Config, ttlCache ...*cache.TTLCache) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		dockerClient = resolveDockerClient(c, dockerClient)
+
+		// Cache key includes the "since" param to differentiate dashboard vs analysis queries
+		cacheKey := "alerts-analysis-" + c.Query("since")
+		if len(ttlCache) > 0 && ttlCache[0] != nil {
+			if cached, ok := ttlCache[0].Get(cacheKey); ok {
+				c.JSON(http.StatusOK, models.Response{
+					Success: true,
+					Data:    cached,
+				})
+				return
+			}
+		}
+
 		logger.Info("Getting CrowdSec alerts analysis via cscli")
 
 		var cmd []string
@@ -233,9 +248,14 @@ func GetAlertsAnalysis(dockerClient *docker.Client, cfg *config.Config) gin.Hand
 
 		logger.Info("Alerts analysis retrieved successfully", "count", len(alerts))
 
+		result := gin.H{"alerts": alerts, "count": len(alerts)}
+		if len(ttlCache) > 0 && ttlCache[0] != nil {
+			ttlCache[0].Set(cacheKey, result, 30*time.Second)
+		}
+
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
-			Data:    gin.H{"alerts": alerts, "count": len(alerts)},
+			Data:    result,
 		})
 	}
 }

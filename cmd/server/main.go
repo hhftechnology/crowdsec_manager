@@ -18,6 +18,7 @@ import (
 	"crowdsec-manager/internal/api/handlers"
 	"crowdsec-manager/internal/api/middleware"
 	"crowdsec-manager/internal/backup"
+	"crowdsec-manager/internal/cache"
 	"crowdsec-manager/internal/config"
 	"crowdsec-manager/internal/configvalidator"
 	"crowdsec-manager/internal/cron"
@@ -132,7 +133,8 @@ func main() {
 		api.RegisterBackupRoutes(apiGroup, backupManager, dockerClient)
 		api.RegisterUpdateRoutes(apiGroup, dockerClient, cfg)
 		api.RegisterCronRoutes(apiGroup, cronScheduler)
-		api.RegisterServicesRoutes(apiGroup, dockerClient, db, cfg)
+		ttlCache := cache.New()
+		api.RegisterServicesRoutes(apiGroup, dockerClient, db, cfg, ttlCache)
 		api.RegisterNotificationRoutes(apiGroup, dockerClient, db, cfg)
 		api.RegisterProfileRoutes(apiGroup, db, cfg, dockerClient)
 		api.RegisterHostRoutes(apiGroup, multiHost)

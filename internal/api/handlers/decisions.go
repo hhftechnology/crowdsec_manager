@@ -37,21 +37,15 @@ func AddDecision(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFun
 		}
 
 		cmd := []string{"cscli", "decisions", "add"}
-
-		// Helper to add flag if value is present
-		addFlag := func(flag, value string) {
-			if value != "" {
-				cmd = append(cmd, flag, value)
-			}
-		}
-
-		addFlag("--ip", req.IP)
-		addFlag("--range", req.Range)
-		addFlag("--duration", req.Duration)
-		addFlag("--type", req.Type)
-		addFlag("--scope", req.Scope)
-		addFlag("--value", req.Value)
-		addFlag("--reason", req.Reason)
+		cmd, _ = appendCLIFlags(cmd, []CLIFlag{
+			{"--ip", req.IP},
+			{"--range", req.Range},
+			{"--duration", req.Duration},
+			{"--type", req.Type},
+			{"--scope", req.Scope},
+			{"--value", req.Value},
+			{"--reason", req.Reason},
+		})
 
 		logger.Info("Adding decision", "command", cmd)
 
@@ -99,25 +93,19 @@ func DeleteDecision(dockerClient *docker.Client, cfg *config.Config) gin.Handler
 		}
 
 		cmd := []string{"cscli", "decisions", "delete"}
-		hasFilter := false
+		var count int
+		cmd, count = appendCLIFlags(cmd, []CLIFlag{
+			{"--id", req.ID},
+			{"--ip", req.IP},
+			{"--range", req.Range},
+			{"--type", req.Type},
+			{"--scope", req.Scope},
+			{"--value", req.Value},
+			{"--scenario", req.Scenario},
+			{"--origin", req.Origin},
+		})
 
-		addFlag := func(flag, value string) {
-			if value != "" {
-				cmd = append(cmd, flag, value)
-				hasFilter = true
-			}
-		}
-
-		addFlag("--id", req.ID)
-		addFlag("--ip", req.IP)
-		addFlag("--range", req.Range)
-		addFlag("--type", req.Type)
-		addFlag("--scope", req.Scope)
-		addFlag("--value", req.Value)
-		addFlag("--scenario", req.Scenario)
-		addFlag("--origin", req.Origin)
-
-		if !hasFilter {
+		if count == 0 {
 			c.JSON(http.StatusBadRequest, models.Response{
 				Success: false,
 				Error:   "At least one filter (id, ip, range, etc.) must be provided to delete decisions",

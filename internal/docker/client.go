@@ -234,6 +234,27 @@ func (c *Client) GetContainerLogs(containerName string, tail string) (string, er
 	return stripControlCharacters(result.String()), nil
 }
 
+// FollowContainerLogs opens a streaming log reader using Docker's native Follow
+// mode. The caller is responsible for closing the returned ReadCloser.
+// If since is non-empty, only logs after that timestamp are returned.
+func (c *Client) FollowContainerLogs(containerName, since string) (io.ReadCloser, error) {
+	containerID, err := c.GetContainerID(containerName)
+	if err != nil {
+		return nil, err
+	}
+
+	options := container.LogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+		Follow:     true,
+		Timestamps: true,
+		Since:      since,
+		Tail:       "50",
+	}
+
+	return c.cli.ContainerLogs(c.ctx, containerID, options)
+}
+
 // RestartContainer restarts a container with default 30-second timeout
 func (c *Client) RestartContainer(name string) error {
 	return c.RestartContainerWithTimeout(name, 30)

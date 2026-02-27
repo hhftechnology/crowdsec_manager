@@ -1,18 +1,17 @@
 package handlers
 
 import (
-	"crowdsec-manager/internal/config"
-	"crowdsec-manager/internal/constants"
-	"crowdsec-manager/internal/docker"
-	"crowdsec-manager/internal/logger"
-	"crowdsec-manager/internal/models"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"path/filepath"
 	"strings"
+
+	"crowdsec-manager/internal/config"
+	"crowdsec-manager/internal/docker"
+	"crowdsec-manager/internal/logger"
+	"crowdsec-manager/internal/models"
 
 	"github.com/buger/jsonparser"
 	"github.com/gin-gonic/gin"
@@ -27,34 +26,9 @@ func GetPublicIP() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		logger.Info("Getting public IP")
 
-		// Try multiple services for reliability
-		services := constants.ExternalIPServices
-
-		var publicIP string
-		var lastErr error
-
-		for _, service := range services {
-			resp, err := constants.ExternalHTTPClient.Get(service)
-			if err != nil {
-				lastErr = err
-				continue
-			}
-			defer resp.Body.Close()
-
-			body, err := io.ReadAll(resp.Body)
-			if err != nil {
-				lastErr = err
-				continue
-			}
-
-			publicIP = strings.TrimSpace(string(body))
-			if publicIP != "" {
-				break
-			}
-		}
-
-		if publicIP == "" {
-			logger.Error("Failed to get public IP", "error", lastErr)
+		publicIP, err := getExternalIP()
+		if err != nil {
+			logger.Error("Failed to get public IP", "error", err)
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
 				Error:   "Failed to retrieve public IP address",
@@ -64,7 +38,6 @@ func GetPublicIP() gin.HandlerFunc {
 
 		logger.Info("Public IP retrieved", "ip", publicIP)
 		c.JSON(http.StatusOK, models.Response{
-
 			Success: true,
 			Data:    gin.H{"ip": publicIP},
 		})

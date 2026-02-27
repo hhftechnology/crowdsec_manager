@@ -1,16 +1,18 @@
 package handlers
 
 import (
-	"crowdsec-manager/internal/config"
-	"crowdsec-manager/internal/database"
-	"crowdsec-manager/internal/docker"
-	"crowdsec-manager/internal/logger"
-	"crowdsec-manager/internal/models"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
 	"time"
+
+	"crowdsec-manager/internal/cache"
+	"crowdsec-manager/internal/config"
+	"crowdsec-manager/internal/database"
+	"crowdsec-manager/internal/docker"
+	"crowdsec-manager/internal/logger"
+	"crowdsec-manager/internal/models"
 
 	"github.com/buger/jsonparser"
 	"github.com/gin-gonic/gin"
@@ -21,10 +23,26 @@ import (
 // =============================================================================
 
 // GetDecisions retrieves CrowdSec decisions
-// GetDecisions retrieves CrowdSec decisions
-func GetDecisions(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
+func GetDecisions(dockerClient *docker.Client, cfg *config.Config, ttlCache ...*cache.TTLCache) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		dockerClient = resolveDockerClient(c, dockerClient)
+
+		// Check cache first
+		summary := c.Query("summary") == "true"
+		cacheKey := "decisions"
+		if summary {
+			cacheKey = "decisions-summary"
+		}
+		if len(ttlCache) > 0 && ttlCache[0] != nil {
+			if cached, ok := ttlCache[0].Get(cacheKey); ok {
+				c.JSON(http.StatusOK, models.Response{
+					Success: true,
+					Data:    cached,
+				})
+				return
+			}
+		}
+
 		logger.Info("Getting CrowdSec decisions via cscli")
 
 		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
@@ -120,18 +138,61 @@ func GetDecisions(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFu
 
 		logger.Debug("Decisions retrieved successfully", "count", len(decisions))
 
+		// Summary mode: return only count and lightweight aggregations
+		if summary {
+			typeDistribution := make(map[string]int)
+			topScenarios := make(map[string]int)
+			for _, d := range decisions {
+				if d.Type != "" {
+					typeDistribution[d.Type]++
+				}
+				if d.Scenario != "" {
+					topScenarios[d.Scenario]++
+				}
+			}
+			result := gin.H{
+				"count":     len(decisions),
+				"types":     typeDistribution,
+				"scenarios": topScenarios,
+			}
+			if len(ttlCache) > 0 && ttlCache[0] != nil {
+				ttlCache[0].Set(cacheKey, result, 15*time.Second)
+			}
+			c.JSON(http.StatusOK, models.Response{
+				Success: true,
+				Data:    result,
+			})
+			return
+		}
+
+		result := gin.H{"decisions": decisions, "count": len(decisions)}
+		if len(ttlCache) > 0 && ttlCache[0] != nil {
+			ttlCache[0].Set(cacheKey, result, 15*time.Second)
+		}
+
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
-			Data:    gin.H{"decisions": decisions, "count": len(decisions)},
+			Data:    result,
 		})
 	}
 }
 
 // GetMetrics retrieves CrowdSec metrics
-// GetMetrics retrieves CrowdSec metrics
-func GetMetrics(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
+func GetMetrics(dockerClient *docker.Client, cfg *config.Config, ttlCache ...*cache.TTLCache) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		dockerClient = resolveDockerClient(c, dockerClient)
+
+		cacheKey := "metrics"
+		if len(ttlCache) > 0 && ttlCache[0] != nil {
+			if cached, ok := ttlCache[0].Get(cacheKey); ok {
+				c.JSON(http.StatusOK, models.Response{
+					Success: true,
+					Data:    cached,
+				})
+				return
+			}
+		}
+
 		logger.Info("Getting CrowdSec metrics")
 
 		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
@@ -145,7 +206,6 @@ func GetMetrics(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc
 			return
 		}
 
-		// Parse as raw JSON
 		var metrics interface{}
 		if err := json.Unmarshal([]byte(output), &metrics); err != nil {
 			logger.Warn("Failed to parse metrics JSON", "error", err)
@@ -154,6 +214,10 @@ func GetMetrics(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc
 				Error:   fmt.Sprintf("Failed to parse metrics JSON: %v", err),
 			})
 			return
+		}
+
+		if len(ttlCache) > 0 && ttlCache[0] != nil {
+			ttlCache[0].Set(cacheKey, metrics, 30*time.Second)
 		}
 
 		c.JSON(http.StatusOK, models.Response{

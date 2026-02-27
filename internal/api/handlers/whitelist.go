@@ -2,12 +2,10 @@ package handlers
 
 import (
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 
 	"crowdsec-manager/internal/config"
-	"crowdsec-manager/internal/constants"
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
 	"crowdsec-manager/internal/models"
@@ -89,19 +87,14 @@ func WhitelistCurrentIP(dockerClient *docker.Client, cfg *config.Config) gin.Han
 		dockerClient = resolveDockerClient(c, dockerClient)
 		logger.Info("Whitelisting current IP")
 
-		// Get public IP using first available service
-		resp, err := constants.ExternalHTTPClient.Get(constants.ExternalIPServices[0])
+		publicIP, err := getExternalIP()
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
-				Error:   "Failed to get public IP",
+				Error:   "Failed to get public IP: " + err.Error(),
 			})
 			return
 		}
-		defer resp.Body.Close()
-
-		body, _ := io.ReadAll(resp.Body)
-		publicIP := strings.TrimSpace(string(body))
 
 		// Add to CrowdSec whitelist
 		whitelistContent := fmt.Sprintf(`name: mywhitelists

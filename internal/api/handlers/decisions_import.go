@@ -117,7 +117,16 @@ func ImportDecisions(dockerClient *docker.Client, cfg *config.Config) gin.Handle
 		// Write to container
 		containerFile := "/tmp/decisions_import.csv"
 
-		err = copyToContainer(dockerClient, cfg.CrowdsecContainerName, tempFilePath, containerFile)
+		content, err := os.ReadFile(tempFilePath)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   "Failed to read temp file: " + err.Error(),
+			})
+			return
+		}
+
+		err = dockerClient.WriteFileToContainer(cfg.CrowdsecContainerName, containerFile, content)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
@@ -147,15 +156,4 @@ func ImportDecisions(dockerClient *docker.Client, cfg *config.Config) gin.Handle
 			Data:    gin.H{"output": output},
 		})
 	}
-}
-
-// copyToContainer is a helper to copy a file to the container
-func copyToContainer(client *docker.Client, containerName, srcPath, dstPath string) error {
-	f, err := os.Open(srcPath)
-	if err != nil {
-		return fmt.Errorf("failed to open source file: %w", err)
-	}
-	defer f.Close()
-
-	return client.CopyToContainer(containerName, dstPath, f)
 }

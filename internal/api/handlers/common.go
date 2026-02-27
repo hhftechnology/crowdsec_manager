@@ -2,9 +2,12 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
+	"io"
 	"strings"
 	"time"
 
+	"crowdsec-manager/internal/constants"
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
 	"crowdsec-manager/internal/models"
@@ -194,4 +197,47 @@ func errString(err error) string {
 		return ""
 	}
 	return err.Error()
+}
+
+// CLIFlag represents a CLI flag and its value for building cscli commands.
+type CLIFlag struct {
+	Flag  string
+	Value string
+}
+
+// appendCLIFlags appends non-empty flag/value pairs to a command slice.
+// Returns the extended command and the number of flags added.
+func appendCLIFlags(cmd []string, flags []CLIFlag) ([]string, int) {
+	count := 0
+	for _, f := range flags {
+		if f.Value != "" {
+			cmd = append(cmd, f.Flag, f.Value)
+			count++
+		}
+	}
+	return cmd, count
+}
+
+// getExternalIP tries each external IP service in order and returns the first
+// successful result. Used by both GetPublicIP and WhitelistCurrentIP.
+func getExternalIP() (string, error) {
+	var lastErr error
+	for _, service := range constants.ExternalIPServices {
+		resp, err := constants.ExternalHTTPClient.Get(service)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		ip := strings.TrimSpace(string(body))
+		if ip != "" {
+			return ip, nil
+		}
+	}
+	return "", fmt.Errorf("all IP services failed: %w", lastErr)
 }
