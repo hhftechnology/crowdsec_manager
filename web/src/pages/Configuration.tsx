@@ -14,11 +14,11 @@ export default function Configuration() {
   const queryClient = useQueryClient()
   const [configPath, setConfigPath] = useState('')
 
-  const { data: pathData, isLoading } = useQuery<ConfigPathResponse | undefined>({
+  const { data: pathData, isLoading } = useQuery<ConfigPathResponse | null>({
     queryKey: ['traefik-config-path'],
     queryFn: async () => {
       const response = await api.traefik.getConfigPath()
-      return response.data.data
+      return response.data.data ?? null
     },
   })
 

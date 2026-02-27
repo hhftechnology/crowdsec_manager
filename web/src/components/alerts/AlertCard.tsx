@@ -185,7 +185,7 @@ function AlertInspectDialog({ alertId, open, onOpenChange }: { alertId: number; 
     queryKey: ['alert-inspect', alertId],
     queryFn: async () => {
       const response = await crowdsecAPI.inspectAlert(alertId)
-      return response.data.data
+      return response.data.data ?? null
     },
     enabled: open,
   })

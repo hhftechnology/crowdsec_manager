@@ -115,7 +115,7 @@ export default function HubBrowser() {
     queryKey: ['hub-items-browser'],
     queryFn: async () => {
       const response = await hubAPI.list()
-      return response.data.data
+      return response.data.data ?? null
     },
   })
 

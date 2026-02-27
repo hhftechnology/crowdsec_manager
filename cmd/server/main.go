@@ -160,12 +160,20 @@ func main() {
 	// Suppress unused variable warnings — publisher will be used by handlers in Phase 4
 	_ = publisher
 
-	// Serve React frontend static assets and handle client-side routing
+	// Serve React frontend static assets and handle client-side routing.
+	// Assets use content-hashed filenames so they can be cached indefinitely.
 	router.Static("/assets", "./web/dist/assets")
-	router.StaticFile("/", "./web/dist/index.html")
-	router.NoRoute(func(c *gin.Context) {
+	// index.html must not be cached — it references hashed asset URLs that
+	// change on each build. Without no-cache the browser may serve a stale
+	// copy (304) that points to old, non-existent JS chunks.
+	serveIndex := func(c *gin.Context) {
+		c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
+		c.Header("Pragma", "no-cache")
+		c.Header("Expires", "0")
 		c.File("./web/dist/index.html")
-	})
+	}
+	router.GET("/", func(c *gin.Context) { serveIndex(c) })
+	router.NoRoute(serveIndex)
 
 	// Create HTTP server with production-ready timeouts to prevent resource exhaustion
 	srv := &http.Server{

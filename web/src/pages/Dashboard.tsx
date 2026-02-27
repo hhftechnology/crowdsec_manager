@@ -158,7 +158,7 @@ export default function Dashboard() {
     queryKey: ['health'],
     queryFn: async () => {
       const response = await api.health.checkStack()
-      return response.data.data
+      return response.data.data ?? null
     },
     refetchInterval: 15000,
   })

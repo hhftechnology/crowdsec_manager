@@ -174,7 +174,7 @@ function AlertDetailModal({
     queryKey: ['alert-inspect', alert.id],
     queryFn: async () => {
       const response = await crowdsecAPI.inspectAlert(alert.id)
-      return response.data.data
+      return response.data.data ?? null
     },
     enabled: open && alert.id != null,
   })
@@ -496,7 +496,7 @@ export default function AlertAnalysis() {
     queryKey: ['alerts-analysis', activeFilters],
     queryFn: async () => {
       const response = await api.crowdsec.getAlertsAnalysis(activeFilters)
-      return response.data.data
+      return response.data.data ?? null
     },
     refetchInterval: 30000,
   })
