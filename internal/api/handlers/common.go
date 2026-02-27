@@ -2,14 +2,33 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
+	"io"
 	"strings"
 	"time"
 
+	"crowdsec-manager/internal/constants"
+	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
 	"crowdsec-manager/internal/models"
 
+	"github.com/buger/jsonparser"
 	"github.com/gin-gonic/gin"
 )
+
+// resolveDockerClient returns the per-request Docker client from gin.Context
+// (set by DockerHostSelector middleware), falling back to the default client.
+// The returned client is scoped to the request context so Docker operations
+// are cancelled when the HTTP request is cancelled.
+func resolveDockerClient(c *gin.Context, fallback *docker.Client) *docker.Client {
+	dc := fallback
+	if val, exists := c.Get("dockerClient"); exists {
+		if client, ok := val.(*docker.Client); ok {
+			dc = client
+		}
+	}
+	return dc.WithContext(c.Request.Context())
+}
 
 // truncateString truncates a string to a maximum length for logging
 func truncateString(s string, maxLen int) string {
@@ -17,6 +36,18 @@ func truncateString(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen] + "... (truncated)"
+}
+
+func parseCLIJSONToBytes(output string) ([]byte, error) {
+	parsed, err := parseCLIJSONOutput(output)
+	if err != nil {
+		return nil, err
+	}
+	data, err := json.Marshal(parsed)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal parsed CLI JSON: %w", err)
+	}
+	return data, nil
 }
 
 // Helper functions for safe type conversion from map[string]interface{}
@@ -52,21 +83,21 @@ func calculateUntil(createdAtStr, durationStr string) *time.Time {
 
 	// Parse created_at timestamp - try multiple formats
 	var createdAt time.Time
-	
+
 	formats := []string{
 		time.RFC3339,
 		"2006-01-02T15:04:05Z",
 		"2006-01-02 15:04:05 +0000 UTC",
 		time.RFC3339Nano,
 	}
-	
+
 	for _, format := range formats {
 		if t, err := time.Parse(format, createdAtStr); err == nil {
 			createdAt = t
 			break
 		}
 	}
-	
+
 	if createdAt.IsZero() {
 		return nil
 	}
@@ -107,22 +138,29 @@ func GetConsoleStatusHelper(dockerClient interface {
 	logger.Info("Console status raw output", "output", output)
 
 	var status models.ConsoleStatus
-	if err := json.Unmarshal([]byte(output), &status); err != nil {
-		logger.Warn("Failed to parse console status JSON, attempting fallback", "error", err)
-		
+	dataBytes, parseErr := parseCLIJSONToBytes(output)
+	if parseErr == nil {
+		if err := json.Unmarshal(dataBytes, &status); err != nil {
+			parseErr = err
+		}
+	}
+
+	if parseErr != nil {
+		logger.Warn("Failed to parse console status JSON, attempting fallback", "error", parseErr)
+
 		// Fallback to simple string check if JSON parsing fails
 		// This handles cases where older versions might not output valid JSON or other issues
 		// We check for various formats (YAML-like, JSON with/without spaces)
-		status.Enrolled = strings.Contains(output, "enrolled: true") || 
-			strings.Contains(output, `"enrolled":true`) || 
+		status.Enrolled = strings.Contains(output, "enrolled: true") ||
+			strings.Contains(output, `"enrolled":true`) ||
 			strings.Contains(output, `"enrolled": true`)
-			
-		status.Validated = strings.Contains(output, "validated: true") || 
-			strings.Contains(output, `"validated":true`) || 
+
+		status.Validated = strings.Contains(output, "validated: true") ||
+			strings.Contains(output, `"validated":true`) ||
 			strings.Contains(output, `"validated": true`)
-			
-		status.Manual = strings.Contains(output, "manual: true") || 
-			strings.Contains(output, `"manual":true`) || 
+
+		status.Manual = strings.Contains(output, "manual: true") ||
+			strings.Contains(output, `"manual":true`) ||
 			strings.Contains(output, `"manual": true`)
 
 		status.ConsoleManagement = strings.Contains(output, "console_management: true") ||
@@ -138,11 +176,123 @@ func GetConsoleStatusHelper(dockerClient interface {
 	if !status.Validated && status.ConsoleManagement {
 		status.Validated = true
 	}
-	
+
 	// If ConsoleManagement is true, it definitely means it is enrolled too
 	if !status.Enrolled && status.ConsoleManagement {
 		status.Enrolled = true
 	}
 
+	// Normalized approval semantics across CrowdSec versions.
+	// Some versions only expose manual/context/console_management in JSON output.
+	status.Approved = status.ConsoleManagement ||
+		(status.Manual && status.Context) ||
+		status.Validated ||
+		(status.Enrolled && status.Validated)
+
+	status.ManagementEnabled = status.ConsoleManagement
+
+	if status.Approved {
+		// Keep legacy fields consistent for existing UI consumers.
+		status.Enrolled = true
+		status.Validated = true
+	}
+
+	switch {
+	case status.ManagementEnabled:
+		status.Phase = "management_enabled"
+	case status.Approved:
+		status.Phase = "approved"
+	case status.Manual || status.Context:
+		status.Phase = "pending_approval"
+	default:
+		status.Phase = "not_enrolled"
+	}
+
 	return status, nil
+}
+
+// errString safely converts an error to a string, returning "" for nil.
+func errString(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
+}
+
+// parseDecisionNode extracts a models.Decision from a jsonparser byte slice.
+// Used by both GetDecisions and GetDecisionsAnalysis to avoid duplicating
+// field-extraction logic.
+func parseDecisionNode(data []byte) models.Decision {
+	var d models.Decision
+	if id, err := jsonparser.GetInt(data, "id"); err == nil {
+		d.ID = id
+	}
+	if v, err := jsonparser.GetString(data, "origin"); err == nil {
+		d.Origin = v
+	}
+	if v, err := jsonparser.GetString(data, "type"); err == nil {
+		d.Type = v
+	}
+	if v, err := jsonparser.GetString(data, "scope"); err == nil {
+		d.Scope = v
+	}
+	if v, err := jsonparser.GetString(data, "value"); err == nil {
+		d.Value = v
+	}
+	if v, err := jsonparser.GetString(data, "duration"); err == nil {
+		d.Duration = v
+	}
+	if v, err := jsonparser.GetString(data, "scenario"); err == nil {
+		d.Scenario = v
+	}
+	if v, err := jsonparser.GetBoolean(data, "simulated"); err == nil {
+		d.Simulated = v
+	}
+	if v, err := jsonparser.GetString(data, "created_at"); err == nil {
+		d.CreatedAt = v
+	}
+	return d
+}
+
+// CLIFlag represents a CLI flag and its value for building cscli commands.
+type CLIFlag struct {
+	Flag  string
+	Value string
+}
+
+// appendCLIFlags appends non-empty flag/value pairs to a command slice.
+// Returns the extended command and the number of flags added.
+func appendCLIFlags(cmd []string, flags []CLIFlag) ([]string, int) {
+	count := 0
+	for _, f := range flags {
+		if f.Value != "" {
+			cmd = append(cmd, f.Flag, f.Value)
+			count++
+		}
+	}
+	return cmd, count
+}
+
+// getExternalIP tries each external IP service in order and returns the first
+// successful result. Used by both GetPublicIP and WhitelistCurrentIP.
+func getExternalIP() (string, error) {
+	var lastErr error
+	for _, service := range constants.ExternalIPServices {
+		resp, err := constants.ExternalHTTPClient.Get(service)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		ip := strings.TrimSpace(string(body))
+		if ip != "" {
+			return ip, nil
+		}
+	}
+	return "", fmt.Errorf("all IP services failed: %w", lastErr)
 }

@@ -1,8 +1,9 @@
 import { Suspense, lazy } from 'react'
 import { Routes, Route } from 'react-router-dom'
 import { Toaster } from 'sonner'
-import Layout from './components/Layout'
-import { ThemeProvider } from './components/ThemeProvider'
+import Layout from './layouts/Layout'
+import { ThemeProvider } from './contexts/ThemeContext'
+import { SearchProvider } from './contexts/SearchContext'
 
 // Lazy load pages
 const Dashboard = lazy(() => import('./pages/Dashboard'))
@@ -24,36 +25,50 @@ const AlertAnalysis = lazy(() => import('./pages/AlertAnalysis'))
 const Notifications = lazy(() => import('./pages/Notifications'))
 const Profiles = lazy(() => import('./pages/Profiles'))
 const Bouncers = lazy(() => import('./pages/Bouncers'))
+const Terminal = lazy(() => import('./pages/Terminal'))
+const ConfigValidation = lazy(() => import('./pages/ConfigValidation'))
+const Hub = lazy(() => import('./pages/Hub'))
+const HubBrowser = lazy(() => import('./pages/HubBrowser'))
+const HubCategory = lazy(() => import('./pages/HubCategory'))
+const Metrics = lazy(() => import('./pages/Metrics'))
 
 function App() {
   return (
     <>
       <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
-        <Layout>
-          <Suspense fallback={<div className="flex items-center justify-center h-full w-full">Loading...</div>}>
-            <Routes>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/health" element={<Health />} />
-              <Route path="/crowdsec-health" element={<CrowdSecHealth />} />
-              <Route path="/ip-management" element={<IPManagement />} />
-              <Route path="/whitelist" element={<Whitelist />} />
-              <Route path="/allowlist" element={<Allowlist />} />
-              <Route path="/scenarios" element={<Scenarios />} />
-              <Route path="/captcha" element={<Captcha />} />
-              <Route path="/decisions" element={<DecisionAnalysis />} />
-              <Route path="/alerts" element={<AlertAnalysis />} />
-              <Route path="/logs" element={<Logs />} />
-              <Route path="/backup" element={<Backup />} />
-              <Route path="/update" element={<Update />} />
-              <Route path="/cron" element={<Cron />} />
-              <Route path="/services" element={<Services />} />
-              <Route path="/configuration" element={<Configuration />} />
-              <Route path="/notifications" element={<Notifications />} />
-              <Route path="/profiles" element={<Profiles />} />
-              <Route path="/bouncers" element={<Bouncers />} />
-            </Routes>
-          </Suspense>
-        </Layout>
+        <SearchProvider>
+          <Layout>
+            <Suspense fallback={<div className="flex items-center justify-center h-full w-full">Loading...</div>}>
+              <Routes>
+                <Route path="/" element={<Dashboard />} />
+                <Route path="/health" element={<Health />} />
+                <Route path="/crowdsec-health" element={<CrowdSecHealth />} />
+                <Route path="/ip-management" element={<IPManagement />} />
+                <Route path="/whitelist" element={<Whitelist />} />
+                <Route path="/allowlist" element={<Allowlist />} />
+                <Route path="/scenarios" element={<Scenarios />} />
+                <Route path="/captcha" element={<Captcha />} />
+                <Route path="/decisions" element={<DecisionAnalysis />} />
+                <Route path="/alerts" element={<AlertAnalysis />} />
+                <Route path="/logs" element={<Logs />} />
+                <Route path="/backup" element={<Backup />} />
+                <Route path="/update" element={<Update />} />
+                <Route path="/cron" element={<Cron />} />
+                <Route path="/services" element={<Services />} />
+                <Route path="/configuration" element={<Configuration />} />
+                <Route path="/notifications" element={<Notifications />} />
+                <Route path="/profiles" element={<Profiles />} />
+                <Route path="/bouncers" element={<Bouncers />} />
+                <Route path="/terminal" element={<Terminal />} />
+                <Route path="/config-validation" element={<ConfigValidation />} />
+                <Route path="/hub" element={<Hub />} />
+                <Route path="/hub/browser" element={<HubBrowser />} />
+                <Route path="/hub/:category" element={<HubCategory />} />
+                <Route path="/metrics" element={<Metrics />} />
+              </Routes>
+            </Suspense>
+          </Layout>
+        </SearchProvider>
         <Toaster position="top-right" richColors />
       </ThemeProvider>
     </>

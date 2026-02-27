@@ -1,348 +1,559 @@
-import { useState } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import api, { CaptchaSetupRequest } from '@/lib/api'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { captchaAPI } from '@/lib/api/captcha'
+import { FeatureWizard, StepProgress, PageHeader, QueryError } from '@/components/common'
+import type { WizardStep } from '@/components/common'
+import type { StepResult, FeatureDetectionResult } from '@/lib/api/types'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import { XCircle, Shield, Info } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { useEffect } from 'react'
+import {
+  ScanFace,
+  Settings,
+  Rocket,
+  CheckCircle,
+  AlertCircle,
+  RefreshCw,
+  Info,
+} from 'lucide-react'
+
+const PROVIDER_OPTIONS = [
+  { value: 'turnstile', label: 'Cloudflare Turnstile', url: 'https://dash.cloudflare.com/sign-up' },
+  { value: 'recaptcha', label: 'Google reCAPTCHA', url: 'https://www.google.com/recaptcha/admin' },
+  { value: 'hcaptcha', label: 'hCaptcha', url: 'https://dashboard.hcaptcha.com/signup' },
+] as const
+
+type ProviderValue = (typeof PROVIDER_OPTIONS)[number]['value']
 
 export default function Captcha() {
   const queryClient = useQueryClient()
-  const [provider, setProvider] = useState('recaptcha')
+  const [currentStep, setCurrentStep] = useState(0)
+  const [provider, setProvider] = useState<ProviderValue>('turnstile')
   const [siteKey, setSiteKey] = useState('')
   const [secretKey, setSecretKey] = useState('')
+  const [applySteps, setApplySteps] = useState<StepResult[]>([])
+  const [retryingStep, setRetryingStep] = useState<number | undefined>()
+  const [completedSteps, setCompletedSteps] = useState<Set<string>>(new Set())
+  const [errorSteps, setErrorSteps] = useState<Set<string>>(new Set())
 
-  const { data: statusData, isLoading } = useQuery({
+  // Detection query — runs on mount
+  const {
+    data: detection,
+    isLoading: detecting,
+    isError: detectError,
+    error: detectErr,
+    refetch: redetect,
+  } = useQuery({
+    queryKey: ['captcha-detect'],
+    queryFn: async () => {
+      const res = await captchaAPI.detect()
+      return res.data.data as FeatureDetectionResult
+    },
+  })
+
+  // Status query — used in verify step
+  const { data: statusData, refetch: refetchStatus } = useQuery({
     queryKey: ['captcha-status'],
     queryFn: async () => {
-      const response = await api.captcha.getStatus()
-      return response.data.data
+      const res = await captchaAPI.getStatus()
+      return res.data.data
     },
   })
 
-  // Pre-populate values from statusData
+  // Pre-populate form from detection results
   useEffect(() => {
-    if (statusData) {
-      if (statusData.site_key) {
-        setSiteKey(statusData.site_key)
+    if (detection?.detected_values) {
+      const vals = detection.detected_values
+      if (vals.provider && typeof vals.provider === 'string') {
+        const p = vals.provider as ProviderValue
+        if (PROVIDER_OPTIONS.some((o) => o.value === p)) setProvider(p)
       }
-      if (statusData.secret_key) {
-        setSecretKey(statusData.secret_key)
-      }
-      if (statusData.provider) {
-        setProvider(statusData.provider)
-      }
+      if (vals.site_key && typeof vals.site_key === 'string') setSiteKey(vals.site_key)
+      if (vals.secret_key && typeof vals.secret_key === 'string') setSecretKey(vals.secret_key)
+      setCompletedSteps((prev) => new Set([...prev, 'detect']))
     }
-  }, [statusData])
+  }, [detection])
 
-  const setupMutation = useMutation({
-    mutationFn: (data: CaptchaSetupRequest) => api.captcha.setup(data),
+  // Save config mutation
+  const saveMutation = useMutation({
+    mutationFn: () =>
+      captchaAPI.saveConfig({ provider, site_key: siteKey, secret_key: secretKey }),
     onSuccess: () => {
-      toast.success('Captcha configured successfully')
-      // Don't clear values - keep them populated
-      queryClient.invalidateQueries({ queryKey: ['captcha-status'] })
+      toast.success('Configuration saved')
+      setCompletedSteps((prev) => new Set([...prev, 'configure', 'review']))
+      setCurrentStep(3)
     },
-    onError: () => {
-      toast.error('Failed to configure captcha')
-    },
+    onError: () => toast.error('Failed to save configuration'),
   })
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
+  // Apply mutation
+  const applyMutation = useMutation({
+    mutationFn: () => captchaAPI.applyConfig(),
+    onSuccess: (res) => {
+      const data = res.data.data
+      if (data?.steps) setApplySteps(data.steps)
+      if (data?.applied) {
+        toast.success('Captcha applied successfully!')
+        setCompletedSteps((prev) => new Set([...prev, 'apply']))
+        setCurrentStep(4)
+      } else {
+        toast.error('Some steps failed. Check details below.')
+        setErrorSteps((prev) => new Set([...prev, 'apply']))
+      }
+      queryClient.invalidateQueries({ queryKey: ['captcha-status'] })
+      queryClient.invalidateQueries({ queryKey: ['captcha-detect'] })
+    },
+    onError: () => toast.error('Failed to apply configuration'),
+  })
 
-    if (!provider.trim()) {
-      toast.error('Please select a provider')
-      return
+  // ── Retry a single failed step ──────────────────────────────────────────────
+  const handleRetryStep = async (stepNum: number) => {
+    setRetryingStep(stepNum)
+    try {
+      const res = await captchaAPI.applyConfig(stepNum)
+      const data = res.data.data
+      if (data?.steps) {
+        setApplySteps((prev) =>
+          prev.map((s) => {
+            const updated = data.steps.find((u: StepResult) => u.step === s.step)
+            return updated ?? s
+          })
+        )
+        const retried = data.steps[0]
+        if (retried?.success) {
+          toast.success(`Step ${stepNum} succeeded`)
+          setApplySteps((prev) => {
+            const allOk = prev.every((s) => s.success || s.skipped)
+            if (allOk) {
+              setCompletedSteps((p) => new Set([...p, 'apply']))
+              setErrorSteps((p) => {
+                const n = new Set(p)
+                n.delete('apply')
+                return n
+              })
+            }
+            return prev
+          })
+        } else {
+          toast.error(`Step ${stepNum} failed: ${retried?.error || 'Unknown error'}`)
+        }
+      }
+    } catch {
+      toast.error(`Failed to retry step ${stepNum}`)
+    } finally {
+      setRetryingStep(undefined)
+      queryClient.invalidateQueries({ queryKey: ['captcha-status'] })
+      queryClient.invalidateQueries({ queryKey: ['captcha-detect'] })
     }
-
-    if (!siteKey.trim()) {
-      toast.error('Please enter a site key')
-      return
-    }
-
-    if (!secretKey.trim()) {
-      toast.error('Please enter a secret key')
-      return
-    }
-
-    setupMutation.mutate({
-      provider,
-      site_key: siteKey,
-      secret_key: secretKey,
-    })
   }
 
-  return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Captcha Setup</h1>
-        <p className="text-muted-foreground mt-2">
-          Configure captcha protection for CrowdSec remediation
-        </p>
-      </div>
+  const selectedProvider = PROVIDER_OPTIONS.find((p) => p.value === provider)
+  const isProcessing = saveMutation.isPending || applyMutation.isPending || retryingStep !== undefined || detecting
 
-      {/* Current Status */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Shield className="h-5 w-5" />
-            Captcha Status
-          </CardTitle>
-          <CardDescription>
-            Current captcha configuration status
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="h-24 bg-muted animate-pulse rounded" />
-          ) : (
+  const steps: WizardStep[] = useMemo(
+    () => [
+      // ── Step 1: Detect ───────────────────────────────────────────────────────
+      {
+        id: 'detect',
+        title: 'Detect',
+        description: 'Scanning for existing captcha configuration',
+        content: (
+          <div className="space-y-4">
+            {detecting ? (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <RefreshCw className="h-4 w-4 animate-spin" />
+                Scanning configuration files...
+              </div>
+            ) : detectError ? (
+              <QueryError error={detectErr as Error} onRetry={redetect} />
+            ) : detection ? (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <Badge
+                    variant={
+                      detection.status === 'applied'
+                        ? 'default'
+                        : detection.status === 'not_configured'
+                        ? 'secondary'
+                        : 'outline'
+                    }
+                  >
+                    {detection.status.replace(/_/g, ' ')}
+                  </Badge>
+                </div>
+
+                {/* Sources */}
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {Object.entries(detection.sources).map(([source, found]) => (
+                    <div key={source} className="flex items-center gap-2 rounded-lg border p-3">
+                      {found ? (
+                        <CheckCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                      ) : (
+                        <AlertCircle className="h-4 w-4 text-muted-foreground shrink-0" />
+                      )}
+                      <span className="text-sm">{source.replace(/_/g, ' ')}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Detected values */}
+                {Object.keys(detection.detected_values).length > 0 && (
+                  <Alert>
+                    <Info className="h-4 w-4" />
+                    <AlertTitle>Values detected</AlertTitle>
+                    <AlertDescription>
+                      <ul className="mt-2 space-y-1 text-sm">
+                        {Boolean(detection.detected_values.provider) && (
+                          <li>
+                            Provider:{' '}
+                            <strong>{String(detection.detected_values.provider)}</strong>
+                          </li>
+                        )}
+                        {Boolean(detection.detected_values.site_key) && (
+                          <li>
+                            Site Key:{' '}
+                            <code className="text-xs">
+                              {String(detection.detected_values.site_key).substring(0, 12)}...
+                            </code>
+                          </li>
+                        )}
+                        {Boolean(detection.detected_values.html_exists) && (
+                          <li>
+                            HTML file:{' '}
+                            <code className="text-xs">
+                              {String(detection.detected_values.html_path)}
+                            </code>
+                          </li>
+                        )}
+                      </ul>
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        These values are pre-filled in the next step.
+                      </p>
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </div>
+            ) : null}
+          </div>
+        ),
+      },
+
+      // ── Step 2: Configure ────────────────────────────────────────────────────
+      {
+        id: 'configure',
+        title: 'Configure',
+        description: 'Enter your captcha provider credentials',
+        canProceed: siteKey.length > 0 && secretKey.length > 0,
+        content: (
+          <div className="space-y-6">
+            {/* Provider selection */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Captcha Provider</label>
+              <div className="grid gap-3 sm:grid-cols-3">
+                {PROVIDER_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setProvider(opt.value)}
+                    className={[
+                      'rounded-lg border-2 p-4 text-left transition-colors',
+                      provider === opt.value
+                        ? 'border-primary bg-primary/5'
+                        : 'border-border hover:border-primary/50',
+                    ].join(' ')}
+                  >
+                    <p className="font-medium text-sm">{opt.label}</p>
+                    <a
+                      href={opt.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-primary hover:underline mt-1 inline-block"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      Get keys &rarr;
+                    </a>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Keys */}
             <div className="space-y-4">
-              {/* Implementation Status - Fully Active */}
-              {statusData?.implemented && (
-                <div className="flex items-center gap-3 p-4 border border-green-500/50 bg-green-500/10 rounded-lg">
-                  <Shield className="h-5 w-5 text-green-500 flex-shrink-0" />
-                  <div>
-                    <p className="font-medium text-green-700 dark:text-green-400">
-                      Captcha Protection Active
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      Captcha is configured in dynamic_config.yml and HTML file exists
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* Implementation Status Warning - Partially Configured */}
-              {!statusData?.implemented && (statusData?.configured || statusData?.configSaved) && (
-                <div className="flex items-center gap-3 p-4 border border-yellow-500/50 bg-yellow-500/10 rounded-lg">
-                  <XCircle className="h-5 w-5 text-yellow-500 flex-shrink-0" />
-                  <div>
-                    <p className="font-medium text-yellow-700 dark:text-yellow-400">
-                      Captcha Partially Configured
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      {!statusData?.configured && 'Captcha not detected in dynamic_config.yml. '}
-                      {!statusData?.captchaHTMLExists && 'Captcha HTML file missing. '}
-                      Restart Traefik and CrowdSec after adding captcha.html to activate protection.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* Not Configured */}
-              {!statusData?.implemented && !statusData?.configured && !statusData?.configSaved && (
-                <div className="flex items-center gap-3 p-4 border border-muted bg-muted/30 rounded-lg">
-                  <XCircle className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-                  <div>
-                    <p className="font-medium">Captcha Not Configured</p>
-                    <p className="text-sm text-muted-foreground">
-                      No captcha configuration detected
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* Detected in dynamic_config.yml */}
-              <div className="flex items-center justify-between p-4 border rounded-lg">
-                <div>
-                  <p className="font-medium">Dynamic Config Status</p>
-                  <p className="text-sm text-muted-foreground">
-                    {statusData?.configured
-                      ? 'Captcha detected in dynamic_config.yml'
-                      : 'Captcha not found in dynamic_config.yml'}
-                  </p>
-                </div>
-                {statusData?.configured ? (
-                  <Badge variant="default" className="bg-green-600">Active</Badge>
-                ) : (
-                  <Badge variant="outline">Not Found</Badge>
-                )}
+              <div className="space-y-2">
+                <label htmlFor="site-key" className="text-sm font-medium">
+                  Site Key (Public)
+                </label>
+                <Input
+                  id="site-key"
+                  placeholder="Enter your site key..."
+                  value={siteKey}
+                  onChange={(e) => setSiteKey(e.target.value)}
+                />
               </div>
-
-              {/* Detected Provider */}
-              {statusData?.detectedProvider && (
-                <div className="flex items-center justify-between p-4 border rounded-lg">
-                  <div>
-                    <p className="font-medium">Detected Provider</p>
-                    <p className="text-sm text-muted-foreground capitalize">
-                      {statusData.detectedProvider} (from dynamic_config.yml)
-                    </p>
-                  </div>
-                  <Badge variant="secondary">{statusData.detectedProvider}</Badge>
-                </div>
-              )}
-
-              {/* Saved Configuration */}
-              {statusData?.configSaved && (
-                <div className="flex items-center justify-between p-4 border rounded-lg">
-                  <div>
-                    <p className="font-medium">Saved Configuration</p>
-                    <p className="text-sm text-muted-foreground">
-                      {statusData.savedProvider && `Provider: ${statusData.savedProvider}`}
-                    </p>
-                  </div>
-                  <Badge variant="outline">Saved</Badge>
-                </div>
-              )}
-
-              {/* HTML File Status */}
-              <div className="flex items-center justify-between p-4 border rounded-lg">
-                <div>
-                  <p className="font-medium">Captcha HTML File</p>
-                  <p className="text-sm text-muted-foreground">
-                    {statusData?.captchaHTMLExists
-                      ? 'captcha.html found at /etc/traefik/conf/'
-                      : 'captcha.html not found - required for captcha to work'}
-                  </p>
-                </div>
-                {statusData?.captchaHTMLExists ? (
-                  <Badge variant="default" className="bg-green-600">Exists</Badge>
-                ) : (
-                  <Badge variant="destructive">Missing</Badge>
-                )}
+              <div className="space-y-2">
+                <label htmlFor="secret-key" className="text-sm font-medium">
+                  Secret Key (Private)
+                </label>
+                <Input
+                  id="secret-key"
+                  type="password"
+                  placeholder="Enter your secret key..."
+                  value={secretKey}
+                  onChange={(e) => setSecretKey(e.target.value)}
+                />
               </div>
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </div>
+        ),
+      },
 
-      {/* Setup Form */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Configure Captcha</CardTitle>
-          <CardDescription>
-            Setup captcha provider credentials for bot protection
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {statusData?.manually_configured && (
-            <Alert className="mb-4">
-              <Info className="h-4 w-4" />
-              <AlertTitle>Existing Configuration Detected</AlertTitle>
-              <AlertDescription>
-                A captcha configuration was found in the Traefik dynamic config. The values below have been pre-populated from your existing setup.
-              </AlertDescription>
-            </Alert>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="provider">
-                Captcha Provider <span className="text-destructive">*</span>
-                {statusData?.manually_configured && (
-                  <span className="ml-2 text-xs text-muted-foreground font-normal">(Pre-populated)</span>
-                )}
-              </Label>
-              <select
-                id="provider"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                value={provider}
-                onChange={(e) => setProvider(e.target.value)}
-              >
-                <option value="recaptcha">Google reCAPTCHA</option>
-                <option value="hcaptcha">hCaptcha</option>
-                <option value="turnstile">Cloudflare Turnstile</option>
-              </select>
-              <p className="text-xs text-muted-foreground">
-                Select your preferred captcha provider
-              </p>
+      // ── Step 3: Review ───────────────────────────────────────────────────────
+      {
+        id: 'review',
+        title: 'Review',
+        description: 'Review what will happen when you apply',
+        content: (
+          <div className="space-y-4">
+            <div className="rounded-lg border p-4 space-y-3">
+              <h4 className="font-medium text-sm">Configuration Summary</h4>
+              <div className="grid gap-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Provider</span>
+                  <span className="font-medium">{selectedProvider?.label}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Site Key</span>
+                  <code className="text-xs">{siteKey.substring(0, 16)}...</code>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Secret Key</span>
+                  <span>••••••••</span>
+                </div>
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="site-key">
-                Site Key <span className="text-destructive">*</span>
-                {statusData?.manually_configured && statusData?.site_key && (
-                  <span className="ml-2 text-xs text-muted-foreground font-normal">(Pre-populated)</span>
-                )}
-              </Label>
-              <Input
-                id="site-key"
-                type="text"
-                placeholder="Your site key (public key)"
-                value={siteKey}
-                onChange={(e) => setSiteKey(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">
-                The public site key from your captcha provider
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="secret-key">
-                Secret Key <span className="text-destructive">*</span>
-                {statusData?.manually_configured && statusData?.secret_key && (
-                  <span className="ml-2 text-xs text-muted-foreground font-normal">(Pre-populated)</span>
-                )}
-              </Label>
-              <Input
-                id="secret-key"
-                type="password"
-                placeholder="Your secret key (private key)"
-                value={secretKey}
-                onChange={(e) => setSecretKey(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">
-                The private secret key from your captcha provider (kept secure)
-              </p>
+            <div className="rounded-lg border p-4 space-y-3">
+              <h4 className="font-medium text-sm">What will happen</h4>
+              <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
+                <li>
+                  A captcha HTML challenge page will be{' '}
+                  <strong className="text-foreground">created</strong> in your Traefik config
+                  directory
+                </li>
+                <li>
+                  Traefik dynamic config will be{' '}
+                  <strong className="text-foreground">updated</strong> with captcha middleware
+                  settings
+                </li>
+                <li>
+                  CrowdSec profiles will be{' '}
+                  <strong className="text-foreground">updated</strong> to include captcha decisions
+                </li>
+                <li>
+                  Traefik container will be{' '}
+                  <strong className="text-foreground">restarted</strong> to load new config
+                </li>
+                <li>
+                  CrowdSec container will be{' '}
+                  <strong className="text-foreground">restarted</strong> to load new profiles
+                </li>
+                <li>
+                  Setup will be <strong className="text-foreground">verified</strong> across all
+                  components
+                </li>
+              </ol>
             </div>
 
             <Button
-              type="submit"
               className="w-full"
-              disabled={setupMutation.isPending}
+              onClick={() => saveMutation.mutate()}
+              disabled={saveMutation.isPending}
             >
-              {setupMutation.isPending ? 'Configuring...' : 'Configure Captcha'}
+              {saveMutation.isPending ? (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Settings className="h-4 w-4 mr-2" />
+                  Save &amp; Continue to Apply
+                </>
+              )}
             </Button>
-          </form>
-        </CardContent>
-      </Card>
-
-      {/* Provider Setup Instructions */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Setup Instructions</CardTitle>
-          <CardDescription>
-            How to obtain captcha credentials from different providers
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <h3 className="font-semibold">Google reCAPTCHA</h3>
-            <ol className="list-decimal list-inside space-y-1 text-sm text-muted-foreground">
-              <li>Visit <a href="https://www.google.com/recaptcha/admin" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">reCAPTCHA Admin Console</a></li>
-              <li>Register a new site</li>
-              <li>Choose reCAPTCHA v2 or v3</li>
-              <li>Add your domain</li>
-              <li>Copy the Site Key and Secret Key</li>
-            </ol>
           </div>
+        ),
+      },
 
-          <div className="space-y-2">
-            <h3 className="font-semibold">hCaptcha</h3>
-            <ol className="list-decimal list-inside space-y-1 text-sm text-muted-foreground">
-              <li>Visit <a href="https://dashboard.hcaptcha.com/signup" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">hCaptcha Dashboard</a></li>
-              <li>Create a new site</li>
-              <li>Add your domain</li>
-              <li>Copy the Site Key and Secret Key</li>
-            </ol>
+      // ── Step 4: Apply ────────────────────────────────────────────────────────
+      {
+        id: 'apply',
+        title: 'Apply',
+        description: 'Applying configuration to your system',
+        content: (
+          <div className="space-y-4">
+            {applySteps.length > 0 ? (
+              <StepProgress
+                steps={applySteps}
+                retryingStep={retryingStep}
+                onRetryStep={handleRetryStep}
+              />
+            ) : (
+              <div className="text-center py-8 space-y-4">
+                <Rocket className="h-12 w-12 mx-auto text-muted-foreground" />
+                <div>
+                  <p className="font-medium">Ready to apply</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    This will write config files and restart containers.
+                  </p>
+                </div>
+                <Button
+                  onClick={() => applyMutation.mutate()}
+                  disabled={applyMutation.isPending}
+                >
+                  {applyMutation.isPending ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                      Applying...
+                    </>
+                  ) : (
+                    <>
+                      <Rocket className="h-4 w-4 mr-2" />
+                      Apply Now
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
           </div>
+        ),
+      },
 
-          <div className="space-y-2">
-            <h3 className="font-semibold">Cloudflare Turnstile</h3>
-            <ol className="list-decimal list-inside space-y-1 text-sm text-muted-foreground">
-              <li>Visit <a href="https://dash.cloudflare.com/?to=/:account/turnstile" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Cloudflare Turnstile</a></li>
-              <li>Create a new site</li>
-              <li>Add your domain</li>
-              <li>Copy the Site Key and Secret Key</li>
-            </ol>
+      // ── Step 5: Verify ───────────────────────────────────────────────────────
+      {
+        id: 'verify',
+        title: 'Verify',
+        description: 'Checking that everything is working',
+        content: (
+          <div className="space-y-4">
+            {statusData ? (
+              <div className="space-y-4">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="flex items-center gap-3 rounded-lg border p-4">
+                    {statusData.configured ? (
+                      <CheckCircle className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                    ) : (
+                      <AlertCircle className="h-5 w-5 text-destructive" />
+                    )}
+                    <div>
+                      <p className="text-sm font-medium">Provider Configured</p>
+                      <p className="text-xs text-muted-foreground">
+                        {statusData.provider ?? 'Not set'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 rounded-lg border p-4">
+                    {statusData.captchaHTMLExists ? (
+                      <CheckCircle className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                    ) : (
+                      <AlertCircle className="h-5 w-5 text-destructive" />
+                    )}
+                    <div>
+                      <p className="text-sm font-medium">HTML Challenge Page</p>
+                      <p className="text-xs text-muted-foreground">
+                        {statusData.captchaHTMLExists ? 'Exists' : 'Missing'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 rounded-lg border p-4">
+                    {statusData.hasHTMLPath ? (
+                      <CheckCircle className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                    ) : (
+                      <AlertCircle className="h-5 w-5 text-destructive" />
+                    )}
+                    <div>
+                      <p className="text-sm font-medium">Traefik Config</p>
+                      <p className="text-xs text-muted-foreground">
+                        {statusData.hasHTMLPath ? 'Configured' : 'Not configured'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 rounded-lg border p-4">
+                    {statusData.implemented ? (
+                      <CheckCircle className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                    ) : (
+                      <AlertCircle className="h-5 w-5 text-destructive" />
+                    )}
+                    <div>
+                      <p className="text-sm font-medium">Fully Implemented</p>
+                      <p className="text-xs text-muted-foreground">
+                        {statusData.implemented ? 'Active' : 'Incomplete'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    void refetchStatus()
+                    void redetect()
+                  }}
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Re-check Status
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <RefreshCw className="h-4 w-4 animate-spin" />
+                Checking status...
+              </div>
+            )}
           </div>
-        </CardContent>
-      </Card>
+        ),
+      },
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      detecting,
+      detectError,
+      detectErr,
+      detection,
+      siteKey,
+      secretKey,
+      provider,
+      selectedProvider,
+      applySteps,
+      statusData,
+      saveMutation.isPending,
+      applyMutation.isPending,
+    ],
+  )
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Captcha Protection"
+        description="Configure captcha challenge pages for CrowdSec decisions"
+        breadcrumbs="Security / Captcha"
+      />
+
+      <FeatureWizard
+        title="Captcha Setup"
+        icon={<ScanFace className="h-6 w-6" />}
+        steps={steps}
+        currentStep={currentStep}
+        onStepChange={setCurrentStep}
+        isProcessing={isProcessing}
+        completedSteps={completedSteps}
+        errorSteps={errorSteps}
+      />
     </div>
   )
 }

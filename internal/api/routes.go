@@ -3,10 +3,13 @@ package api
 import (
 	"crowdsec-manager/internal/api/handlers"
 	"crowdsec-manager/internal/backup"
+	"crowdsec-manager/internal/cache"
 	"crowdsec-manager/internal/config"
+	"crowdsec-manager/internal/configvalidator"
 	"crowdsec-manager/internal/cron"
 	"crowdsec-manager/internal/database"
 	"crowdsec-manager/internal/docker"
+	"crowdsec-manager/internal/messaging"
 
 	"github.com/gin-gonic/gin"
 )
@@ -44,6 +47,7 @@ func RegisterWhitelistRoutes(router *gin.RouterGroup, dockerClient *docker.Clien
 		whitelist.POST("/crowdsec", handlers.AddToCrowdSecWhitelist(dockerClient, cfg))
 		whitelist.POST("/traefik", handlers.AddToTraefikWhitelist(dockerClient, cfg))
 		whitelist.POST("/comprehensive", handlers.SetupComprehensiveWhitelist(dockerClient, cfg))
+		whitelist.DELETE("/remove", handlers.RemoveFromWhitelist(dockerClient, cfg))
 	}
 }
 
@@ -77,6 +81,9 @@ func RegisterCaptchaRoutes(router *gin.RouterGroup, dockerClient *docker.Client,
 	{
 		captcha.POST("/setup", handlers.SetupCaptcha(dockerClient, cfg))
 		captcha.GET("/status", handlers.GetCaptchaStatus(dockerClient, db, cfg))
+		captcha.GET("/detect", handlers.DetectCaptchaConfig(dockerClient, db, cfg))
+		captcha.POST("/config", handlers.SaveCaptchaConfig(db))
+		captcha.POST("/apply", handlers.ApplyCaptchaConfig(dockerClient, db, cfg))
 	}
 }
 
@@ -89,6 +96,7 @@ func RegisterLogRoutes(router *gin.RouterGroup, dockerClient *docker.Client, db 
 		logs.GET("/traefik/advanced", handlers.AnalyzeTraefikLogsAdvanced(dockerClient, cfg))
 		logs.GET("/:service", handlers.GetServiceLogs(dockerClient))
 		logs.GET("/stream/:service", handlers.StreamLogs(dockerClient))
+		logs.GET("/structured/:service", handlers.GetStructuredLogs(dockerClient, cfg))
 	}
 }
 
@@ -116,7 +124,11 @@ func RegisterUpdateRoutes(router *gin.RouterGroup, dockerClient *docker.Client, 
 }
 
 // RegisterServicesRoutes configures endpoints for Docker service management, CrowdSec operations, and Traefik config
-func RegisterServicesRoutes(router *gin.RouterGroup, dockerClient *docker.Client, db *database.Database, cfg *config.Config) {
+func RegisterServicesRoutes(router *gin.RouterGroup, dockerClient *docker.Client, db *database.Database, cfg *config.Config, ttlCache ...*cache.TTLCache) {
+	var c *cache.TTLCache
+	if len(ttlCache) > 0 {
+		c = ttlCache[0]
+	}
 	services := router.Group("/services")
 	{
 		services.GET("/verify", handlers.VerifyServices(dockerClient, cfg))
@@ -131,14 +143,19 @@ func RegisterServicesRoutes(router *gin.RouterGroup, dockerClient *docker.Client
 		crowdsec.GET("/bouncers", handlers.GetBouncers(dockerClient, cfg))
 		crowdsec.POST("/bouncers", handlers.AddBouncer(dockerClient, cfg))
 		crowdsec.DELETE("/bouncers/:name", handlers.DeleteBouncer(dockerClient, cfg))
-		crowdsec.GET("/decisions", handlers.GetDecisions(dockerClient, cfg))
+		crowdsec.GET("/decisions", handlers.GetDecisions(dockerClient, cfg, c))
 		crowdsec.POST("/decisions", handlers.AddDecision(dockerClient, cfg))
 		crowdsec.DELETE("/decisions", handlers.DeleteDecision(dockerClient, cfg))
 		crowdsec.POST("/decisions/import", handlers.ImportDecisions(dockerClient, cfg))
 		crowdsec.GET("/decisions/analysis", handlers.GetDecisionsAnalysis(dockerClient, cfg))
-		crowdsec.GET("/alerts/analysis", handlers.GetAlertsAnalysis(dockerClient, cfg))
-		crowdsec.GET("/metrics", handlers.GetMetrics(dockerClient, cfg))
-		crowdsec.POST("/enroll", handlers.EnrollCrowdSec(dockerClient, cfg))
+		crowdsec.GET("/alerts/analysis", handlers.GetAlertsAnalysis(dockerClient, cfg, c))
+		crowdsec.GET("/alerts/:id", handlers.InspectAlert(dockerClient, cfg))
+		crowdsec.DELETE("/alerts/:id", handlers.DeleteAlert(dockerClient, cfg))
+		crowdsec.GET("/metrics", handlers.GetMetrics(dockerClient, cfg, c))
+		crowdsec.POST("/enroll", handlers.EnrollCrowdSec(dockerClient, db, cfg))
+		crowdsec.POST("/enroll/finalize", handlers.FinalizeCrowdSecEnrollment(dockerClient, cfg))
+		crowdsec.GET("/enroll/preferences", handlers.GetCrowdSecEnrollmentPreferences(db))
+		crowdsec.PUT("/enroll/preferences", handlers.UpdateCrowdSecEnrollmentPreferences(db))
 		crowdsec.GET("/status", handlers.GetCrowdSecEnrollmentStatus(dockerClient, cfg))
 	}
 
@@ -153,14 +170,7 @@ func RegisterServicesRoutes(router *gin.RouterGroup, dockerClient *docker.Client
 	// Configuration/Settings
 	config := router.Group("/config")
 	{
-		config.GET("/settings", func(c *gin.Context) {
-			settings, err := db.GetSettings()
-			if err != nil {
-				c.JSON(500, gin.H{"error": err.Error()})
-				return
-			}
-			c.JSON(200, gin.H{"success": true, "data": settings})
-		})
+		config.GET("/settings", handlers.GetSettings(db))
 		config.PUT("/settings", handlers.UpdateSettings(db))
 		config.GET("/files/:container/:fileType", handlers.GetFileContent(dockerClient, db))
 	}
@@ -172,6 +182,10 @@ func RegisterNotificationRoutes(router *gin.RouterGroup, dockerClient *docker.Cl
 	{
 		notifications.GET("/discord", handlers.GetDiscordConfig(db, cfg, dockerClient))
 		notifications.POST("/discord", handlers.UpdateDiscordConfig(db, cfg, dockerClient))
+		notifications.GET("/discord/preview", handlers.PreviewDiscordConfig(cfg, dockerClient))
+		notifications.GET("/discord/detect", handlers.DetectDiscordConfig(dockerClient, db, cfg))
+		notifications.POST("/discord/config", handlers.SaveDiscordConfig(db))
+		notifications.POST("/discord/apply", handlers.ApplyDiscordConfig(dockerClient, db, cfg))
 	}
 }
 
@@ -192,4 +206,64 @@ func RegisterProfileRoutes(router *gin.RouterGroup, db *database.Database, cfg *
 		profiles.GET("", handlers.GetProfiles(cfg, dockerClient))
 		profiles.POST("", handlers.UpdateProfiles(db, cfg, dockerClient))
 	}
+}
+
+// RegisterHostRoutes configures endpoints for listing and managing Docker hosts
+func RegisterHostRoutes(router *gin.RouterGroup, multiHost *docker.MultiHostClient) {
+	hosts := router.Group("/hosts")
+	{
+		hosts.GET("/list", handlers.ListDockerHosts(multiHost))
+	}
+}
+
+// RegisterTerminalRoutes configures WebSocket endpoint for interactive container terminals
+func RegisterTerminalRoutes(router *gin.RouterGroup, dockerClient *docker.Client) {
+	router.GET("/terminal/:container", handlers.TerminalSession(dockerClient))
+}
+
+// RegisterConfigValidationRoutes configures endpoints for config drift detection and recovery
+func RegisterConfigValidationRoutes(router *gin.RouterGroup, validator *configvalidator.Validator) {
+	cfgValidation := router.Group("/config/validation")
+	{
+		cfgValidation.GET("/validate", handlers.ValidateConfigs(validator))
+		cfgValidation.GET("/snapshots", handlers.GetConfigSnapshots(validator))
+		cfgValidation.POST("/snapshot", handlers.SnapshotAllConfigs(validator))
+		cfgValidation.POST("/restore/:type", handlers.RestoreConfig(validator))
+		cfgValidation.POST("/accept/:type", handlers.AcceptCurrentConfig(validator))
+		cfgValidation.DELETE("/snapshot/:type", handlers.DeleteConfigSnapshot(validator))
+	}
+}
+
+// RegisterHubRoutes configures endpoints for browsing, installing, removing, and upgrading CrowdSec hub items
+func RegisterHubRoutes(router *gin.RouterGroup, dockerClient *docker.Client, db *database.Database, cfg *config.Config) {
+	hub := router.Group("/hub")
+	{
+		hub.GET("/list", handlers.ListHubItems(dockerClient, cfg))
+		hub.POST("/upgrade", handlers.UpgradeAllHub(dockerClient, db, cfg))
+		hub.GET("/categories", handlers.ListHubCategories())
+		hub.GET("/:category/items", handlers.ListHubItemsByCategory(dockerClient, cfg))
+		hub.POST("/:category/install", handlers.InstallHubItemByCategory(dockerClient, db, cfg))
+		hub.POST("/:category/remove", handlers.RemoveHubItemByCategory(dockerClient, db, cfg))
+		hub.POST("/:category/manual-apply", handlers.ManualApplyHubYAML(dockerClient, db, cfg))
+		hub.GET("/preferences", handlers.GetHubPreferences(db))
+		hub.GET("/preferences/:category", handlers.GetHubPreferenceByCategory(db))
+		hub.PUT("/preferences/:category", handlers.UpdateHubPreference(db))
+		hub.GET("/history", handlers.ListHubOperationHistory(db))
+		hub.GET("/history/:id", handlers.GetHubOperationByID(db))
+	}
+}
+
+// RegisterSimulationRoutes configures endpoints for managing CrowdSec simulation mode
+func RegisterSimulationRoutes(router *gin.RouterGroup, dockerClient *docker.Client, cfg *config.Config) {
+	simulation := router.Group("/simulation")
+	{
+		simulation.GET("/status", handlers.GetSimulationStatus(dockerClient, cfg))
+		simulation.POST("/toggle", handlers.ToggleSimulation(dockerClient, cfg))
+	}
+}
+
+// RegisterEventRoutes configures WebSocket and SSE endpoints for real-time event streaming
+func RegisterEventRoutes(router *gin.RouterGroup, hub *messaging.Hub) {
+	router.GET("/events/ws", handlers.EventsWebSocket(hub))
+	router.GET("/events/sse", handlers.EventsSSE(hub))
 }

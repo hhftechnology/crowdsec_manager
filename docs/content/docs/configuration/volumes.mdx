@@ -1,45 +1,23 @@
 ---
 title: Volumes & Persistence
-description: Understanding data persistence and volume mappings
+description: Required and optional volume mappings
 ---
 
 # Volumes & Persistence
 
-Proper volume mapping is critical for data persistence and functionality.
+The minimum deployment relies on five volume mappings.
 
-## Required Volumes
+## Required volumes
 
-### Docker Socket
-- **Host Path**: `/var/run/docker.sock`
-- **Container Path**: `/var/run/docker.sock`
-- **Purpose**: Allows the manager to control Docker containers (start, stop, update).
+| Host path | Container path | Purpose |
+| :--- | :--- | :--- |
+| `/var/run/docker.sock` | `/var/run/docker.sock` | Docker API access for service actions. |
+| `/root/config` | `/app/config` | Runtime configuration files used by manager workflows. |
+| `/root/docker-compose.yml` | `/app/docker-compose.yml` | Compose file used for stack operations. |
+| `./backups` | `/app/backups` | Backup artifacts. |
+| `./data` | `/app/data` | Persistent settings database and app data. |
 
-### Configuration Directory
-- **Host Path**: `/root/config` (example)
-- **Container Path**: `/app/config`
-- **Purpose**: Stores application configuration files.
-
-### Docker Compose File
-- **Host Path**: `/root/docker-compose.yml` (example)
-- **Container Path**: `/app/docker-compose.yml`
-- **Purpose**: Allows the manager to read and update the stack configuration.
-
-### Data Directory
-- **Host Path**: `./data`
-- **Container Path**: `/app/data`
-- **Purpose**: Persists the SQLite database (`settings.db`). **Critical for saving settings.**
-
-### Backups
-- **Host Path**: `./backups`
-- **Container Path**: `/app/backups`
-- **Purpose**: Stores generated system backups.
-
-### Logs (Optional but Recommended)
-- **Host Path**: `/root/config/traefik/logs`
-- **Container Path**: `/var/log/traefik`
-- **Purpose**: Allows the manager to read and analyze Traefik logs.
-
-## Example Configuration
+## Minimum example
 
 ```yaml
 volumes:
@@ -48,5 +26,9 @@ volumes:
   - /root/docker-compose.yml:/app/docker-compose.yml
   - ./backups:/app/backups
   - ./data:/app/data
-  - /root/config/traefik/logs:/var/log/traefik
 ```
+
+## Optional volumes
+
+- Traefik log path mapping, if you want in-app log analysis from host log files.
+- Custom config mounts, only when your host paths differ from defaults.

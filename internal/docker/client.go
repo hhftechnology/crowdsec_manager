@@ -1,11 +1,13 @@
 package docker
 
 import (
+	"archive/tar"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -13,7 +15,9 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/image"
+	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
+	"github.com/docker/docker/errdefs"
 	"github.com/docker/docker/pkg/stdcopy"
 )
 
@@ -35,6 +39,16 @@ func NewClient() (*Client, error) {
 		cli: cli,
 		ctx: context.Background(),
 	}, nil
+}
+
+// WithContext returns a shallow copy of the Client using the given context.
+// Use this to pass request-scoped contexts so Docker operations are cancelled
+// when the HTTP request is cancelled.
+func (c *Client) WithContext(ctx context.Context) *Client {
+	return &Client{
+		cli: c.cli,
+		ctx: ctx,
+	}
 }
 
 // Close gracefully closes the Docker client connection
@@ -220,6 +234,27 @@ func (c *Client) GetContainerLogs(containerName string, tail string) (string, er
 	return stripControlCharacters(result.String()), nil
 }
 
+// FollowContainerLogs opens a streaming log reader using Docker's native Follow
+// mode. The caller is responsible for closing the returned ReadCloser.
+// If since is non-empty, only logs after that timestamp are returned.
+func (c *Client) FollowContainerLogs(containerName, since string) (io.ReadCloser, error) {
+	containerID, err := c.GetContainerID(containerName)
+	if err != nil {
+		return nil, err
+	}
+
+	options := container.LogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+		Follow:     true,
+		Timestamps: true,
+		Since:      since,
+		Tail:       "50",
+	}
+
+	return c.cli.ContainerLogs(c.ctx, containerID, options)
+}
+
 // RestartContainer restarts a container with default 30-second timeout
 func (c *Client) RestartContainer(name string) error {
 	return c.RestartContainerWithTimeout(name, 30)
@@ -290,6 +325,133 @@ func (c *Client) CopyToContainer(containerName, dstPath string, content io.Reade
 	return c.cli.CopyToContainer(c.ctx, containerID, dstPath, content, container.CopyToContainerOptions{})
 }
 
+// WriteFileToContainer writes content to a file inside a container using the
+// Docker copy API. This avoids shell interpolation entirely, preventing
+// injection attacks from user-supplied data.
+func (c *Client) WriteFileToContainer(containerName, filePath string, content []byte) error {
+	containerID, err := c.GetContainerID(containerName)
+	if err != nil {
+		return err
+	}
+
+	// Build a tar archive containing a single file
+	dir := filepath.Dir(filePath)
+	name := filepath.Base(filePath)
+
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+	if err := tw.WriteHeader(&tar.Header{
+		Name: name,
+		Mode: 0644,
+		Size: int64(len(content)),
+	}); err != nil {
+		return fmt.Errorf("failed to write tar header: %w", err)
+	}
+	if _, err := tw.Write(content); err != nil {
+		return fmt.Errorf("failed to write tar body: %w", err)
+	}
+	if err := tw.Close(); err != nil {
+		return fmt.Errorf("failed to close tar: %w", err)
+	}
+
+	return c.cli.CopyToContainer(c.ctx, containerID, dir, &buf, container.CopyToContainerOptions{
+		AllowOverwriteDirWithFile: true,
+	})
+}
+
+// ReadFileFromContainer reads a file from inside a container and returns its
+// content as a string. Uses the Docker copy API (no shell needed).
+func (c *Client) ReadFileFromContainer(containerName, filePath string) (string, error) {
+	containerID, err := c.GetContainerID(containerName)
+	if err != nil {
+		return "", err
+	}
+
+	reader, _, err := c.cli.CopyFromContainer(c.ctx, containerID, filePath)
+	if err != nil {
+		return "", fmt.Errorf("failed to copy from container: %w", err)
+	}
+	defer reader.Close()
+
+	tr := tar.NewReader(reader)
+	if _, err := tr.Next(); err != nil {
+		return "", fmt.Errorf("failed to read tar entry: %w", err)
+	}
+	data, err := io.ReadAll(tr)
+	if err != nil {
+		return "", fmt.Errorf("failed to read file content: %w", err)
+	}
+	return string(data), nil
+}
+
+// AppendLineToFileInContainer reads a file from a container, appends a line
+// after the last list item in the block started by `afterLine`, and writes it
+// back. Uses the Docker copy API so no shell interpolation occurs.
+//
+// For YAML list blocks (e.g. sourceRange:), the new entry is inserted after the
+// last existing "- " item in the block so that indentation stays consistent.
+func (c *Client) AppendLineToFileInContainer(containerName, filePath, afterLine, newLine string) error {
+	content, err := c.ReadFileFromContainer(containerName, filePath)
+	if err != nil {
+		return fmt.Errorf("failed to read file: %w", err)
+	}
+
+	lines := strings.Split(content, "\n")
+
+	// Find the index of the section header.
+	sectionIdx := -1
+	for i, line := range lines {
+		if strings.Contains(line, afterLine) {
+			sectionIdx = i
+			break
+		}
+	}
+	if sectionIdx == -1 {
+		return fmt.Errorf("pattern %q not found in %s", afterLine, filePath)
+	}
+
+	// Scan forward to find the last list item ("- ") in this block.
+	// A line that is non-empty, not a list item, and has less or equal
+	// indentation than the section header signals the end of the block.
+	// The indentation of the first found list item is captured so the new
+	// entry can match it exactly, regardless of what the caller passes.
+	sectionIndent := len(lines[sectionIdx]) - len(strings.TrimLeft(lines[sectionIdx], " \t"))
+	lastListIdx := sectionIdx // insert right after header if no items found
+	detectedIndent := ""
+	for i := sectionIdx + 1; i < len(lines); i++ {
+		trimmed := strings.TrimLeft(lines[i], " \t")
+		if trimmed == "" {
+			continue
+		}
+		lineIndent := len(lines[i]) - len(trimmed)
+		if lineIndent <= sectionIndent {
+			// Left the block.
+			break
+		}
+		if strings.HasPrefix(trimmed, "- ") || trimmed == "-" {
+			lastListIdx = i
+			if detectedIndent == "" {
+				detectedIndent = lines[i][:lineIndent]
+			}
+		}
+	}
+
+	// Apply detected indentation so the new entry always matches existing items.
+	// If the block has no existing items, use newLine verbatim.
+	insertLine := newLine
+	if detectedIndent != "" {
+		insertLine = detectedIndent + strings.TrimLeft(newLine, " \t")
+	}
+
+	// Insert after the last list item (or after the header if none exist).
+	result := make([]string, 0, len(lines)+1)
+	result = append(result, lines[:lastListIdx+1]...)
+	result = append(result, insertLine)
+	result = append(result, lines[lastListIdx+1:]...)
+
+	return c.WriteFileToContainer(containerName, filePath, []byte(strings.Join(result, "\n")))
+}
+
 // GetContainerStats gets container statistics
 func (c *Client) GetContainerStats(name string) (*container.StatsResponse, error) {
 	containerID, err := c.GetContainerID(name)
@@ -345,8 +507,7 @@ func (c *Client) FileExists(containerName, path string) (bool, error) {
 
 	_, _, err = c.cli.CopyFromContainer(c.ctx, containerID, path)
 	if err != nil {
-		if strings.Contains(err.Error(), "No such container:path") ||
-			strings.Contains(err.Error(), "not found") {
+		if errdefs.IsNotFound(err) {
 			return false, nil
 		}
 		return false, err
@@ -446,12 +607,20 @@ func (c *Client) RecreateContainer(name string) error {
 		return fmt.Errorf("failed to remove container: %w", err)
 	}
 
+	// Preserve network configuration so the container re-attaches to named networks
+	var networkingConfig *network.NetworkingConfig
+	if inspect.NetworkSettings != nil && len(inspect.NetworkSettings.Networks) > 0 {
+		networkingConfig = &network.NetworkingConfig{
+			EndpointsConfig: inspect.NetworkSettings.Networks,
+		}
+	}
+
 	// Create new container with same configuration but new image
 	resp, err := c.cli.ContainerCreate(
 		c.ctx,
 		inspect.Config,
 		inspect.HostConfig,
-		nil,
+		networkingConfig,
 		nil,
 		name,
 	)

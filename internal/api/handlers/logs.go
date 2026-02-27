@@ -2,9 +2,8 @@ package handlers
 
 import (
 	"fmt"
+	"io"
 	"net/http"
-	"regexp"
-	"sort"
 	"strings"
 	"time"
 
@@ -25,6 +24,7 @@ import (
 // GetCrowdSecLogs retrieves CrowdSec logs
 func GetCrowdSecLogs(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		dockerClient = resolveDockerClient(c, dockerClient)
 		tail := c.DefaultQuery("tail", "100")
 		logger.Info("Getting CrowdSec logs", "tail", tail)
 
@@ -47,6 +47,7 @@ func GetCrowdSecLogs(dockerClient *docker.Client, cfg *config.Config) gin.Handle
 // GetTraefikLogs retrieves Traefik logs from the access log file
 func GetTraefikLogs(dockerClient *docker.Client, db *database.Database, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		dockerClient = resolveDockerClient(c, dockerClient)
 		tail := c.DefaultQuery("tail", "100")
 		logType := c.DefaultQuery("type", "access") // access or error
 		logger.Info("Getting Traefik logs", "tail", tail, "type", logType)
@@ -84,6 +85,7 @@ func GetTraefikLogs(dockerClient *docker.Client, db *database.Database, cfg *con
 // AnalyzeTraefikLogsAdvanced performs advanced analysis of Traefik logs
 func AnalyzeTraefikLogsAdvanced(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		dockerClient = resolveDockerClient(c, dockerClient)
 		tail := c.DefaultQuery("tail", "1000")
 		logger.Info("Analyzing Traefik logs", "tail", tail)
 
@@ -109,6 +111,7 @@ func AnalyzeTraefikLogsAdvanced(dockerClient *docker.Client, cfg *config.Config)
 // GetServiceLogs gets logs for any service
 func GetServiceLogs(dockerClient *docker.Client) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		dockerClient = resolveDockerClient(c, dockerClient)
 		service := c.Param("service")
 		tail := c.DefaultQuery("tail", "100")
 		logger.Info("Getting service logs", "service", service, "tail", tail)
@@ -129,7 +132,7 @@ func GetServiceLogs(dockerClient *docker.Client) gin.HandlerFunc {
 	}
 }
 
-// StreamLogs streams logs via WebSocket
+// StreamLogs streams logs via WebSocket using Docker's native Follow mode
 func StreamLogs(dockerClient *docker.Client) gin.HandlerFunc {
 	var upgrader = websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool {
@@ -140,6 +143,7 @@ func StreamLogs(dockerClient *docker.Client) gin.HandlerFunc {
 	}
 
 	return func(c *gin.Context) {
+		dockerClient = resolveDockerClient(c, dockerClient)
 		service := c.Param("service")
 		logger.Info("Streaming logs", "service", service)
 
@@ -157,19 +161,10 @@ func StreamLogs(dockerClient *docker.Client) gin.HandlerFunc {
 			return nil
 		})
 
-		// Start ping ticker
 		pingTicker := time.NewTicker(30 * time.Second)
 		defer pingTicker.Stop()
 
-		// Stream logs in real-time
-		logTicker := time.NewTicker(500 * time.Millisecond)
-		defer logTicker.Stop()
-
 		done := make(chan struct{})
-
-		// Track last sent log lines to avoid sending duplicates
-		var lastSentHash string
-		lastLogLines := make([]string, 0)
 
 		// Read messages from client (to detect disconnection)
 		go func() {
@@ -183,6 +178,45 @@ func StreamLogs(dockerClient *docker.Client) gin.HandlerFunc {
 			}
 		}()
 
+		// Start Docker follow stream
+		since := time.Now().Add(-5 * time.Minute).Format(time.RFC3339)
+		logStream, err := dockerClient.FollowContainerLogs(service, since)
+		if err != nil {
+			ws.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("Error starting log stream: %v", err)))
+			return
+		}
+		defer logStream.Close()
+
+		// Stream log lines from Docker to WebSocket in a goroutine
+		logLines := make(chan string, 64)
+		logErr := make(chan error, 1)
+
+		go func() {
+			defer close(logLines)
+			// Docker multiplexed stream: 8-byte header + payload per frame.
+			// Header: [type(1)][0][0][0][size(4 big-endian)]
+			header := make([]byte, 8)
+			for {
+				if _, err := io.ReadFull(logStream, header); err != nil {
+					logErr <- err
+					return
+				}
+				size := int(header[4])<<24 | int(header[5])<<16 | int(header[6])<<8 | int(header[7])
+				if size <= 0 {
+					continue
+				}
+				payload := make([]byte, size)
+				if _, err := io.ReadFull(logStream, payload); err != nil {
+					logErr <- err
+					return
+				}
+				line := strings.TrimRight(string(payload), "\r\n")
+				if line != "" {
+					logLines <- line
+				}
+			}
+		}()
+
 		for {
 			select {
 			case <-done:
@@ -192,173 +226,64 @@ func StreamLogs(dockerClient *docker.Client) gin.HandlerFunc {
 					logger.Debug("WebSocket ping error", "error", err)
 					return
 				}
-			case <-logTicker.C:
-				// Check if container is running before attempting to get logs
-				isRunning, err := dockerClient.IsContainerRunning(service)
-				if err != nil {
-					// Only send error once per unique error
-					errorMsg := fmt.Sprintf("Error checking container status: %v", err)
-					if lastSentHash != errorMsg {
-						ws.WriteMessage(websocket.TextMessage, []byte(errorMsg))
-						lastSentHash = errorMsg
-					}
-					continue
-				}
-
-				if !isRunning {
-					// Only send status message once
-					statusMsg := fmt.Sprintf("Container '%s' is not running (restarting or stopped)", service)
-					if lastSentHash != statusMsg {
-						ws.WriteMessage(websocket.TextMessage, []byte(statusMsg))
-						lastSentHash = statusMsg
-					}
-					continue
-				}
-
-				logs, err := dockerClient.GetContainerLogs(service, "100")
-				if err != nil {
-					errorMsg := fmt.Sprintf("Error fetching logs: %v", err)
-					if lastSentHash != errorMsg {
-						ws.WriteMessage(websocket.TextMessage, []byte(errorMsg))
-						lastSentHash = errorMsg
-					}
-					continue
-				}
-
-				// Clean the logs
-				logs = strings.TrimSpace(logs)
-				if logs == "" {
-					continue // Skip empty logs
-				}
-
-				// Split logs into lines
-				currentLines := strings.Split(logs, "\n")
-				if len(currentLines) == 0 {
-					continue
-				}
-
-				// Calculate hash of last few lines to detect if content changed
-				var currentHash string
-				if len(currentLines) > 0 {
-					// Use last 10 lines for hash comparison
-					lastLines := currentLines
-					if len(lastLines) > 10 {
-						lastLines = lastLines[len(lastLines)-10:]
-					}
-					currentHash = strings.Join(lastLines, "\n")
-				}
-
-				// Only send new lines if content has changed
-				if currentHash != lastSentHash && currentHash != "" {
-					// Find new lines that weren't in the previous batch
-					var newLines []string
-					if len(lastLogLines) == 0 {
-						// First batch, send all lines
-						newLines = currentLines
-					} else {
-						// Find lines that are new compared to last batch
-						lastLineMap := make(map[string]bool)
-						for _, line := range lastLogLines {
-							lastLineMap[line] = true
+			case line, ok := <-logLines:
+				if !ok {
+					// Stream ended; check for error
+					select {
+					case streamErr := <-logErr:
+						if streamErr != nil && streamErr != io.EOF {
+							ws.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("Log stream ended: %v", streamErr)))
 						}
-						for _, line := range currentLines {
-							if !lastLineMap[line] {
-								newLines = append(newLines, line)
-							}
-						}
+					default:
 					}
-
-					// Only send if there are actual new lines
-					if len(newLines) > 0 {
-						newContent := strings.Join(newLines, "\n")
-						if err := ws.WriteMessage(websocket.TextMessage, []byte(newContent)); err != nil {
-							logger.Debug("WebSocket write error", "error", err)
-							return
-						}
-						lastSentHash = currentHash
-						lastLogLines = currentLines
-						// Keep only last 50 lines to avoid memory growth
-						if len(lastLogLines) > 50 {
-							lastLogLines = lastLogLines[len(lastLogLines)-50:]
-						}
-					}
+					return
+				}
+				if err := ws.WriteMessage(websocket.TextMessage, []byte(line)); err != nil {
+					logger.Debug("WebSocket write error", "error", err)
+					return
 				}
 			}
 		}
 	}
 }
 
-// analyzeLogs performs log analysis and returns statistics
-func analyzeLogs(logs string) models.LogStats {
-	lines := strings.Split(logs, "\n")
+// GetStructuredLogs returns parsed, structured log entries for a container
+func GetStructuredLogs(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		dockerClient = resolveDockerClient(c, dockerClient)
+		service := c.Param("service")
+		tail := c.DefaultQuery("tail", "200")
+		level := c.DefaultQuery("level", "")
 
-	stats := models.LogStats{
-		TotalLines:   len(lines),
-		TopIPs:       []models.IPCount{},
-		StatusCodes:  make(map[string]int),
-		HTTPMethods:  make(map[string]int),
-		ErrorEntries: []models.LogEntry{},
-	}
+		logger.Info("Getting structured logs", "service", service, "tail", tail)
 
-	ipMap := make(map[string]int)
-	ipRegex := regexp.MustCompile(`\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b`)
-	statusRegex := regexp.MustCompile(`\s(2\d{2}|3\d{2}|4\d{2}|5\d{2})\s`)
-	methodRegex := regexp.MustCompile(`"(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)`)
-
-	for _, line := range lines {
-		if line == "" {
-			continue
-		}
-
-		// Extract IPs
-		if ips := ipRegex.FindAllString(line, -1); len(ips) > 0 {
-			for _, ip := range ips {
-				ipMap[ip]++
-			}
-		}
-
-		// Extract status codes
-		if matches := statusRegex.FindStringSubmatch(line); len(matches) > 1 {
-			stats.StatusCodes[matches[1]]++
-		}
-
-		// Extract HTTP methods
-		if matches := methodRegex.FindStringSubmatch(line); len(matches) > 1 {
-			stats.HTTPMethods[matches[1]]++
-		}
-
-		// Collect error entries
-		if strings.Contains(strings.ToLower(line), "error") ||
-			strings.Contains(line, "5") && statusRegex.MatchString(line) {
-			stats.ErrorEntries = append(stats.ErrorEntries, models.LogEntry{
-				Timestamp: time.Now(),
-				Level:     "error",
-				Service:   "traefik",
-				Message:   line,
+		entries, err := dockerClient.GetStructuredLogs(service, tail, service)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to get structured logs: %v", err),
 			})
+			return
 		}
-	}
 
-	// Convert IP map to sorted slice
-	for ip, count := range ipMap {
-		stats.TopIPs = append(stats.TopIPs, models.IPCount{
-			IP:    ip,
-			Count: count,
+		// Filter by level if specified
+		if level != "" {
+			filtered := make([]docker.StructuredLogEntry, 0)
+			for _, e := range entries {
+				if e.Level == level {
+					filtered = append(filtered, e)
+				}
+			}
+			entries = filtered
+		}
+
+		c.JSON(http.StatusOK, models.Response{
+			Success: true,
+			Data: gin.H{
+				"entries": entries,
+				"count":   len(entries),
+				"service": service,
+			},
 		})
 	}
-	sort.Slice(stats.TopIPs, func(i, j int) bool {
-		return stats.TopIPs[i].Count > stats.TopIPs[j].Count
-	})
-
-	// Keep only top 10 IPs
-	if len(stats.TopIPs) > 10 {
-		stats.TopIPs = stats.TopIPs[:10]
-	}
-
-	// Keep only last 20 error entries
-	if len(stats.ErrorEntries) > 20 {
-		stats.ErrorEntries = stats.ErrorEntries[len(stats.ErrorEntries)-20:]
-	}
-
-	return stats
 }

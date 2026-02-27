@@ -1,13 +1,16 @@
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import api from '@/lib/api'
+import { EmptyState, PageHeader, QueryError } from '@/components/common'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { CheckCircle2, XCircle, Activity, Shield, Globe } from 'lucide-react'
+import { CheckCircle2, XCircle, Activity, Shield, Globe, Container } from 'lucide-react'
 
 export default function Health() {
-  const { data: diagnostics, isLoading } = useQuery({
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const { data: diagnostics, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['diagnostics'],
     queryFn: async () => {
       const response = await api.health.completeDiagnostics()
@@ -18,15 +21,27 @@ export default function Health() {
 
   const bouncers = diagnostics?.bouncers ?? []
   const allRunning = diagnostics?.health?.allRunning || false
+  useEffect(() => {
+    if (diagnostics) {
+      setLastUpdated(new Date())
+    }
+  }, [diagnostics])
+
+  const lastUpdatedLabel = useMemo(() => {
+    if (!lastUpdated) return 'Not refreshed yet'
+    return `Updated ${lastUpdated.toLocaleTimeString()}`
+  }, [lastUpdated])
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Health & Diagnostics</h1>
-        <p className="text-muted-foreground mt-2">
-          Complete system diagnostics and health monitoring
-        </p>
-      </div>
+      <PageHeader
+        title="Health & Diagnostics"
+        description="Complete system diagnostics and health monitoring"
+        breadcrumbs="System / Health"
+        actions={<span className="text-xs text-muted-foreground">{lastUpdatedLabel}</span>}
+      />
+
+      {isError && <QueryError error={error} onRetry={refetch} />}
 
       {/* System Status Overview */}
       <Card>
@@ -35,9 +50,9 @@ export default function Health() {
             {isLoading ? (
               <Activity className="h-5 w-5 animate-pulse" />
             ) : allRunning ? (
-              <CheckCircle2 className="h-5 w-5 text-green-500" />
+              <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
             ) : (
-              <XCircle className="h-5 w-5 text-red-500" />
+              <XCircle className="h-5 w-5 text-destructive" />
             )}
             System Status
           </CardTitle>
@@ -91,7 +106,10 @@ export default function Health() {
         <TabsContent value="containers">
           <Card>
             <CardHeader>
-              <CardTitle>Container Status</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle>Container Status</CardTitle>
+                <Badge variant="secondary">{diagnostics?.health?.containers?.length || 0}</Badge>
+              </div>
               <CardDescription>
                 Status of all Docker containers in the stack
               </CardDescription>
@@ -102,7 +120,7 @@ export default function Health() {
                   <div className="h-16 bg-muted animate-pulse rounded" />
                   <div className="h-16 bg-muted animate-pulse rounded" />
                 </div>
-              ) : (
+              ) : diagnostics?.health?.containers?.length ? (
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -128,15 +146,21 @@ export default function Health() {
                         </TableCell>
                         <TableCell>
                           {container.running ? (
-                            <CheckCircle2 className="h-4 w-4 text-green-500" />
+                            <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                           ) : (
-                            <XCircle className="h-4 w-4 text-red-500" />
+                            <XCircle className="h-4 w-4 text-destructive" />
                           )}
                         </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
+              ) : (
+                <EmptyState
+                  icon={Container}
+                  title="No containers found"
+                  description="The stack did not report any containers."
+                />
               )}
             </CardContent>
           </Card>
@@ -146,7 +170,10 @@ export default function Health() {
         <TabsContent value="bouncers">
           <Card>
             <CardHeader>
-              <CardTitle>Connected Bouncers</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle>Connected Bouncers</CardTitle>
+                <Badge variant="secondary">{bouncers.length}</Badge>
+              </div>
               <CardDescription>
                 Active enforcement agents connected to CrowdSec
               </CardDescription>
@@ -179,9 +206,11 @@ export default function Health() {
                   </TableBody>
                 </Table>
               ) : (
-                <p className="text-muted-foreground text-center py-8">
-                  No bouncers connected
-                </p>
+                <EmptyState
+                  icon={Shield}
+                  title="No bouncers connected"
+                  description="No enforcement agents are connected right now."
+                />
               )}
             </CardContent>
           </Card>
@@ -203,7 +232,7 @@ export default function Health() {
               {isLoading ? (
                 <div className="space-y-2">
                   <div className="h-12 bg-muted animate-pulse rounded" />
-                  <div className="h-12 bg-mute animate-pulse rounded" />
+                  <div className="h-12 bg-muted animate-pulse rounded" />
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -215,9 +244,9 @@ export default function Health() {
                       </p>
                     </div>
                     {diagnostics?.traefik_integration?.middleware_configured ? (
-                      <CheckCircle2 className="h-5 w-5 text-green-500" />
+                      <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                     ) : (
-                      <XCircle className="h-5 w-5 text-red-500" />
+                      <XCircle className="h-5 w-5 text-destructive" />
                     )}
                   </div>
 
@@ -229,9 +258,9 @@ export default function Health() {
                       </p>
                     </div>
                     {diagnostics?.traefik_integration?.lapi_key_found ? (
-                      <CheckCircle2 className="h-5 w-5 text-green-500" />
+                      <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                     ) : (
-                      <XCircle className="h-5 w-5 text-red-500" />
+                      <XCircle className="h-5 w-5 text-destructive" />
                     )}
                   </div>
 
@@ -243,9 +272,9 @@ export default function Health() {
                       </p>
                     </div>
                     {diagnostics?.traefik_integration?.appsec_enabled ? (
-                      <CheckCircle2 className="h-5 w-5 text-green-500" />
+                      <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                     ) : (
-                      <XCircle className="h-5 w-5 text-red-500" />
+                      <XCircle className="h-5 w-5 text-destructive" />
                     )}
                   </div>
 

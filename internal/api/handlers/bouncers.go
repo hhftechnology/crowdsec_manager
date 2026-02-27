@@ -19,6 +19,7 @@ import (
 // GetBouncers retrieves CrowdSec bouncers
 func GetBouncers(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		dockerClient = resolveDockerClient(c, dockerClient)
 		logger.Info("Getting CrowdSec bouncers")
 
 		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
@@ -32,14 +33,22 @@ func GetBouncers(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFun
 			return
 		}
 
-		// Parse the JSON to ensure it's valid and return as structured data
-		var bouncers []models.Bouncer
-		if err := json.Unmarshal([]byte(output), &bouncers); err != nil {
-			// If JSON parsing fails, log details and return error
+		// Parse and normalize CLI JSON output first, then decode typed payload.
+		dataBytes, parseErr := parseCLIJSONToBytes(output)
+		if parseErr != nil {
 			logger.Warn("Failed to parse bouncers JSON",
-				"error", err,
+				"error", parseErr,
 				"output_length", len(output),
 				"output_preview", truncateString(output, 100))
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to parse bouncers JSON: %v", parseErr),
+			})
+			return
+		}
+
+		var bouncers []models.Bouncer
+		if err := json.Unmarshal(dataBytes, &bouncers); err != nil {
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
 				Error:   fmt.Sprintf("Failed to parse bouncers JSON: %v", err),
@@ -49,14 +58,14 @@ func GetBouncers(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFun
 
 		// Compute status for each bouncer
 		for i := range bouncers {
-			// Primary indicator: if last pull was recent (within 5 minutes), bouncer is connected
-			if time.Since(bouncers[i].LastPull) <= 5*time.Minute {
+			// Primary indicator: valid key + pulled within 60 minutes = connected
+			if bouncers[i].Valid && time.Since(bouncers[i].LastPull) <= 60*time.Minute {
 				bouncers[i].Status = "connected"
 			} else if bouncers[i].Valid {
-				// Last pull is old but key is valid - bouncer exists but inactive
+				// Valid key but hasn't pulled recently - stale but registered
 				bouncers[i].Status = "stale"
 			} else {
-				// Key is invalid - bouncer is disconnected
+				// Key is invalid/revoked - bouncer is disconnected
 				bouncers[i].Status = "disconnected"
 			}
 		}
@@ -74,6 +83,7 @@ func GetBouncers(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFun
 // AddBouncer adds a new bouncer with a generated API key
 func AddBouncer(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		dockerClient = resolveDockerClient(c, dockerClient)
 		var req struct {
 			Name string `json:"name" binding:"required"`
 		}
@@ -144,6 +154,7 @@ func generateBouncerAPIKey() (string, error) {
 // DeleteBouncer deletes a bouncer
 func DeleteBouncer(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		dockerClient = resolveDockerClient(c, dockerClient)
 		name := strings.TrimSpace(c.Param("name"))
 		if name == "" {
 			c.JSON(http.StatusBadRequest, models.Response{
@@ -158,7 +169,7 @@ func DeleteBouncer(dockerClient *docker.Client, cfg *config.Config) gin.HandlerF
 		// Execute delete command
 		cmd := []string{"cscli", "bouncers", "delete", name}
 		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, cmd)
-		
+
 		// Log the output for debugging
 		logger.Info("Delete command executed", "cmd", cmd, "output", output, "error", err)
 
@@ -176,8 +187,17 @@ func DeleteBouncer(dockerClient *docker.Client, cfg *config.Config) gin.HandlerF
 		checkCmd := []string{"cscli", "bouncers", "list", "-o", "json"}
 		checkOutput, checkErr := dockerClient.ExecCommand(cfg.CrowdsecContainerName, checkCmd)
 		if checkErr == nil {
+			dataBytes, parseErr := parseCLIJSONToBytes(checkOutput)
+			if parseErr != nil {
+				logger.Warn("Failed to parse bouncer verification JSON", "error", parseErr, "output_preview", truncateString(checkOutput, 100))
+			}
 			var bouncers []models.Bouncer
-			if jsonErr := json.Unmarshal([]byte(checkOutput), &bouncers); jsonErr == nil {
+			if parseErr == nil {
+				if jsonErr := json.Unmarshal(dataBytes, &bouncers); jsonErr != nil {
+					logger.Warn("Failed to decode bouncer verification JSON", "error", jsonErr)
+				}
+			}
+			if parseErr == nil {
 				for _, b := range bouncers {
 					if b.Name == name {
 						// Bouncer still exists!

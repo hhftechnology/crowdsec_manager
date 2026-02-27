@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import api, { BackupRequest, RestoreRequest, type Backup } from '@/lib/api'
+import { ErrorContexts, getErrorMessage } from '@/lib/api/errors'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
@@ -9,12 +10,13 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Database, Download, Trash2, RefreshCw, Plus, AlertTriangle } from 'lucide-react'
+import { PageHeader, EmptyState, QueryError, ResultsSummary } from '@/components/common'
 
 export default function Backup() {
   const queryClient = useQueryClient()
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
 
-  const { data: backups, isLoading } = useQuery({
+  const { data: backups, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['backups'],
     queryFn: async () => {
       const response = await api.backup.list()
@@ -29,8 +31,8 @@ export default function Backup() {
       setIsCreateDialogOpen(false)
       queryClient.invalidateQueries({ queryKey: ['backups'] })
     },
-    onError: () => {
-      toast.error('Failed to create backup')
+    onError: (error) => {
+      toast.error(getErrorMessage(error, 'Failed to create backup', ErrorContexts.BackupCreate))
     },
   })
 
@@ -40,8 +42,8 @@ export default function Backup() {
       toast.success('Backup restored successfully')
       queryClient.invalidateQueries({ queryKey: ['backups'] })
     },
-    onError: () => {
-      toast.error('Failed to restore backup')
+    onError: (error) => {
+      toast.error(getErrorMessage(error, 'Failed to restore backup', ErrorContexts.BackupRestore))
     },
   })
 
@@ -51,8 +53,8 @@ export default function Backup() {
       toast.success('Backup deleted successfully')
       queryClient.invalidateQueries({ queryKey: ['backups'] })
     },
-    onError: () => {
-      toast.error('Failed to delete backup')
+    onError: (error) => {
+      toast.error(getErrorMessage(error, 'Failed to delete backup', ErrorContexts.BackupDelete))
     },
   })
 
@@ -62,8 +64,8 @@ export default function Backup() {
       toast.success('Old backups cleaned up successfully')
       queryClient.invalidateQueries({ queryKey: ['backups'] })
     },
-    onError: () => {
-      toast.error('Failed to cleanup backups')
+    onError: (error) => {
+      toast.error(getErrorMessage(error, 'Failed to cleanup backups', ErrorContexts.BackupCleanup))
     },
   })
 
@@ -102,26 +104,23 @@ export default function Backup() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Backup Management</h1>
-          <p className="text-muted-foreground mt-2">
-            Create, restore, and manage system backups
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button
+      <PageHeader
+        title="Backup Management"
+        description="Create, restore, and manage system backups"
+        actions={
+          <>
+            <Button
             variant="outline"
             onClick={handleCleanup}
             disabled={cleanupMutation.isPending}
           >
-            <Trash2 className="mr-2 h-4 w-4" />
+            <Trash2 className="h-4 w-4" />
             Cleanup Old
           </Button>
           <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
             <DialogTrigger asChild>
               <Button>
-                <Plus className="mr-2 h-4 w-4" />
+                <Plus className="h-4 w-4" />
                 Create Backup
               </Button>
             </DialogTrigger>
@@ -153,16 +152,22 @@ export default function Backup() {
               </div>
             </DialogContent>
           </Dialog>
-        </div>
-      </div>
+          </>
+        }
+      />
+
+      {isError && <QueryError error={error} onRetry={refetch} />}
 
       {/* Backups Table */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Database className="h-5 w-5" />
-            Available Backups
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <Database className="h-5 w-5" />
+              Available Backups
+            </CardTitle>
+            <Badge variant="secondary">{backups?.length || 0}</Badge>
+          </div>
           <CardDescription>
             All created backups and their details
           </CardDescription>
@@ -175,7 +180,9 @@ export default function Backup() {
               <div className="h-16 bg-muted animate-pulse rounded" />
             </div>
           ) : backups && backups.length > 0 ? (
-            <Table>
+            <div className="space-y-3">
+              <ResultsSummary total={backups.length} label="backups" />
+              <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Filename</TableHead>
@@ -278,15 +285,14 @@ export default function Backup() {
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
-          ) : (
-            <div className="text-center py-12">
-              <Database className="mx-auto h-12 w-12 text-muted-foreground/50" />
-              <p className="mt-4 text-muted-foreground">No backups available</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                Click "Create Backup" to create your first backup
-              </p>
+              </Table>
             </div>
+          ) : (
+            <EmptyState
+              icon={Database}
+              title="No backups available"
+              description='Click "Create Backup" to create your first backup'
+            />
           )}
         </CardContent>
       </Card>

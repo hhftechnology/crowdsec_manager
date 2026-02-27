@@ -52,7 +52,7 @@ func getProfilesPath(cfg *config.Config) string {
 func readProfilesFromContainer(dockerClient *docker.Client, cfg *config.Config) (string, error) {
 	// Try to read profiles.yaml from container
 	output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
-		"cat", "/etc/crowdsec/profiles.yaml",
+		"cat", cfg.CrowdSecProfilesPath,
 	})
 	if err != nil {
 		return "", fmt.Errorf("profiles.yaml not found in container: %w", err)
@@ -89,6 +89,7 @@ func createDefaultProfilesYaml(path string) error {
 // Query parameter ?default=true forces using default template
 func GetProfiles(cfg *config.Config, dockerClient *docker.Client) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		dockerClient = resolveDockerClient(c, dockerClient)
 		profilesPath := getProfilesPath(cfg)
 		var content []byte
 		var err error
@@ -157,6 +158,7 @@ func GetProfiles(cfg *config.Config, dockerClient *docker.Client) gin.HandlerFun
 // UpdateProfiles updates profiles.yaml and optionally restarts CrowdSec
 func UpdateProfiles(db *database.Database, cfg *config.Config, dockerClient *docker.Client) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		dockerClient = resolveDockerClient(c, dockerClient)
 		var req models.ProfileRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, models.Response{
@@ -211,6 +213,8 @@ func UpdateProfiles(db *database.Database, cfg *config.Config, dockerClient *doc
 				return
 			}
 		}
+
+		autoSnapshot("profiles")
 
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
