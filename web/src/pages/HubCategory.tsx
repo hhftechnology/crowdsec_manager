@@ -23,6 +23,7 @@ const categoryMeta: Record<HubCategoryKey, { title: string; breadcrumbs: string 
   remediations: { title: 'Remediation components', breadcrumbs: 'Hub / Remediations' },
   'appsec-configs': { title: 'AppSec configurations', breadcrumbs: 'Hub / AppSec configurations' },
   'appsec-rules': { title: 'AppSec rules', breadcrumbs: 'Hub / AppSec rules' },
+  contexts: { title: 'Contexts', breadcrumbs: 'Hub / Contexts' },
 }
 
 function isHubCategoryKey(value: string): value is HubCategoryKey {

@@ -221,8 +221,17 @@ func ListHubItems(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFu
 			return
 		}
 
+		// cscli hub list may output informational preamble lines (e.g.
+		// "Loaded: 161 parsers...") to stdout before the JSON object.
+		// Strip any text before the opening '{' to get clean JSON.
+		jsonOutput := output
+		if idx := strings.Index(output, "{"); idx > 0 {
+			jsonOutput = output[idx:]
+		}
+
 		var parsed interface{}
-		if err := json.Unmarshal([]byte(output), &parsed); err != nil {
+		if err := json.Unmarshal([]byte(jsonOutput), &parsed); err != nil {
+			logger.Warn("Failed to parse hub list JSON", "error", err, "output_preview", truncateString(output, 200))
 			c.JSON(http.StatusOK, models.Response{
 				Success: true,
 				Data:    output,
@@ -256,8 +265,16 @@ func ListHubItemsByCategory(dockerClient *docker.Client, cfg *config.Config) gin
 			return
 		}
 
+		// Strip preamble text before JSON (cscli may output info lines to stdout)
+		jsonOutput := output
+		if idx := strings.Index(output, "{"); idx > 0 {
+			jsonOutput = output[idx:]
+		} else if idx := strings.Index(output, "["); idx > 0 {
+			jsonOutput = output[idx:]
+		}
+
 		var parsed interface{}
-		if err := json.Unmarshal([]byte(output), &parsed); err != nil {
+		if err := json.Unmarshal([]byte(jsonOutput), &parsed); err != nil {
 			c.JSON(http.StatusOK, models.Response{Success: true, Data: gin.H{"category": spec, "raw_output": output}})
 			return
 		}
