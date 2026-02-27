@@ -58,7 +58,7 @@ export default function EnrollDialog({ trigger, open: controlledOpen, onOpenChan
     queryKey: ['crowdsec-enrollment-status'],
     queryFn: async () => {
       const response = await api.crowdsec.getStatus()
-      return response.data.data
+      return response.data.data ?? null
     },
     refetchInterval: (query) => {
       const data = query.state.data as ConsoleStatus | undefined

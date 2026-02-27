@@ -24,7 +24,7 @@ export default function IPManagement() {
     queryKey: ['publicIP'],
     queryFn: async () => {
       const response = await api.ip.getPublicIP()
-      return response.data.data
+      return response.data.data ?? null
     },
   })
 

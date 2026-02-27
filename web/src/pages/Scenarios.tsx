@@ -80,7 +80,7 @@ export default function Scenarios() {
     queryKey: ['scenarios'],
     queryFn: async () => {
       const response = await api.scenarios.list()
-      return response.data.data as ScenariosResponse
+      return response.data.data as ScenariosResponse | null
     },
     retry: 1,
     retryDelay: 1000,
@@ -335,7 +335,7 @@ function SimulationCard() {
     queryKey: ['simulation-status'],
     queryFn: async () => {
       const response = await simulationAPI.getStatus()
-      return response.data.data as SimulationStatus
+      return response.data.data as SimulationStatus | null
     },
   })
 

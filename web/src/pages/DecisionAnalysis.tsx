@@ -138,7 +138,7 @@ export default function DecisionAnalysis() {
     queryKey: ['decisions-analysis', activeFilters],
     queryFn: async () => {
       const response = await api.crowdsec.getDecisionsAnalysis(activeFilters)
-      return response.data.data
+      return response.data.data ?? null
     },
     refetchInterval: 30000,
   })
@@ -158,7 +158,7 @@ export default function DecisionAnalysis() {
         range: activeFilters.range,
         includeAll: activeFilters.includeAll,
       })
-      return response.data.data
+      return response.data.data ?? null
     },
     refetchInterval: 60000,
   })
