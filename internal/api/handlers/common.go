@@ -38,6 +38,18 @@ func truncateString(s string, maxLen int) string {
 	return s[:maxLen] + "... (truncated)"
 }
 
+func parseCLIJSONToBytes(output string) ([]byte, error) {
+	parsed, err := parseCLIJSONOutput(output)
+	if err != nil {
+		return nil, err
+	}
+	data, err := json.Marshal(parsed)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal parsed CLI JSON: %w", err)
+	}
+	return data, nil
+}
+
 // Helper functions for safe type conversion from map[string]interface{}
 func getString(m map[string]interface{}, key string) string {
 	if v, ok := m[key]; ok {
@@ -126,8 +138,15 @@ func GetConsoleStatusHelper(dockerClient interface {
 	logger.Info("Console status raw output", "output", output)
 
 	var status models.ConsoleStatus
-	if err := json.Unmarshal([]byte(output), &status); err != nil {
-		logger.Warn("Failed to parse console status JSON, attempting fallback", "error", err)
+	dataBytes, parseErr := parseCLIJSONToBytes(output)
+	if parseErr == nil {
+		if err := json.Unmarshal(dataBytes, &status); err != nil {
+			parseErr = err
+		}
+	}
+
+	if parseErr != nil {
+		logger.Warn("Failed to parse console status JSON, attempting fallback", "error", parseErr)
 
 		// Fallback to simple string check if JSON parsing fails
 		// This handles cases where older versions might not output valid JSON or other issues

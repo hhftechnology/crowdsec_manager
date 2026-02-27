@@ -74,7 +74,8 @@ func IsIPBlocked(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFun
 
 		// Parse the JSON output
 		var decisions []models.DecisionRaw
-		if err := json.Unmarshal([]byte(output), &decisions); err != nil {
+		dataBytes, parseErr := parseCLIJSONToBytes(output)
+		if parseErr != nil || json.Unmarshal(dataBytes, &decisions) != nil {
 			// If output is empty or "null", it means no decisions (not blocked)
 			if output == "null" || output == "" {
 				c.JSON(http.StatusOK, models.Response{
@@ -88,10 +89,14 @@ func IsIPBlocked(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFun
 				return
 			}
 
-			logger.Error("Failed to parse decisions JSON", "error", err, "output", output)
+			if parseErr != nil {
+				logger.Error("Failed to normalize decisions JSON", "error", parseErr, "output", output)
+			} else {
+				logger.Error("Failed to parse decisions JSON", "output", output)
+			}
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
-				Error:   fmt.Sprintf("Failed to parse response: %v", err),
+				Error:   "Failed to parse response",
 			})
 			return
 		}
@@ -146,8 +151,10 @@ func CheckIPSecurity(dockerClient *docker.Client, cfg *config.Config) gin.Handle
 		})
 		if err == nil && decisionsOutput != "null" && decisionsOutput != "" && decisionsOutput != "[]" {
 			var decisions []interface{}
-			if json.Unmarshal([]byte(decisionsOutput), &decisions) == nil {
-				result.IsBlocked = len(decisions) > 0
+			if dataBytes, parseErr := parseCLIJSONToBytes(decisionsOutput); parseErr == nil {
+				if json.Unmarshal(dataBytes, &decisions) == nil {
+					result.IsBlocked = len(decisions) > 0
+				}
 			}
 		}
 
@@ -157,10 +164,16 @@ func CheckIPSecurity(dockerClient *docker.Client, cfg *config.Config) gin.Handle
 		})
 		if err == nil && allowlistOutput != "null" && allowlistOutput != "" && allowlistOutput != "[]" {
 			// Parse allowlists and check if IP is in any of them
-			dataBytes := []byte(allowlistOutput)
+			dataBytes, parseErr := parseCLIJSONToBytes(allowlistOutput)
+			if parseErr != nil {
+				logger.Warn("Failed to normalize allowlists JSON", "error", parseErr)
+			}
+			if parseErr != nil {
+				dataBytes = []byte(allowlistOutput)
+			}
 			inAllowlist := false
 
-			_, parseErr := jsonparser.ArrayEach(dataBytes, func(allowlistValue []byte, dataType jsonparser.ValueType, offset int, err error) {
+			_, arrErr := jsonparser.ArrayEach(dataBytes, func(allowlistValue []byte, dataType jsonparser.ValueType, offset int, err error) {
 				if inAllowlist {
 					return // Already found
 				}
@@ -190,8 +203,8 @@ func CheckIPSecurity(dockerClient *docker.Client, cfg *config.Config) gin.Handle
 				}, "items")
 			})
 
-			if parseErr != nil {
-				logger.Warn("Failed to parse allowlists", "error", parseErr)
+			if arrErr != nil {
+				logger.Warn("Failed to parse allowlists", "error", arrErr)
 			}
 		}
 

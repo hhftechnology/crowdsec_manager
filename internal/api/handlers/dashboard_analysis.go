@@ -71,9 +71,17 @@ func GetDecisionsAnalysis(dockerClient *docker.Client, cfg *config.Config) gin.H
 			return
 		}
 
-		// Parse alerts using jsonparser
+		// Parse alerts using normalized CLI JSON output.
 		var decisions []models.Decision
-		dataBytes := []byte(output)
+		dataBytes, parseErr := parseCLIJSONToBytes(output)
+		if parseErr != nil {
+			logger.Error("Failed to normalize decisions analysis JSON", "error", parseErr, "output_preview", truncateString(output, 200))
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to parse decisions JSON: %v", parseErr),
+			})
+			return
+		}
 
 		_, err = jsonparser.ArrayEach(dataBytes, func(alertValue []byte, alertType jsonparser.ValueType, alertOffset int, alertErr error) {
 			// Get alert's created_at for fallback
@@ -203,11 +211,27 @@ func GetAlertsAnalysis(dockerClient *docker.Client, cfg *config.Config, ttlCache
 		}
 
 		// Parse JSON
+		dataBytes, parseErr := parseCLIJSONToBytes(output)
+		if parseErr != nil {
+			if output == "null" || output == "" {
+				c.JSON(http.StatusOK, models.Response{
+					Success: true,
+					Data:    gin.H{"alerts": []interface{}{}, "count": 0},
+				})
+				return
+			}
+			logger.Warn("Failed to normalize alerts JSON", "error", parseErr)
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to parse alerts: %v", parseErr),
+			})
+			return
+		}
 		var alerts []interface{}
-		if err := json.Unmarshal([]byte(output), &alerts); err != nil {
+		if err := json.Unmarshal(dataBytes, &alerts); err != nil {
 			// If unmarshaling as list fails, try as a single object (behavior for inspect command)
 			var singleAlert interface{}
-			if errSingle := json.Unmarshal([]byte(output), &singleAlert); errSingle == nil {
+			if errSingle := json.Unmarshal(dataBytes, &singleAlert); errSingle == nil {
 				alerts = []interface{}{singleAlert}
 			} else {
 				if output == "null" || output == "" {

@@ -195,7 +195,7 @@ func upsertHubPreference(db *database.Database, category, mode, defaultPath, las
 	}
 }
 
-func firstJSONStartIndex(output string) int {
+func firstCLIJSONStartIndex(output string) int {
 	objectStart := strings.Index(output, "{")
 	arrayStart := strings.Index(output, "[")
 
@@ -211,10 +211,10 @@ func firstJSONStartIndex(output string) int {
 	}
 }
 
-// parseHubJSONOutput extracts the first JSON value from mixed CLI output.
+// parseCLIJSONOutput extracts the first JSON value from mixed CLI output.
 // cscli may print informational preamble/trailing lines around the JSON body.
-func parseHubJSONOutput(output string) (interface{}, error) {
-	start := firstJSONStartIndex(output)
+func parseCLIJSONOutput(output string) (interface{}, error) {
+	start := firstCLIJSONStartIndex(output)
 	if start < 0 {
 		return nil, fmt.Errorf("no JSON payload found")
 	}
@@ -256,7 +256,7 @@ func ListHubItems(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFu
 			return
 		}
 
-		parsed, err := parseHubJSONOutput(output)
+		parsed, err := parseCLIJSONOutput(output)
 		if err != nil {
 			logger.Warn("Failed to parse hub list JSON", "error", err, "output_preview", truncateString(output, 200))
 			c.JSON(http.StatusOK, models.Response{
@@ -292,7 +292,7 @@ func ListHubItemsByCategory(dockerClient *docker.Client, cfg *config.Config) gin
 			return
 		}
 
-		parsed, err := parseHubJSONOutput(output)
+		parsed, err := parseCLIJSONOutput(output)
 		if err != nil {
 			c.JSON(http.StatusOK, models.Response{Success: true, Data: gin.H{"category": spec, "raw_output": output}})
 			return

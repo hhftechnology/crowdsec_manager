@@ -166,8 +166,11 @@ func ListScenarios(dockerClient *docker.Client, cfg *config.Config) gin.HandlerF
 			return
 		}
 
-		// Clean the output - remove any non-JSON characters
+		dataBytes, parseErr := parseCLIJSONToBytes(output)
 		cleanedOutput := strings.TrimSpace(output)
+		if parseErr == nil {
+			cleanedOutput = string(dataBytes)
+		}
 
 		// Define structs for parsing
 		type ScenarioItem struct {

@@ -33,14 +33,22 @@ func GetBouncers(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFun
 			return
 		}
 
-		// Parse the JSON to ensure it's valid and return as structured data
-		var bouncers []models.Bouncer
-		if err := json.Unmarshal([]byte(output), &bouncers); err != nil {
-			// If JSON parsing fails, log details and return error
+		// Parse and normalize CLI JSON output first, then decode typed payload.
+		dataBytes, parseErr := parseCLIJSONToBytes(output)
+		if parseErr != nil {
 			logger.Warn("Failed to parse bouncers JSON",
-				"error", err,
+				"error", parseErr,
 				"output_length", len(output),
 				"output_preview", truncateString(output, 100))
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to parse bouncers JSON: %v", parseErr),
+			})
+			return
+		}
+
+		var bouncers []models.Bouncer
+		if err := json.Unmarshal(dataBytes, &bouncers); err != nil {
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
 				Error:   fmt.Sprintf("Failed to parse bouncers JSON: %v", err),
@@ -179,8 +187,17 @@ func DeleteBouncer(dockerClient *docker.Client, cfg *config.Config) gin.HandlerF
 		checkCmd := []string{"cscli", "bouncers", "list", "-o", "json"}
 		checkOutput, checkErr := dockerClient.ExecCommand(cfg.CrowdsecContainerName, checkCmd)
 		if checkErr == nil {
+			dataBytes, parseErr := parseCLIJSONToBytes(checkOutput)
+			if parseErr != nil {
+				logger.Warn("Failed to parse bouncer verification JSON", "error", parseErr, "output_preview", truncateString(checkOutput, 100))
+			}
 			var bouncers []models.Bouncer
-			if jsonErr := json.Unmarshal([]byte(checkOutput), &bouncers); jsonErr == nil {
+			if parseErr == nil {
+				if jsonErr := json.Unmarshal(dataBytes, &bouncers); jsonErr != nil {
+					logger.Warn("Failed to decode bouncer verification JSON", "error", jsonErr)
+				}
+			}
+			if parseErr == nil {
 				for _, b := range bouncers {
 					if b.Name == name {
 						// Bouncer still exists!

@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 
@@ -29,9 +28,8 @@ func GetSimulationStatus(dockerClient *docker.Client, cfg *config.Config) gin.Ha
 			return
 		}
 
-		// Try to parse as JSON
-		var parsed interface{}
-		if err := json.Unmarshal([]byte(output), &parsed); err != nil {
+		parsed, err := parseCLIJSONOutput(output)
+		if err != nil {
 			logger.Warn("Failed to parse simulation status JSON, returning raw", "error", err)
 			c.JSON(http.StatusOK, models.Response{
 				Success: true,

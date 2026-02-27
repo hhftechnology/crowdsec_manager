@@ -65,9 +65,17 @@ func GetDecisions(dockerClient *docker.Client, cfg *config.Config, ttlCache ...*
 			return
 		}
 
-		// Parse alerts using jsonparser
+		// Parse alerts using normalized CLI JSON output.
 		var decisions []models.Decision
-		dataBytes := []byte(output)
+		dataBytes, parseErr := parseCLIJSONToBytes(output)
+		if parseErr != nil {
+			logger.Error("Failed to normalize decisions JSON", "error", parseErr, "output_preview", truncateString(output, 200))
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to parse decisions JSON: %v", parseErr),
+			})
+			return
+		}
 
 		_, err = jsonparser.ArrayEach(dataBytes, func(alertValue []byte, alertType jsonparser.ValueType, alertOffset int, alertErr error) {
 			// Get alert's created_at for fallback
@@ -188,7 +196,16 @@ func GetMetrics(dockerClient *docker.Client, cfg *config.Config, ttlCache ...*ca
 		}
 
 		var metrics interface{}
-		if err := json.Unmarshal([]byte(output), &metrics); err != nil {
+		dataBytes, parseErr := parseCLIJSONToBytes(output)
+		if parseErr != nil {
+			logger.Warn("Failed to normalize metrics JSON", "error", parseErr)
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to parse metrics JSON: %v", parseErr),
+			})
+			return
+		}
+		if err := json.Unmarshal(dataBytes, &metrics); err != nil {
 			logger.Warn("Failed to parse metrics JSON", "error", err)
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,

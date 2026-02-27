@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-func TestParseHubJSONOutput(t *testing.T) {
+func TestParseCLIJSONOutput(t *testing.T) {
 	tests := []struct {
 		name      string
 		input     string
@@ -63,7 +63,7 @@ func TestParseHubJSONOutput(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			parsed, err := parseHubJSONOutput(tt.input)
+			parsed, err := parseCLIJSONOutput(tt.input)
 			if tt.wantError {
 				if err == nil {
 					t.Fatalf("expected error, got parsed=%#v", parsed)
@@ -81,7 +81,7 @@ func TestParseHubJSONOutput(t *testing.T) {
 	}
 }
 
-func TestFirstJSONStartIndex(t *testing.T) {
+func TestFirstCLIJSONStartIndex(t *testing.T) {
 	tests := []struct {
 		name  string
 		input string
@@ -94,7 +94,7 @@ func TestFirstJSONStartIndex(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := firstJSONStartIndex(tt.input); got != tt.want {
+			if got := firstCLIJSONStartIndex(tt.input); got != tt.want {
 				t.Fatalf("got %d want %d", got, tt.want)
 			}
 		})
