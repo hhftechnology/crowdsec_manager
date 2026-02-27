@@ -83,48 +83,29 @@ func GetDecisions(dockerClient *docker.Client, cfg *config.Config, ttlCache ...*
 			}
 
 			// Parse decisions array within this alert
+			foundNested := false
 			jsonparser.ArrayEach(alertValue, func(decisionValue []byte, decisionType jsonparser.ValueType, decisionOffset int, decisionErr error) {
-				var decision models.Decision
-
-				// Extract decision fields
-				if id, err := jsonparser.GetInt(decisionValue, "id"); err == nil {
-					decision.ID = id
-				}
-				if origin, err := jsonparser.GetString(decisionValue, "origin"); err == nil {
-					decision.Origin = origin
-				}
-				if decisionType, err := jsonparser.GetString(decisionValue, "type"); err == nil {
-					decision.Type = decisionType
-				}
-				if scope, err := jsonparser.GetString(decisionValue, "scope"); err == nil {
-					decision.Scope = scope
-				}
-				if value, err := jsonparser.GetString(decisionValue, "value"); err == nil {
-					decision.Value = value
-				}
-				if duration, err := jsonparser.GetString(decisionValue, "duration"); err == nil {
-					decision.Duration = duration
-				}
-				if scenario, err := jsonparser.GetString(decisionValue, "scenario"); err == nil {
-					decision.Scenario = scenario
-				}
-				if simulated, err := jsonparser.GetBoolean(decisionValue, "simulated"); err == nil {
-					decision.Simulated = simulated
-				}
-				if createdAt, err := jsonparser.GetString(decisionValue, "created_at"); err == nil {
-					decision.CreatedAt = createdAt
-				}
-
-				// Set created_at from alert if not present in decision
+				foundNested = true
+				decision := parseDecisionNode(decisionValue)
 				if decision.CreatedAt == "" {
 					decision.CreatedAt = alertCreatedAt
 				}
-
-				// Set AlertID
 				decision.AlertID = alertID
-
 				decisions = append(decisions, decision)
 			}, "decisions")
+
+			// Fallback: if no nested decisions found, check if the top-level
+			// item itself has decision fields (manual decisions via cscli decisions add)
+			if !foundNested {
+				if _, _, _, err := jsonparser.Get(alertValue, "type"); err == nil {
+					decision := parseDecisionNode(alertValue)
+					if decision.CreatedAt == "" {
+						decision.CreatedAt = alertCreatedAt
+					}
+					decision.AlertID = alertID
+					decisions = append(decisions, decision)
+				}
+			}
 		})
 
 		if err != nil {

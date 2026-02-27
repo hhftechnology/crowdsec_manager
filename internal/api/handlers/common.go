@@ -12,6 +12,7 @@ import (
 	"crowdsec-manager/internal/logger"
 	"crowdsec-manager/internal/models"
 
+	"github.com/buger/jsonparser"
 	"github.com/gin-gonic/gin"
 )
 
@@ -197,6 +198,41 @@ func errString(err error) string {
 		return ""
 	}
 	return err.Error()
+}
+
+// parseDecisionNode extracts a models.Decision from a jsonparser byte slice.
+// Used by both GetDecisions and GetDecisionsAnalysis to avoid duplicating
+// field-extraction logic.
+func parseDecisionNode(data []byte) models.Decision {
+	var d models.Decision
+	if id, err := jsonparser.GetInt(data, "id"); err == nil {
+		d.ID = id
+	}
+	if v, err := jsonparser.GetString(data, "origin"); err == nil {
+		d.Origin = v
+	}
+	if v, err := jsonparser.GetString(data, "type"); err == nil {
+		d.Type = v
+	}
+	if v, err := jsonparser.GetString(data, "scope"); err == nil {
+		d.Scope = v
+	}
+	if v, err := jsonparser.GetString(data, "value"); err == nil {
+		d.Value = v
+	}
+	if v, err := jsonparser.GetString(data, "duration"); err == nil {
+		d.Duration = v
+	}
+	if v, err := jsonparser.GetString(data, "scenario"); err == nil {
+		d.Scenario = v
+	}
+	if v, err := jsonparser.GetBoolean(data, "simulated"); err == nil {
+		d.Simulated = v
+	}
+	if v, err := jsonparser.GetString(data, "created_at"); err == nil {
+		d.CreatedAt = v
+	}
+	return d
 }
 
 // CLIFlag represents a CLI flag and its value for building cscli commands.
