@@ -195,6 +195,41 @@ func upsertHubPreference(db *database.Database, category, mode, defaultPath, las
 	}
 }
 
+func firstJSONStartIndex(output string) int {
+	objectStart := strings.Index(output, "{")
+	arrayStart := strings.Index(output, "[")
+
+	switch {
+	case objectStart == -1:
+		return arrayStart
+	case arrayStart == -1:
+		return objectStart
+	case objectStart < arrayStart:
+		return objectStart
+	default:
+		return arrayStart
+	}
+}
+
+// parseHubJSONOutput extracts the first JSON value from mixed CLI output.
+// cscli may print informational preamble/trailing lines around the JSON body.
+func parseHubJSONOutput(output string) (interface{}, error) {
+	start := firstJSONStartIndex(output)
+	if start < 0 {
+		return nil, fmt.Errorf("no JSON payload found")
+	}
+
+	decoder := json.NewDecoder(strings.NewReader(output[start:]))
+	decoder.UseNumber()
+
+	var parsed interface{}
+	if err := decoder.Decode(&parsed); err != nil {
+		return nil, err
+	}
+
+	return parsed, nil
+}
+
 // ListHubCategories returns the supported category metadata.
 func ListHubCategories() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -221,16 +256,8 @@ func ListHubItems(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFu
 			return
 		}
 
-		// cscli hub list may output informational preamble lines (e.g.
-		// "Loaded: 161 parsers...") to stdout before the JSON object.
-		// Strip any text before the opening '{' to get clean JSON.
-		jsonOutput := output
-		if idx := strings.Index(output, "{"); idx > 0 {
-			jsonOutput = output[idx:]
-		}
-
-		var parsed interface{}
-		if err := json.Unmarshal([]byte(jsonOutput), &parsed); err != nil {
+		parsed, err := parseHubJSONOutput(output)
+		if err != nil {
 			logger.Warn("Failed to parse hub list JSON", "error", err, "output_preview", truncateString(output, 200))
 			c.JSON(http.StatusOK, models.Response{
 				Success: true,
@@ -265,16 +292,8 @@ func ListHubItemsByCategory(dockerClient *docker.Client, cfg *config.Config) gin
 			return
 		}
 
-		// Strip preamble text before JSON (cscli may output info lines to stdout)
-		jsonOutput := output
-		if idx := strings.Index(output, "{"); idx > 0 {
-			jsonOutput = output[idx:]
-		} else if idx := strings.Index(output, "["); idx > 0 {
-			jsonOutput = output[idx:]
-		}
-
-		var parsed interface{}
-		if err := json.Unmarshal([]byte(jsonOutput), &parsed); err != nil {
+		parsed, err := parseHubJSONOutput(output)
+		if err != nil {
 			c.JSON(http.StatusOK, models.Response{Success: true, Data: gin.H{"category": spec, "raw_output": output}})
 			return
 		}

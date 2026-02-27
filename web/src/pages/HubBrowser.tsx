@@ -59,6 +59,50 @@ type ParsedHubItems = {
   rawParseError: boolean
 }
 
+function extractHubArray(record: Record<string, unknown>, ...keys: string[]): HubBrowserItem[] {
+  for (const key of keys) {
+    if (Array.isArray(record[key])) return record[key] as HubBrowserItem[]
+  }
+  return []
+}
+
+function parseHubJSONString(raw: string): unknown {
+  const trimmed = raw.trim()
+  if (!trimmed) return null
+
+  try {
+    return JSON.parse(trimmed)
+  } catch {
+    // Continue with robust fallback below.
+  }
+
+  const firstObject = trimmed.indexOf('{')
+  const firstArray = trimmed.indexOf('[')
+
+  let start = -1
+  if (firstObject >= 0 && firstArray >= 0) start = Math.min(firstObject, firstArray)
+  else if (firstObject >= 0) start = firstObject
+  else if (firstArray >= 0) start = firstArray
+
+  if (start < 0) {
+    throw new Error('No JSON payload found in hub response')
+  }
+
+  const openChar = trimmed[start]
+  const closeChar = openChar === '{' ? '}' : ']'
+  for (let end = trimmed.length - 1; end > start; end -= 1) {
+    if (trimmed[end] !== closeChar) continue
+    const candidate = trimmed.slice(start, end + 1)
+    try {
+      return JSON.parse(candidate)
+    } catch {
+      // Keep shrinking until we find a parseable payload.
+    }
+  }
+
+  throw new Error('Unable to parse JSON payload from hub response')
+}
+
 function parseHubItems(data: unknown): ParsedHubItems {
   if (!data) return { items: EMPTY_HUB_ITEMS, rawParseError: false }
   if (Array.isArray(data)) {
@@ -66,7 +110,7 @@ function parseHubItems(data: unknown): ParsedHubItems {
   }
   if (typeof data === 'string') {
     try {
-      const parsed = JSON.parse(data)
+      const parsed = parseHubJSONString(data)
       return parseHubItems(parsed)
     } catch {
       return { items: EMPTY_HUB_ITEMS, rawParseError: true }
@@ -74,18 +118,16 @@ function parseHubItems(data: unknown): ParsedHubItems {
   }
   if (typeof data === 'object') {
     const record = data as Record<string, unknown>
-    const extract = (key: string): HubBrowserItem[] =>
-      Array.isArray(record[key]) ? (record[key] as HubBrowserItem[]) : []
     return {
       rawParseError: false,
       items: {
-        collections: extract('collections'),
-        scenarios: extract('scenarios'),
-        parsers: extract('parsers'),
-        postoverflows: extract('postoverflows'),
-        'appsec-configs': extract('appsec-configs'),
-        'appsec-rules': extract('appsec-rules'),
-        contexts: extract('contexts'),
+        collections: extractHubArray(record, 'collections'),
+        scenarios: extractHubArray(record, 'scenarios'),
+        parsers: extractHubArray(record, 'parsers'),
+        postoverflows: extractHubArray(record, 'postoverflows'),
+        'appsec-configs': extractHubArray(record, 'appsec-configs', 'appsec_configs'),
+        'appsec-rules': extractHubArray(record, 'appsec-rules', 'appsec_rules'),
+        contexts: extractHubArray(record, 'contexts'),
       },
     }
   }
