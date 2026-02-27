@@ -33,6 +33,24 @@ CrowdSec Manager is a web-based management interface for CrowdSec operations, Tr
 <img width="1200" height="630" alt="System Update" src="/images/system-update.jpeg"/>
 <img width="1200" height="630" alt="Services Management" src="/images/services-management.jpeg"/>
 <img width="1200" height="630" alt="Configuration" src="/images/configuration-settings.jpeg"/>
+<img width="1200" height="630" alt="Alert Filters" src="/images/alerts-analysis-filters.jpeg"/>
+<img width="1200" height="630" alt="Alert Inspect Modal" src="/images/alerts-analysis-inspect-modal.jpeg"/>
+<img width="1200" height="630" alt="Alert Results Table" src="/images/alerts-analysis-results-table.jpeg"/>
+<img width="1200" height="630" alt="Bouncers Management" src="/images/bouncers-management.jpeg"/>
+<img width="1200" height="630" alt="Config Validation" src="/images/config-validation.jpeg"/>
+<img width="1200" height="630" alt="CrowdSec Health Overview" src="/images/crowdsec-health-overview.jpeg"/>
+<img width="1200" height="630" alt="Dashboard Scenarios and Blocked IPs" src="/images/dashboard-overview-scenarios-blocked-ips.jpeg"/>
+<img width="1200" height="630" alt="Decision Results Table" src="/images/decisions-results-table.jpeg"/>
+<img width="1200" height="630" alt="Hub AppSec Configurations" src="/images/hub-appsec-configurations.jpeg"/>
+<img width="1200" height="630" alt="Hub AppSec Rules" src="/images/hub-appsec-rules.jpeg"/>
+<img width="1200" height="630" alt="Hub Collections" src="/images/hub-collections.jpeg"/>
+<img width="1200" height="630" alt="Hub Home Categories" src="/images/hub-home-categories.jpeg"/>
+<img width="1200" height="630" alt="Hub Log Parsers" src="/images/hub-log-parsers.jpeg"/>
+<img width="1200" height="630" alt="Hub Postoverflows" src="/images/hub-postoverflows.jpeg"/>
+<img width="1200" height="630" alt="Hub Remediation Components" src="/images/hub-remediation-components.jpeg"/>
+<img width="1200" height="630" alt="Hub Scenarios Install Mode" src="/images/hub-scenarios-install-mode.jpeg"/>
+<img width="1200" height="630" alt="Notifications Detect" src="/images/notifications-detect.jpeg"/>
+<img width="1200" height="630" alt="Terminal Container Shell" src="/images/terminal-container-shell.png"/>
 
 ### Image Index
 
