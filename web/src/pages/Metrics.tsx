@@ -10,7 +10,7 @@ export default function Metrics() {
     queryKey: ['crowdsec-metrics'],
     queryFn: async () => {
       const response = await crowdsecAPI.getMetrics()
-      return response.data.data as { metrics: string }
+      return (response.data.data ?? null) as { metrics: string } | null
     },
     refetchInterval: 30000,
   })

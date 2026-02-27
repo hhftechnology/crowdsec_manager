@@ -158,7 +158,7 @@ export default function Dashboard() {
     queryKey: ['health'],
     queryFn: async () => {
       const response = await api.health.checkStack()
-      return response.data.data
+      return response.data.data ?? null
     },
     refetchInterval: 15000,
   })
@@ -167,7 +167,7 @@ export default function Dashboard() {
     queryKey: ['decisions-summary'],
     queryFn: async () => {
       const response = await api.crowdsec.getDecisionsSummary()
-      return response.data.data
+      return response.data.data ?? null
     },
     refetchInterval: 30000,
   })
@@ -176,7 +176,7 @@ export default function Dashboard() {
     queryKey: ['decisions'],
     queryFn: async () => {
       const response = await api.crowdsec.getDecisions()
-      return response.data.data
+      return response.data.data ?? null
     },
     refetchInterval: 60000,
   })
@@ -185,7 +185,7 @@ export default function Dashboard() {
     queryKey: ['bouncers'],
     queryFn: async () => {
       const response = await api.crowdsec.getBouncers()
-      return response.data.data
+      return response.data.data ?? null
     },
     refetchInterval: 30000,
   })
@@ -194,7 +194,7 @@ export default function Dashboard() {
     queryKey: ['alerts-dashboard'],
     queryFn: async () => {
       const response = await api.crowdsec.getAlertsAnalysis({ since: '7d' })
-      return response.data.data
+      return response.data.data ?? null
     },
     refetchInterval: 30000,
   })

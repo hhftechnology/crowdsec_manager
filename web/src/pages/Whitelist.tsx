@@ -65,7 +65,7 @@ export default function Whitelist() {
     queryKey: ['whitelist'],
     queryFn: async () => {
       const response = await api.whitelist.view()
-      return response.data.data
+      return response.data.data ?? null
     },
   })
 
@@ -73,7 +73,7 @@ export default function Whitelist() {
     queryKey: ['publicIP'],
     queryFn: async () => {
       const response = await api.ip.getPublicIP()
-      return response.data.data
+      return response.data.data ?? null
     },
   })
 

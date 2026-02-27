@@ -66,9 +66,9 @@ export default function HubCategory() {
   const { data: itemsData, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['hub-category-items', category],
     queryFn: async () => {
-      if (!category) return undefined
+      if (!category) return null
       const response = await hubAPI.listItems(category)
-      return response.data.data
+      return response.data.data ?? null
     },
     enabled: !!category,
   })
@@ -76,9 +76,9 @@ export default function HubCategory() {
   const { data: preferenceData, refetch: refetchPreference } = useQuery({
     queryKey: ['hub-category-preference', category],
     queryFn: async () => {
-      if (!category) return undefined
+      if (!category) return null
       const response = await hubAPI.getPreference(category)
-      return response.data.data
+      return response.data.data ?? null
     },
     enabled: !!category,
   })

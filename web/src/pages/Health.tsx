@@ -14,7 +14,7 @@ export default function Health() {
     queryKey: ['diagnostics'],
     queryFn: async () => {
       const response = await api.health.completeDiagnostics()
-      return response.data.data
+      return response.data.data ?? null
     },
     refetchInterval: 10000, // Refresh every 10 seconds
   })

@@ -23,7 +23,7 @@ export default function Update() {
     queryKey: ['update-check'],
     queryFn: async () => {
       const response = await api.update.checkForUpdates()
-      return response.data.data
+      return response.data.data ?? null
     },
   })
 
