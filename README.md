@@ -94,7 +94,7 @@ CrowdSec Manager is a web-based management interface for CrowdSec operations, Tr
 ```yaml
 services:
   crowdsec-manager:
-    image: hhftechnology/crowdsec-manager:1.0.0
+    image: hhftechnology/crowdsec-manager:1.1.0
     container_name: crowdsec-manager
     restart: unless-stopped
     expose:
