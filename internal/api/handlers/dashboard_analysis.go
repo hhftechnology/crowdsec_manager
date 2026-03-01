@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"crowdsec-manager/internal/cache"
 	"crowdsec-manager/internal/config"
+	"crowdsec-manager/internal/constants"
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
 	"crowdsec-manager/internal/models"
@@ -22,7 +24,8 @@ func GetDecisionsAnalysis(dockerClient *docker.Client, cfg *config.Config) gin.H
 		dockerClient = resolveDockerClient(c, dockerClient)
 		logger.Info("Getting CrowdSec decisions analysis via cscli")
 
-		cmd := []string{"cscli", "decisions", "list", "-o", "json"}
+		limit := config.EffectiveLimit(cfg.DecisionListLimit, constants.MaxListLimit)
+		cmd := []string{"cscli", "decisions", "list", "-o", "json", "--limit", strconv.Itoa(limit)}
 
 		// Add filters based on query parameters
 		if v := c.Query("ip"); v != "" {
@@ -165,7 +168,8 @@ func GetAlertsAnalysis(dockerClient *docker.Client, cfg *config.Config, ttlCache
 		if v := c.Query("id"); v != "" {
 			cmd = []string{"cscli", "alerts", "inspect", v, "-o", "json"}
 		} else {
-			cmd = []string{"cscli", "alerts", "list", "-o", "json"}
+			alertLimit := config.EffectiveLimit(cfg.AlertListLimit, constants.MaxListLimit)
+			cmd = []string{"cscli", "alerts", "list", "-o", "json", "--limit", strconv.Itoa(alertLimit)}
 
 			// Add filters based on query parameters
 			if v := c.Query("ip"); v != "" {

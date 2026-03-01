@@ -4,11 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"crowdsec-manager/internal/cache"
 	"crowdsec-manager/internal/config"
+	"crowdsec-manager/internal/constants"
 	"crowdsec-manager/internal/database"
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
@@ -45,9 +47,9 @@ func GetDecisions(dockerClient *docker.Client, cfg *config.Config, ttlCache ...*
 
 		logger.Info("Getting CrowdSec decisions via cscli")
 
-		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
-			"cscli", "decisions", "list", "-o", "json",
-		})
+		limit := config.EffectiveLimit(cfg.DecisionListLimit, constants.MaxListLimit)
+		cmd := []string{"cscli", "decisions", "list", "-o", "json", "--limit", strconv.Itoa(limit)}
+		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, cmd)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
