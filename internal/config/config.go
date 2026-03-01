@@ -35,13 +35,13 @@ type Config struct {
 	CrowdSecAcquisFile   string
 
 	// CrowdSec container-internal paths and URLs
-	CrowdSecWhitelistPath      string
-	CrowdSecProfilesPath       string
-	CrowdSecNotificationsDir   string
-	CrowdSecScenariosDir       string
-	CrowdSecMetricsURL         string
-	CrowdSecConsoleURL         string
-	CrowdSecCTIURLPattern      string
+	CrowdSecWhitelistPath    string
+	CrowdSecProfilesPath     string
+	CrowdSecNotificationsDir string
+	CrowdSecScenariosDir     string
+	CrowdSecMetricsURL       string
+	CrowdSecConsoleURL       string
+	CrowdSecCTIURLPattern    string
 
 	// Traefik container-internal paths
 	TraefikCaptchaHTMLPath     string
@@ -60,13 +60,16 @@ type Config struct {
 	GerbilContainerName   string
 	TraefikContainerName  string
 
-
 	// Services
 	Services             []string
 	ServicesWithCrowdsec []string
 	IncludeCrowdsec      bool
 	IncludePangolin      bool
 	IncludeGerbil        bool
+
+	// CrowdSec list limits (0 = unlimited)
+	DecisionListLimit int
+	AlertListLimit    int
 
 	// NATS Messaging (optional)
 	NatsURL     string
@@ -83,37 +86,37 @@ type Config struct {
 // It also creates required directories and dynamically builds service lists from compose file
 func Load() (*Config, error) {
 	cfg := &Config{
-		Port:                  getEnvAsInt("PORT", 8080),
-		Environment:           getEnv("ENVIRONMENT", "development"),
-		LogLevel:              getEnv("LOG_LEVEL", "info"),
-		LogFile:               getEnv("LOG_FILE", "./logs/crowdsec-manager.log"),
-		DockerHost:            getEnv("DOCKER_HOST", ""),
-		DockerHosts:           getEnv("DOCKER_HOSTS", ""),
-		ComposeFile:           getEnv("COMPOSE_FILE", "./docker-compose.yml"),
-		PangolinDir:           getEnv("PANGOLIN_DIR", "."),
-		ConfigDir:             getEnv("CONFIG_DIR", "./config"),
-		DatabasePath:          getEnv("DATABASE_PATH", "./data/settings.db"),
-		TraefikDynamicConfig:  getEnv("TRAEFIK_DYNAMIC_CONFIG", "/etc/traefik/dynamic_config.yml"),
-		TraefikStaticConfig:   getEnv("TRAEFIK_STATIC_CONFIG", "/etc/traefik/traefik_config.yml"),
-		TraefikAccessLog:      getEnv("TRAEFIK_ACCESS_LOG", "/var/log/traefik/access.log"),
-		TraefikErrorLog:       getEnv("TRAEFIK_ERROR_LOG", "/var/log/traefik/traefik.log"),
-		CrowdSecAcquisFile:     getEnv("CROWDSEC_ACQUIS_FILE", "/etc/crowdsec/acquis.yaml"),
-		CrowdSecWhitelistPath:      getEnv("CROWDSEC_WHITELIST_PATH", "/etc/crowdsec/parsers/s02-enrich/mywhitelists.yaml"),
-		CrowdSecProfilesPath:       getEnv("CROWDSEC_PROFILES_PATH", "/etc/crowdsec/profiles.yaml"),
-		CrowdSecNotificationsDir:   getEnv("CROWDSEC_NOTIFICATIONS_DIR", "/etc/crowdsec/notifications"),
-		CrowdSecScenariosDir:       getEnv("CROWDSEC_SCENARIOS_DIR", "/etc/crowdsec/scenarios"),
-		CrowdSecMetricsURL:         getEnv("CROWDSEC_METRICS_URL", "http://localhost:6060/metrics"),
-		CrowdSecConsoleURL:         getEnv("CROWDSEC_CONSOLE_URL", "https://app.crowdsec.net/"),
-		CrowdSecCTIURLPattern:      getEnv("CROWDSEC_CTI_URL_PATTERN", "https://app.crowdsec.net/cti/{{.Value}}"),
-		TraefikCaptchaHTMLPath:     getEnv("TRAEFIK_CAPTCHA_HTML_PATH", "/etc/traefik/conf/captcha.html"),
-		TraefikCaptchaEnvPath:      getEnv("TRAEFIK_CAPTCHA_ENV_PATH", "/etc/traefik/captcha.env"),
+		Port:                     getEnvAsInt("PORT", 8080),
+		Environment:              getEnv("ENVIRONMENT", "development"),
+		LogLevel:                 getEnv("LOG_LEVEL", "info"),
+		LogFile:                  getEnv("LOG_FILE", "./logs/crowdsec-manager.log"),
+		DockerHost:               getEnv("DOCKER_HOST", ""),
+		DockerHosts:              getEnv("DOCKER_HOSTS", ""),
+		ComposeFile:              getEnv("COMPOSE_FILE", "./docker-compose.yml"),
+		PangolinDir:              getEnv("PANGOLIN_DIR", "."),
+		ConfigDir:                getEnv("CONFIG_DIR", "./config"),
+		DatabasePath:             getEnv("DATABASE_PATH", "./data/settings.db"),
+		TraefikDynamicConfig:     getEnv("TRAEFIK_DYNAMIC_CONFIG", "/etc/traefik/dynamic_config.yml"),
+		TraefikStaticConfig:      getEnv("TRAEFIK_STATIC_CONFIG", "/etc/traefik/traefik_config.yml"),
+		TraefikAccessLog:         getEnv("TRAEFIK_ACCESS_LOG", "/var/log/traefik/access.log"),
+		TraefikErrorLog:          getEnv("TRAEFIK_ERROR_LOG", "/var/log/traefik/traefik.log"),
+		CrowdSecAcquisFile:       getEnv("CROWDSEC_ACQUIS_FILE", "/etc/crowdsec/acquis.yaml"),
+		CrowdSecWhitelistPath:    getEnv("CROWDSEC_WHITELIST_PATH", "/etc/crowdsec/parsers/s02-enrich/mywhitelists.yaml"),
+		CrowdSecProfilesPath:     getEnv("CROWDSEC_PROFILES_PATH", "/etc/crowdsec/profiles.yaml"),
+		CrowdSecNotificationsDir: getEnv("CROWDSEC_NOTIFICATIONS_DIR", "/etc/crowdsec/notifications"),
+		CrowdSecScenariosDir:     getEnv("CROWDSEC_SCENARIOS_DIR", "/etc/crowdsec/scenarios"),
+		CrowdSecMetricsURL:       getEnv("CROWDSEC_METRICS_URL", "http://localhost:6060/metrics"),
+		CrowdSecConsoleURL:       getEnv("CROWDSEC_CONSOLE_URL", "https://app.crowdsec.net/"),
+		CrowdSecCTIURLPattern:    getEnv("CROWDSEC_CTI_URL_PATTERN", "https://app.crowdsec.net/cti/{{.Value}}"),
+		TraefikCaptchaHTMLPath:   getEnv("TRAEFIK_CAPTCHA_HTML_PATH", "/etc/traefik/conf/captcha.html"),
+		TraefikCaptchaEnvPath:    getEnv("TRAEFIK_CAPTCHA_ENV_PATH", "/etc/traefik/captcha.env"),
 		TraefikDynamicConfigSearch: []string{
 			"/etc/traefik/config/dynamic_config.yml",
 			"/etc/traefik/dynamic_config.yaml",
 			"/etc/traefik/config/dynamic_config.yaml",
 		},
-		CaptchaGracePeriod:         getEnvAsInt("CAPTCHA_GRACE_PERIOD", 1800),
-		BackupDir:              getEnv("BACKUP_DIR", "./backups"),
+		CaptchaGracePeriod:    getEnvAsInt("CAPTCHA_GRACE_PERIOD", 1800),
+		BackupDir:             getEnv("BACKUP_DIR", "./backups"),
 		RetentionDays:         getEnvAsInt("RETENTION_DAYS", 60),
 		BackupItems:           []string{"docker-compose.yml", "config"},
 		CrowdsecContainerName: getEnv("CROWDSEC_CONTAINER_NAME", "crowdsec"),
@@ -123,6 +126,8 @@ func Load() (*Config, error) {
 		IncludeCrowdsec:       getEnvAsBool("INCLUDE_CROWDSEC", true),
 		IncludePangolin:       getEnvAsBool("INCLUDE_PANGOLIN", true),
 		IncludeGerbil:         getEnvAsBool("INCLUDE_GERBIL", true),
+		DecisionListLimit:     getEnvAsInt("DECISION_LIST_LIMIT", 200),
+		AlertListLimit:        getEnvAsInt("ALERT_LIST_LIMIT", 200),
 		NatsURL:               getEnv("NATS_URL", ""),
 		NatsToken:             getEnv("NATS_TOKEN", ""),
 		NatsEnabled:           getEnvAsBool("NATS_ENABLED", false),
@@ -210,6 +215,16 @@ func (c *Config) GetServices() []string {
 		return c.ServicesWithCrowdsec
 	}
 	return c.Services
+}
+
+// EffectiveLimit returns the effective list limit, applying the hard safety cap.
+// If the configured limit is 0 (unlimited), it returns maxLimit.
+// If the configured limit exceeds maxLimit, it returns maxLimit.
+func EffectiveLimit(configured, maxLimit int) int {
+	if configured <= 0 || configured > maxLimit {
+		return maxLimit
+	}
+	return configured
 }
 
 // getEnv retrieves an environment variable or returns the default value if not set

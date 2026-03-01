@@ -30,6 +30,16 @@ const CrowdSecConfigSubdir = "crowdsec"
 // DefaultWebSocketBufferSize is the default buffer size for WebSocket read/write operations
 const DefaultWebSocketBufferSize = 4096
 
+// MaxListLimit is the hard safety cap for cscli list commands.
+// Even when the user sets limit=0 (unlimited), we enforce this cap to prevent
+// memory exhaustion from very large result sets (e.g. 10,000+ decisions/alerts).
+// Matches CrowdSec's default DB retention of 5,000 items.
+const MaxListLimit = 5000
+
+// ExecCommandTimeout is the timeout for cscli commands executed inside containers.
+// Prevents hanging if cscli takes too long on large datasets.
+const ExecCommandTimeout = 60 * time.Second
+
 // ExternalHTTPTimeout is the timeout for outbound HTTP requests (IP lookups, etc.)
 const ExternalHTTPTimeout = 10 * time.Second
 
