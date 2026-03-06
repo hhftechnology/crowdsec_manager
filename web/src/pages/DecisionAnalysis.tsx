@@ -1,8 +1,9 @@
-import { useState, useMemo, useCallback, useEffect } from 'react'
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useSearchParams, Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import api, { Decision } from '@/lib/api'
+import type { RepeatedOffender } from '@/lib/api'
 import type { AlertSource } from '@/lib/api/types'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -29,6 +30,7 @@ import type { FilterField } from '@/components/common'
 import { ChartCard, AreaTimeline, PieBreakdown, BarDistribution } from '@/components/charts'
 import { groupByField } from '@/lib/chart-utils'
 import { useInfiniteScroll } from '@/hooks'
+import { useSSE } from '@/hooks/useSSE'
 import { useSearch } from '@/contexts/SearchContext'
 
 interface DecisionFilters {
@@ -133,6 +135,8 @@ export default function DecisionAnalysis() {
   const [hideDuplicates, setHideDuplicates] = useState(false)
   const [hideExpired, setHideExpired] = useState(true)
   const { query, setQuery } = useSearch()
+  const { lastEvent } = useSSE('/api/events/sse')
+  const seenRealtimeEventsRef = useRef<Set<string>>(new Set())
 
   const { data: decisionsData, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['decisions-analysis', activeFilters],
@@ -163,6 +167,15 @@ export default function DecisionAnalysis() {
     refetchInterval: 60000,
   })
 
+  const { data: repeatedOffendersData } = useQuery({
+    queryKey: ['repeated-offenders'],
+    queryFn: async () => {
+      const response = await api.crowdsec.getRepeatedOffenders()
+      return response.data.data
+    },
+    refetchInterval: 60000,
+  })
+
   // Build a lookup map: alert_id -> AlertSource
   const alertSourceMap = useMemo(() => {
     const map = new Map<number, AlertSource>()
@@ -185,6 +198,23 @@ export default function DecisionAnalysis() {
       setSearchQuery(query)
     }
   }, [query, searchQuery])
+
+  useEffect(() => {
+    if (!lastEvent || lastEvent.type !== 'crowdsec.repeated_offender') {
+      return
+    }
+
+    const eventId = lastEvent.id ?? JSON.stringify(lastEvent.payload ?? {})
+    if (seenRealtimeEventsRef.current.has(eventId)) {
+      return
+    }
+    seenRealtimeEventsRef.current.add(eventId)
+
+    const payload = (lastEvent.payload ?? {}) as Partial<RepeatedOffender>
+    const value = payload.value ?? 'unknown'
+    const count = payload.hit_count ?? 0
+    toast.warning(`Repeated offender detected: ${value} (${count} hits in 30d)`)
+  }, [lastEvent])
 
   // --- Chart data ---
 
@@ -419,6 +449,49 @@ export default function DecisionAnalysis() {
           </ChartCard>
         </div>
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Repeated Offenders (30d)</CardTitle>
+          <CardDescription>
+            Entities with 3 or more decisions in the last 30 days
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {repeatedOffendersData?.offenders && repeatedOffendersData.offenders.length > 0 ? (
+            <div className="rounded-md border overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Value</TableHead>
+                    <TableHead>Scope</TableHead>
+                    <TableHead>Hits</TableHead>
+                    <TableHead>First Seen</TableHead>
+                    <TableHead>Last Seen</TableHead>
+                    <TableHead>Last Notified</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {repeatedOffendersData.offenders.map((offender: RepeatedOffender) => (
+                    <TableRow key={`${offender.value}-${offender.scope}`}>
+                      <TableCell className="font-mono text-sm">{offender.value}</TableCell>
+                      <TableCell><Badge variant="outline">{offender.scope}</Badge></TableCell>
+                      <TableCell>{offender.hit_count}</TableCell>
+                      <TableCell><TimeDisplay date={offender.first_decision_at} /></TableCell>
+                      <TableCell><TimeDisplay date={offender.last_decision_at} /></TableCell>
+                      <TableCell>
+                        {offender.last_notified_at ? <TimeDisplay date={offender.last_notified_at} /> : 'Never'}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          ) : (
+            <div className="text-sm text-muted-foreground">No repeated offenders detected in the last 30 days.</div>
+          )}
+        </CardContent>
+      </Card>
 
       <CrowdSecFilterForm
         fields={DECISION_FILTER_FIELDS}

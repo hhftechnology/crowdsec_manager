@@ -3,6 +3,7 @@ package handlers
 import (
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"crowdsec-manager/internal/config"
 	"crowdsec-manager/internal/docker"
@@ -123,6 +124,13 @@ func DeleteDecision(dockerClient *docker.Client, cfg *config.Config) gin.Handler
 				Error:   fmt.Sprintf("Failed to delete decision: %v. Output: %s", err, output),
 			})
 			return
+		}
+
+		if historyService != nil {
+			decisionID, _ := strconv.ParseInt(req.ID, 10, 64)
+			if err := historyService.MarkDecisionDeleted(c.Request.Context(), decisionID, req.Value); err != nil {
+				logger.Warn("Failed to mark decision history stale after delete", "id", req.ID, "value", req.Value, "error", err)
+			}
 		}
 
 		c.JSON(http.StatusOK, models.Response{
