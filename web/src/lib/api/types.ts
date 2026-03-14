@@ -373,6 +373,60 @@ export interface AlertFilters {
   includeAll?: boolean
 }
 
+export interface HistoryConfig {
+  retention_days: number
+  updated_at?: string
+}
+
+export interface DecisionHistoryRecord {
+  id: number
+  dedupe_key: string
+  decision_id: number
+  alert_id: number
+  origin: string
+  type: string
+  scope: string
+  value: string
+  duration: string
+  scenario: string
+  created_at: string
+  until?: string
+  is_stale: boolean
+  first_seen_at: string
+  last_seen_at: string
+  stale_at?: string
+  last_snapshot_at: string
+}
+
+export interface AlertHistoryRecord {
+  id: number
+  dedupe_key: string
+  alert_id: number
+  scenario: string
+  scope: string
+  value: string
+  origin: string
+  type?: string
+  events_count: number
+  start_at?: string
+  stop_at?: string
+  is_stale: boolean
+  first_seen_at: string
+  last_seen_at: string
+  stale_at?: string
+  last_snapshot_at: string
+}
+
+export interface RepeatedOffender {
+  value: string
+  scope: string
+  hit_count: number
+  window_days: number
+  first_decision_at: string
+  last_decision_at: string
+  last_notified_at?: string
+}
+
 export interface HostInfo {
   id: string
   endpoint: string

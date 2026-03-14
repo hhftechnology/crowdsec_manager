@@ -2,7 +2,8 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 
 interface SSEEvent {
   type: string
-  payload?: Record<string, string>
+  id?: string
+  payload?: Record<string, unknown>
 }
 
 interface UseSSEResult {

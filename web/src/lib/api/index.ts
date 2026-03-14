@@ -53,6 +53,10 @@ export type {
   AlertFilters,
   HostInfo,
   StructuredLogEntry,
+  HistoryConfig,
+  DecisionHistoryRecord,
+  AlertHistoryRecord,
+  RepeatedOffender,
 } from './types'
 
 // Domain API namespaces
