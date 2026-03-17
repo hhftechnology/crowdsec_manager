@@ -111,13 +111,15 @@ func main() {
 	router.Use(gin.Recovery())
 	router.Use(logger.GinLogger())
 
-	// Configure CORS for frontend development servers
+	// Configure CORS – allow all origins so the Capacitor mobile app
+	// (which runs from capacitor://localhost or https://localhost) can
+	// reach the API alongside browser-based frontends.
 	router.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:3000", "http://localhost:5173"},
+		AllowAllOrigins:  true,
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "X-Docker-Host"},
 		ExposeHeaders:    []string{"Content-Length"},
-		AllowCredentials: true,
+		AllowCredentials: false,
 		MaxAge:           12 * time.Hour,
 	}))
 
