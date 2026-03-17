@@ -16,13 +16,7 @@ import (
 
 var terminalUpgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
-		origin := r.Header.Get("Origin")
-		if origin == "" {
-			return true // Allow non-browser clients (curl, etc.)
-		}
-		// Allow same-origin requests: the Origin host must match the request Host
-		host := r.Host
-		return strings.HasPrefix(origin, "http://"+host) || strings.HasPrefix(origin, "https://"+host)
+		return true // Allow all origins (matches CORS AllowAllOrigins: true)
 	},
 	ReadBufferSize:  4096,
 	WriteBufferSize: 4096,
