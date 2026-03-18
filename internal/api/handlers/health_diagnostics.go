@@ -9,7 +9,6 @@ import (
 	"crowdsec-manager/internal/config"
 	"crowdsec-manager/internal/database"
 	"crowdsec-manager/internal/docker"
-	"crowdsec-manager/internal/logger"
 	"crowdsec-manager/internal/models"
 
 	"github.com/buger/jsonparser"
@@ -173,57 +172,6 @@ func collectContainerHealth(dockerClient *docker.Client, cfg *config.Config) ([]
 	return containers, allRunning
 }
 
-// parseDiagnosticDecisions parses decisions from cscli output for diagnostics
-func parseDiagnosticDecisions(decisionOutput string) []models.Decision {
-	var decisions []models.Decision
-
-	var rawDecisions []map[string]interface{}
-	dataBytes, parseErr := parseCLIJSONToBytes(decisionOutput)
-	if parseErr != nil {
-		logger.Warn("Failed to normalize decisions JSON",
-			"error", parseErr,
-			"output_length", len(decisionOutput),
-			"output_preview", truncateString(decisionOutput, 100))
-		return decisions
-	}
-	if err := json.Unmarshal(dataBytes, &rawDecisions); err != nil {
-		logger.Warn("Failed to parse decisions JSON",
-			"error", err,
-			"output_length", len(decisionOutput),
-			"output_preview", truncateString(decisionOutput, 100))
-		return decisions
-	}
-
-	decisions = make([]models.Decision, 0, len(rawDecisions))
-	for _, raw := range rawDecisions {
-		decision := models.Decision{
-			ID:       int64(getInt(raw, "id")),
-			Duration: getString(raw, "duration"),
-		}
-
-		decision.Source = getString(raw, "source")
-		if decision.Source == "" {
-			decision.Source = getString(raw, "origin")
-		}
-		decision.Origin = decision.Source
-
-		decision.Type = getString(raw, "type")
-		decision.Scope = getString(raw, "scope")
-		decision.Value = getString(raw, "value")
-
-		decision.Scenario = getString(raw, "scenario")
-		if decision.Scenario == "" {
-			decision.Scenario = getString(raw, "reason")
-		}
-		decision.Reason = decision.Scenario
-
-		decision.CreatedAt = getString(raw, "created_at")
-
-		decisions = append(decisions, decision)
-	}
-
-	return decisions
-}
 
 // checkTraefikIntegrationDiagnostic checks Traefik integration for diagnostics
 func checkTraefikIntegrationDiagnostic(dockerClient *docker.Client, db *database.Database, cfg *config.Config) *models.TraefikIntegration {

@@ -180,9 +180,14 @@ func RunCompleteDiagnostics(dockerClient *docker.Client, db *database.Database, 
 		var decisions []models.Decision
 		decisionOutput, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{"cscli", "decisions", "list", "-o", "json"})
 		if err == nil {
-			decisions = parseDiagnosticDecisions(decisionOutput)
-			if len(decisions) > 0 {
-				logger.Debug("Decisions retrieved successfully", "count", len(decisions))
+			parsed, parseErr := ParseDecisionsFromOutput(decisionOutput)
+			if parseErr != nil {
+				logger.Warn("Failed to parse decisions JSON", "error", parseErr)
+			} else {
+				decisions = parsed
+				if len(decisions) > 0 {
+					logger.Debug("Decisions retrieved successfully", "count", len(decisions))
+				}
 			}
 		} else {
 			logger.Warn("Failed to execute decisions command", "error", err)
