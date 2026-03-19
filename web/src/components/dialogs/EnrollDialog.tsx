@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import api, { ConsoleStatus, EnrollRequest } from '@/lib/api'
 import { ErrorContexts, getErrorMessage } from '@/lib/api/errors'
+import { useEnrollmentDialogState } from '@/hooks'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -21,17 +22,9 @@ export default function EnrollDialog({ trigger, open: controlledOpen, onOpenChan
   const isControlled = controlledOpen !== undefined
 
   const isOpen = isControlled ? controlledOpen : internalOpen
-  const setIsOpen = (open: boolean) => {
-    if (isControlled && setControlledOpen) {
-      setControlledOpen(open)
-    } else {
-      setInternalOpen(open)
-    }
-  }
 
   const [enrollmentKey, setEnrollmentKey] = useState('')
   const [enrollmentStatus, setEnrollmentStatus] = useState<'idle' | 'enrolling' | 'waiting_approval' | 'success'>('idle')
-  const [disableContext, setDisableContext] = useState(false)
 
   const queryClient = useQueryClient()
 
@@ -47,11 +40,8 @@ export default function EnrollDialog({ trigger, open: controlledOpen, onOpenChan
     enabled: isOpen,
   })
 
-  useEffect(() => {
-    if (enrollmentPreferences) {
-      setDisableContext(enrollmentPreferences.disable_context)
-    }
-  }, [enrollmentPreferences])
+  // Derive disableContext directly from server state — no local state needed.
+  const disableContext = enrollmentPreferences?.disable_context ?? false
 
   // Poll for enrollment status
   const { data: enrollmentData } = useQuery({
@@ -69,29 +59,34 @@ export default function EnrollDialog({ trigger, open: controlledOpen, onOpenChan
     enabled: isOpen, // Only poll when dialog is open
   })
 
-  // Sync state with data — only handles the approved → success transition.
-  // Do NOT set waiting_approval here; that is handled after key submission or on dialog open.
-  useEffect(() => {
-    if (!enrollmentData) return
+  const resetEnrollmentForm = useCallback(() => {
+    setEnrollmentStatus('idle')
+    setEnrollmentKey('')
+  }, [])
 
-    if (isEnrollmentApproved(enrollmentData)) {
-      // Successfully approved in console
-      if (enrollmentStatus !== 'success') {
-        setEnrollmentStatus('success')
-        // Only show toast if we were previously enrolling or waiting
-        if (enrollmentStatus === 'enrolling' || enrollmentStatus === 'waiting_approval') {
-          toast.success('CrowdSec instance successfully enrolled and approved!')
-          setTimeout(() => {
-            setIsOpen(false)
-            setEnrollmentStatus('idle')
-            setEnrollmentKey('')
-          }, 2000)
-        }
-      }
+  const setIsOpen = useCallback((open: boolean) => {
+    if (isControlled && setControlledOpen) {
+      setControlledOpen(open)
+    } else {
+      setInternalOpen(open)
     }
-    // Don't set waiting_approval from polling — that would skip the key input form.
-    // Don't reset to idle automatically - only when user cancels or closes dialog
-  }, [enrollmentData, enrollmentStatus])
+    // Reset state when closing (unless successfully enrolled)
+    if (!open && enrollmentStatus !== 'success') {
+      setTimeout(() => {
+        resetEnrollmentForm()
+      }, 300)
+    }
+  }, [enrollmentStatus, isControlled, resetEnrollmentForm, setControlledOpen])
+
+  useEnrollmentDialogState({
+    enrollmentData,
+    enrollmentStatus,
+    isEnrollmentApproved,
+    isOpen,
+    resetEnrollmentForm,
+    setEnrollmentStatus,
+    setIsOpen,
+  })
 
   const enrollMutation = useMutation({
     mutationFn: (data: EnrollRequest) => api.crowdsec.enroll(data),
@@ -149,36 +144,8 @@ export default function EnrollDialog({ trigger, open: controlledOpen, onOpenChan
 
   const handleCancelEnrollment = () => {
     setIsOpen(false)
-    setEnrollmentStatus('idle')
-    setEnrollmentKey('')
+    resetEnrollmentForm()
   }
-
-  // Check status when dialog first opens.
-  // Only transition out of 'idle' if enrollment is already complete (success) or
-  // CrowdSec reports manual=true (key was submitted previously, awaiting Console approval).
-  useEffect(() => {
-    if (isOpen && enrollmentData && enrollmentStatus === 'idle') {
-      if (isEnrollmentApproved(enrollmentData)) {
-        setEnrollmentStatus('success')
-      } else if (enrollmentData.manual) {
-        // Key was already submitted to the CLI — restore waiting state on re-open
-        setEnrollmentStatus('waiting_approval')
-      }
-      // Otherwise stay idle so the user can enter their enrollment key
-    }
-  }, [isOpen, enrollmentData, enrollmentStatus])
-
-  // Reset state when dialog closes (unless successfully enrolled)
-  useEffect(() => {
-    if (!isOpen && enrollmentStatus !== 'success') {
-      // Delay reset to allow dialog close animation
-      const timer = setTimeout(() => {
-        setEnrollmentStatus('idle')
-        setEnrollmentKey('')
-      }, 300)
-      return () => clearTimeout(timer)
-    }
-  }, [isOpen, enrollmentStatus])
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -214,9 +181,7 @@ export default function EnrollDialog({ trigger, open: controlledOpen, onOpenChan
                   id="disable-context-enroll"
                   checked={disableContext}
                   onCheckedChange={(checked) => {
-                    const enabled = checked === true
-                    setDisableContext(enabled)
-                    savePreferenceMutation.mutate(enabled)
+                    savePreferenceMutation.mutate(checked === true)
                   }}
                   disabled={enrollmentStatus === 'enrolling' || savePreferenceMutation.isPending}
                 />
@@ -285,8 +250,7 @@ export default function EnrollDialog({ trigger, open: controlledOpen, onOpenChan
                 type="button"
                 onClick={() => {
                   setIsOpen(false)
-                  setEnrollmentStatus('idle')
-                  setEnrollmentKey('')
+                  resetEnrollmentForm()
                 }}
                 className="w-full"
               >

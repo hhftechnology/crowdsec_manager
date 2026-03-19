@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { captchaAPI } from '@/lib/api/captcha'
@@ -27,54 +27,45 @@ const PROVIDER_OPTIONS = [
 
 type ProviderValue = (typeof PROVIDER_OPTIONS)[number]['value']
 
-export default function Captcha() {
+interface CaptchaWizardInnerProps {
+  detection: FeatureDetectionResult | undefined
+  statusData: { configured: boolean; provider?: string; captchaHTMLExists: boolean; hasHTMLPath: boolean; implemented: boolean } | undefined
+  detecting: boolean
+  detectError: boolean
+  detectErr: Error | null
+  refetchStatus: () => void
+  redetect: () => void
+}
+
+function CaptchaWizardInner({
+  detection,
+  statusData,
+  detecting,
+  detectError,
+  detectErr,
+  refetchStatus,
+  redetect,
+}: CaptchaWizardInnerProps) {
   const queryClient = useQueryClient()
   const [currentStep, setCurrentStep] = useState(0)
-  const [provider, setProvider] = useState<ProviderValue>('turnstile')
-  const [siteKey, setSiteKey] = useState('')
-  const [secretKey, setSecretKey] = useState('')
+  const detectedVals = detection?.detected_values
+
+  const [provider, setProvider] = useState<ProviderValue>(() => {
+    const p = detectedVals?.provider as ProviderValue
+    return PROVIDER_OPTIONS.some((o) => o.value === p) ? p : 'turnstile'
+  })
+  const [siteKey, setSiteKey] = useState(() =>
+    typeof detectedVals?.site_key === 'string' ? detectedVals.site_key : ''
+  )
+  const [secretKey, setSecretKey] = useState(() =>
+    typeof detectedVals?.secret_key === 'string' ? detectedVals.secret_key : ''
+  )
   const [applySteps, setApplySteps] = useState<StepResult[]>([])
   const [retryingStep, setRetryingStep] = useState<number | undefined>()
-  const [completedSteps, setCompletedSteps] = useState<Set<string>>(new Set())
+  const [completedSteps, setCompletedSteps] = useState<Set<string>>(() =>
+    detectedVals && Object.keys(detectedVals).length > 0 ? new Set(['detect']) : new Set()
+  )
   const [errorSteps, setErrorSteps] = useState<Set<string>>(new Set())
-
-  // Detection query — runs on mount
-  const {
-    data: detection,
-    isLoading: detecting,
-    isError: detectError,
-    error: detectErr,
-    refetch: redetect,
-  } = useQuery({
-    queryKey: ['captcha-detect'],
-    queryFn: async () => {
-      const res = await captchaAPI.detect()
-      return res.data.data as FeatureDetectionResult
-    },
-  })
-
-  // Status query — used in verify step
-  const { data: statusData, refetch: refetchStatus } = useQuery({
-    queryKey: ['captcha-status'],
-    queryFn: async () => {
-      const res = await captchaAPI.getStatus()
-      return res.data.data
-    },
-  })
-
-  // Pre-populate form from detection results
-  useEffect(() => {
-    if (detection?.detected_values) {
-      const vals = detection.detected_values
-      if (vals.provider && typeof vals.provider === 'string') {
-        const p = vals.provider as ProviderValue
-        if (PROVIDER_OPTIONS.some((o) => o.value === p)) setProvider(p)
-      }
-      if (vals.site_key && typeof vals.site_key === 'string') setSiteKey(vals.site_key)
-      if (vals.secret_key && typeof vals.secret_key === 'string') setSecretKey(vals.secret_key)
-      setCompletedSteps((prev) => new Set([...prev, 'detect']))
-    }
-  }, [detection])
 
   // Save config mutation
   const saveMutation = useMutation({
@@ -108,8 +99,7 @@ export default function Captcha() {
     onError: () => toast.error('Failed to apply configuration'),
   })
 
-  // ── Retry a single failed step ──────────────────────────────────────────────
-  const handleRetryStep = async (stepNum: number) => {
+  const handleRetryStep = useCallback(async (stepNum: number) => {
     setRetryingStep(stepNum)
     try {
       const res = await captchaAPI.applyConfig(stepNum)
@@ -147,7 +137,7 @@ export default function Captcha() {
       queryClient.invalidateQueries({ queryKey: ['captcha-status'] })
       queryClient.invalidateQueries({ queryKey: ['captcha-detect'] })
     }
-  }
+  }, [queryClient])
 
   const selectedProvider = PROVIDER_OPTIONS.find((p) => p.value === provider)
   const isProcessing = saveMutation.isPending || applyMutation.isPending || retryingStep !== undefined || detecting
@@ -519,7 +509,6 @@ export default function Captcha() {
         ),
       },
     ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       detecting,
       detectError,
@@ -531,10 +520,51 @@ export default function Captcha() {
       selectedProvider,
       applySteps,
       statusData,
-      saveMutation.isPending,
-      applyMutation.isPending,
+      saveMutation,
+      applyMutation,
+      handleRetryStep,
+      redetect,
+      refetchStatus,
+      retryingStep,
     ],
   )
+
+  return (
+    <FeatureWizard
+      title="Captcha Setup"
+      icon={<ScanFace className="h-6 w-6" />}
+      steps={steps}
+      currentStep={currentStep}
+      onStepChange={setCurrentStep}
+      isProcessing={isProcessing}
+      completedSteps={completedSteps}
+      errorSteps={errorSteps}
+    />
+  )
+}
+
+export default function Captcha() {
+  const {
+    data: detection,
+    isLoading: detecting,
+    isError: detectError,
+    error: detectErr,
+    refetch: redetect,
+  } = useQuery({
+    queryKey: ['captcha-detect'],
+    queryFn: async () => {
+      const res = await captchaAPI.detect()
+      return res.data.data as FeatureDetectionResult
+    },
+  })
+
+  const { data: statusData, refetch: refetchStatus } = useQuery({
+    queryKey: ['captcha-status'],
+    queryFn: async () => {
+      const res = await captchaAPI.getStatus()
+      return res.data.data
+    },
+  })
 
   return (
     <div className="space-y-6">
@@ -544,15 +574,15 @@ export default function Captcha() {
         breadcrumbs="Security / Captcha"
       />
 
-      <FeatureWizard
-        title="Captcha Setup"
-        icon={<ScanFace className="h-6 w-6" />}
-        steps={steps}
-        currentStep={currentStep}
-        onStepChange={setCurrentStep}
-        isProcessing={isProcessing}
-        completedSteps={completedSteps}
-        errorSteps={errorSteps}
+      <CaptchaWizardInner
+        key={detection?.status ?? 'loading'}
+        detection={detection}
+        statusData={statusData}
+        detecting={detecting}
+        detectError={detectError}
+        detectErr={detectErr as Error | null}
+        refetchStatus={refetchStatus}
+        redetect={redetect}
       />
     </div>
   )

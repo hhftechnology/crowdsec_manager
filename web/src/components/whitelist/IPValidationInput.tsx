@@ -1,12 +1,8 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useCallback } from 'react'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
 import { CheckCircle2, XCircle } from 'lucide-react'
-
-interface ValidationResult {
-  valid: boolean
-  message: string
-}
+import { useValidationResult, type ValidationResult } from '@/hooks'
 
 interface IPValidationInputProps {
   value: string
@@ -83,7 +79,12 @@ function IPValidationInput({
   placeholder,
   className,
 }: IPValidationInputProps) {
-  const [validation, setValidation] = useState<ValidationResult>({ valid: false, message: '' })
+  const validation = useValidationResult({
+    value,
+    allowCIDR,
+    onValidation,
+    validate: validateInput,
+  })
 
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -91,12 +92,6 @@ function IPValidationInput({
     },
     [onChange]
   )
-
-  useEffect(() => {
-    const result = validateInput(value, allowCIDR)
-    setValidation(result)
-    onValidation?.(result)
-  }, [value, allowCIDR, onValidation])
 
   const defaultPlaceholder = allowCIDR
     ? 'Enter IP address or CIDR (e.g., 192.168.1.0/24)'

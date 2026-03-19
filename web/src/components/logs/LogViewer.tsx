@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useRef, useState, useCallback } from 'react'
+import { useMountEffect } from '@/hooks/useMountEffect'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -23,11 +24,24 @@ function LogViewer({
 
   const displayedLogs = maxLines > 0 ? logs.slice(-maxLines) : logs
 
-  useEffect(() => {
-    if (isAutoScrollEnabled && scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+  // Ref-as-latest-value: always current without needing it in useMountEffect deps
+  const autoScrollEnabledRef = useRef(isAutoScrollEnabled)
+  autoScrollEnabledRef.current = isAutoScrollEnabled
+
+  useMountEffect(() => {
+    const container = scrollRef.current
+    if (!container) return
+    if (autoScrollEnabledRef.current) {
+      container.scrollTop = container.scrollHeight
     }
-  }, [displayedLogs, isAutoScrollEnabled])
+    const observer = new MutationObserver(() => {
+      if (autoScrollEnabledRef.current) {
+        container.scrollTop = container.scrollHeight
+      }
+    })
+    observer.observe(container, { childList: true, subtree: true })
+    return () => observer.disconnect()
+  })
 
   const handleCopy = useCallback(async () => {
     try {
@@ -51,7 +65,13 @@ function LogViewer({
             variant="ghost"
             size="sm"
             className="h-7 gap-1 text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
-            onClick={() => setIsAutoScrollEnabled(!isAutoScrollEnabled)}
+            onClick={() => {
+              const next = !isAutoScrollEnabled
+              setIsAutoScrollEnabled(next)
+              if (next && scrollRef.current) {
+                scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+              }
+            }}
           >
             <ArrowDownToLine className="h-3 w-3" />
             {isAutoScrollEnabled ? 'Auto-scroll on' : 'Auto-scroll off'}

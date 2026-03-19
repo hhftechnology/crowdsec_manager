@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import api, { ConfigPathRequest, ConfigPathResponse } from '@/lib/api'
@@ -10,24 +10,9 @@ import { Label } from '@/components/ui/label'
 import { Settings, FileCode } from 'lucide-react'
 import { PageHeader } from '@/components/common'
 
-export default function Configuration() {
+function EditableConfigForm({ initialPath, currentPath }: { initialPath: string; currentPath: string }) {
   const queryClient = useQueryClient()
-  const [configPath, setConfigPath] = useState('')
-
-  const { data: pathData, isLoading } = useQuery<ConfigPathResponse | null>({
-    queryKey: ['traefik-config-path'],
-    queryFn: async () => {
-      const response = await api.traefik.getConfigPath()
-      return response.data.data ?? null
-    },
-  })
-
-  // Update local state when data is loaded
-  useEffect(() => {
-    if (pathData?.dynamic_config_path) {
-      setConfigPath(pathData.dynamic_config_path)
-    }
-  }, [pathData])
+  const [configPath, setConfigPath] = useState(initialPath)
 
   const updatePathMutation = useMutation({
     mutationFn: (data: ConfigPathRequest) => api.traefik.setConfigPath(data),
@@ -42,14 +27,55 @@ export default function Configuration() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-
     if (!configPath.trim()) {
       toast.error('Please enter a valid path')
       return
     }
-
     updatePathMutation.mutate({ dynamic_config_path: configPath })
   }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="config-path">
+          Dynamic Config Path <span className="text-destructive">*</span>
+        </Label>
+        <Input
+          id="config-path"
+          type="text"
+          placeholder="/etc/traefik/dynamic_config.yml"
+          value={configPath}
+          onChange={(e) => setConfigPath(e.target.value)}
+        />
+        <p className="text-xs text-muted-foreground">
+          The absolute path to the dynamic_config.yml file in the Traefik container
+        </p>
+      </div>
+
+      <div className="p-4 bg-muted rounded-lg">
+        <p className="text-sm font-semibold mb-2">Current Path:</p>
+        <code className="text-sm font-mono">{currentPath || 'Not set'}</code>
+      </div>
+
+      <Button
+        type="submit"
+        className="w-full"
+        disabled={updatePathMutation.isPending}
+      >
+        {updatePathMutation.isPending ? 'Updating...' : 'Update Configuration Path'}
+      </Button>
+    </form>
+  )
+}
+
+export default function Configuration() {
+  const { data: pathData, isLoading } = useQuery<ConfigPathResponse | null>({
+    queryKey: ['traefik-config-path'],
+    queryFn: async () => {
+      const response = await api.traefik.getConfigPath()
+      return response.data.data ?? null
+    },
+  })
 
   return (
     <div className="space-y-6">
@@ -73,36 +99,11 @@ export default function Configuration() {
           {isLoading ? (
             <div className="h-24 bg-muted animate-pulse rounded" />
           ) : (
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="config-path">
-                  Dynamic Config Path <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  id="config-path"
-                  type="text"
-                  placeholder="/etc/traefik/dynamic_config.yml"
-                  value={configPath}
-                  onChange={(e) => setConfigPath(e.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">
-                  The absolute path to the dynamic_config.yml file in the Traefik container
-                </p>
-              </div>
-
-              <div className="p-4 bg-muted rounded-lg">
-                <p className="text-sm font-semibold mb-2">Current Path:</p>
-                <code className="text-sm font-mono">{pathData?.dynamic_config_path || 'Not set'}</code>
-              </div>
-
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={updatePathMutation.isPending}
-              >
-                {updatePathMutation.isPending ? 'Updating...' : 'Update Configuration Path'}
-              </Button>
-            </form>
+            <EditableConfigForm
+              key={pathData?.dynamic_config_path ?? ''}
+              initialPath={pathData?.dynamic_config_path ?? ''}
+              currentPath={pathData?.dynamic_config_path ?? ''}
+            />
           )}
         </CardContent>
       </Card>

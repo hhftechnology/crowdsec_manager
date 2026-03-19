@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import { useState, useRef, useMemo, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import api from '@/lib/api'
@@ -13,6 +13,7 @@ import { PageHeader, QueryError } from '@/components/common'
 import { LogFilterPanel, type LogFilters } from '@/components/logs/LogFilterPanel'
 import { LogViewer } from '@/components/logs/LogViewer'
 import { TraefikAnalytics } from '@/components/logs/TraefikAnalytics'
+import { useMountEffect } from '@/hooks/useMountEffect'
 
 export default function Logs() {
   const [selectedService, setSelectedService] = useState<'crowdsec' | 'traefik'>('crowdsec')
@@ -54,65 +55,66 @@ export default function Logs() {
     },
   })
 
-  // WebSocket streaming
-  useEffect(() => {
-    if (isStreaming) {
-      const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}${api.logs.getStreamUrl(selectedService)}`
-      try {
-        const ws = new WebSocket(wsUrl)
-        wsRef.current = ws
-        ws.onopen = () => { toast.success('Log stream connected'); setStreamLogs([]); prevStreamLengthRef.current = 0 }
-        ws.onmessage = (event: MessageEvent) => {
-          const message = (event.data as string)?.trim()
-          if (!message) return
-          const lines = message.split('\n').filter(line => line.trim().length > 0)
-          if (lines.length === 0) return
-          setStreamLogs(prev => {
-            const lastFewLines = prev.slice(-5)
-            const hasNewContent = lines.some(line => !lastFewLines.includes(line))
-            if (!hasNewContent && prev.length > 0) return prev
-            return [...prev, ...lines]
-          })
-        }
-        ws.onerror = (event) => { toast.error(getErrorMessage(event, 'WebSocket error occurred', ErrorContexts.LogsStreamWebsocketError)); setIsStreaming(false) }
-        ws.onclose = () => { toast.info('Log stream disconnected'); setIsStreaming(false) }
-      } catch (error) {
-        toast.error(getErrorMessage(error, 'Failed to connect to log stream', ErrorContexts.LogsStreamConnect))
-        setIsStreaming(false)
+  // Close WebSocket on unmount
+  useMountEffect(() => {
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close()
+        wsRef.current = null
       }
-      return () => { if (wsRef.current) wsRef.current.close(); prevStreamLengthRef.current = 0 }
-    } else {
-      setStreamLogs([])
-      prevStreamLengthRef.current = 0
-      if (wsRef.current) { wsRef.current.close(); wsRef.current = null }
     }
-  }, [isStreaming, selectedService])
+  })
 
-  useEffect(() => {
-    if (filters.service === 'all') {
-      return
+  const startWebSocket = useCallback((service: 'crowdsec' | 'traefik') => {
+    const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}${api.logs.getStreamUrl(service)}`
+    try {
+      const ws = new WebSocket(wsUrl)
+      wsRef.current = ws
+      ws.onopen = () => { toast.success('Log stream connected'); setStreamLogs([]); prevStreamLengthRef.current = 0 }
+      ws.onmessage = (event: MessageEvent) => {
+        const message = (event.data as string)?.trim()
+        if (!message) return
+        const lines = message.split('\n').filter(line => line.trim().length > 0)
+        if (lines.length === 0) return
+        setStreamLogs(prev => {
+          const lastFewLines = prev.slice(-5)
+          const hasNewContent = lines.some(line => !lastFewLines.includes(line))
+          if (!hasNewContent && prev.length > 0) return prev
+          return [...prev, ...lines]
+        })
+      }
+      ws.onerror = (event) => { toast.error(getErrorMessage(event, 'WebSocket error occurred', ErrorContexts.LogsStreamWebsocketError)); setIsStreaming(false) }
+      ws.onclose = () => { toast.info('Log stream disconnected'); setIsStreaming(false) }
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Failed to connect to log stream', ErrorContexts.LogsStreamConnect))
+      setIsStreaming(false)
     }
-    if (filters.service !== selectedService) {
-      setSelectedService(filters.service as 'crowdsec' | 'traefik')
-    }
-  }, [filters.service, selectedService])
+  }, [])
 
-  useEffect(() => {
-    if (filters.search !== query) {
-      setFilters((prev) => ({ ...prev, search: query }))
-    }
-  }, [query, filters.search])
-
-  const handleToggleStream = () => {
+  const handleToggleStream = useCallback(() => {
     if (isStreaming) {
       if (wsRef.current) { wsRef.current.close(); wsRef.current = null }
       setStreamLogs([])
       prevStreamLengthRef.current = 0
       setIsStreaming(false)
     } else {
+      startWebSocket(selectedService)
       setIsStreaming(true)
     }
-  }
+  }, [isStreaming, selectedService, startWebSocket])
+
+  const handleFilterChange = useCallback((next: LogFilters) => {
+    setFilters(next)
+    if (next.search !== query) setQuery(next.search)
+    const newService = next.service !== 'all' ? next.service as 'crowdsec' | 'traefik' : selectedService
+    if (newService !== selectedService) {
+      setSelectedService(newService)
+      if (isStreaming) {
+        if (wsRef.current) { wsRef.current.close(); wsRef.current = null }
+        startWebSocket(newService)
+      }
+    }
+  }, [query, setQuery, selectedService, isStreaming, startWebSocket])
 
   const rawLogs = isStreaming
     ? streamLogs.filter(line => line.trim().length > 0).join('\n')
@@ -120,7 +122,9 @@ export default function Logs() {
       ? crowdsecLogs?.logs || ''
       : traefikLogs?.logs || ''
 
-  // Filter logs by search term and level
+  // query (SearchContext) is source of truth for search; derive displayFilters for LogFilterPanel
+  const displayFilters = useMemo(() => ({ ...filters, search: query }), [filters, query])
+
   const filteredLines = useMemo(() => {
     if (!rawLogs) return []
     let lines = rawLogs.split('\n').filter(l => l.trim())
@@ -134,13 +138,13 @@ export default function Logs() {
       })
     }
 
-    if (filters.search) {
-      const lower = filters.search.toLowerCase()
+    if (query) {
+      const lower = query.toLowerCase()
       lines = lines.filter(line => line.toLowerCase().includes(lower))
     }
 
     return lines
-  }, [rawLogs, filters.search, filters.level])
+  }, [rawLogs, query, filters.level])
 
   const totalLines = rawLogs ? rawLogs.split('\n').filter(l => l.trim()).length : 0
 
@@ -226,14 +230,9 @@ export default function Logs() {
           <div className="flex flex-col gap-3">
             <LogFilterPanel
               services={['crowdsec', 'traefik']}
-              filters={filters}
+              filters={displayFilters}
               includeAllServices={false}
-              onFilterChange={(next) => {
-                setFilters(next)
-                if (next.search !== query) {
-                  setQuery(next.search)
-                }
-              }}
+              onFilterChange={handleFilterChange}
             />
             <div className="flex items-center justify-between">
               <div className="text-xs text-muted-foreground">

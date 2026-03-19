@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
 import {
@@ -33,22 +33,23 @@ function LogFilterPanel({
   filters: controlledFilters,
   includeAllServices = true,
 }: LogFilterPanelProps) {
-  const [filters, setFilters] = useState<LogFilters>(controlledFilters ?? {
+  // Uncontrolled local state — only used when controlledFilters is not provided
+  const [localFilters, setLocalFilters] = useState<LogFilters>({
     service: 'all',
     level: 'all',
     search: '',
   })
 
-  useEffect(() => {
-    if (controlledFilters) {
-      setFilters(controlledFilters)
-    }
-  }, [controlledFilters])
+  // In controlled mode, use props directly; fall back to local state otherwise
+  const filters = useMemo(
+    () => controlledFilters ?? localFilters,
+    [controlledFilters, localFilters]
+  )
 
   const updateFilter = useCallback(
     <K extends keyof LogFilters>(key: K, value: LogFilters[K]) => {
       const updated = { ...filters, [key]: value }
-      setFilters(updated)
+      setLocalFilters(updated)
       onFilterChange(updated)
     },
     [filters, onFilterChange]

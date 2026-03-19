@@ -1,6 +1,5 @@
 /// <reference types="vite/client" />
-import { useState, useEffect, useMemo } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import api, { Scenario, ScenarioSetupRequest } from '@/lib/api'
@@ -16,7 +15,7 @@ import { Switch } from '@/components/ui/switch'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { FileText, Plus, X, CheckCircle2, AlertCircle, FlaskConical } from 'lucide-react'
 import { PageHeader, EmptyState, CardSkeleton } from '@/components/common'
-import { useSearch } from '@/contexts/SearchContext'
+import { useUrlFilters } from '@/hooks'
 
 interface ScenarioItem {
   name: string
@@ -71,10 +70,8 @@ const parseScenariosList = (data: ScenariosResponse | null | undefined): Scenari
 
 export default function Scenarios() {
   const queryClient = useQueryClient()
-  const [searchParams, setSearchParams] = useSearchParams()
+  const [urlFilters, setUrlFilter] = useUrlFilters(['q'], { q: '' })
   const [scenarios, setScenarios] = useState<Scenario[]>([{ name: '', description: '', content: '' }])
-  const [debugInfo, setDebugInfo] = useState<Record<string, unknown> | null>(null)
-  const { query, setQuery } = useSearch()
 
   const { data: scenariosListRaw, isLoading, error, isError } = useQuery({
     queryKey: ['scenarios'],
@@ -114,43 +111,23 @@ export default function Scenarios() {
 
   const scenariosList = parseScenariosList(scenariosListRaw)
   const filteredScenarios = useMemo(() => {
-    if (!query) return scenariosList
-    const lower = query.toLowerCase()
+    if (!urlFilters.q) return scenariosList
+    const lower = (urlFilters.q as string).toLowerCase()
     return scenariosList.filter((scenario) =>
       scenario.name?.toLowerCase().includes(lower) ||
       scenario.description?.toLowerCase().includes(lower) ||
       scenario.local_path?.toLowerCase().includes(lower)
     )
-  }, [scenariosList, query])
+  }, [scenariosList, urlFilters.q])
 
-  useEffect(() => {
-    const next = new URLSearchParams(searchParams)
-    if (query) {
-      next.set('q', query)
-    } else {
-      next.delete('q')
-    }
-    if (next.toString() !== searchParams.toString()) {
-      setSearchParams(next, { replace: true })
-    }
-  }, [query, searchParams, setSearchParams])
-
-  useEffect(() => {
-    const q = searchParams.get('q') ?? ''
-    if (q && q !== query) {
-      setQuery(q)
-    }
-  }, [searchParams, query, setQuery])
-
-  useEffect(() => {
-    if (scenariosListRaw) {
-      setDebugInfo({
-        hasData: !!scenariosListRaw, dataType: typeof scenariosListRaw,
-        hasScenarios: !!scenariosListRaw.scenarios, scenariosType: typeof scenariosListRaw.scenarios,
-        scenariosIsArray: Array.isArray(scenariosListRaw.scenarios),
-        scenariosLength: Array.isArray(scenariosListRaw.scenarios) ? scenariosListRaw.scenarios.length : 'N/A',
-        count: scenariosListRaw.count || 'N/A', parsedCount: scenariosList.length,
-      })
+  const debugInfo = useMemo(() => {
+    if (!scenariosListRaw) return null
+    return {
+      hasData: !!scenariosListRaw, dataType: typeof scenariosListRaw,
+      hasScenarios: !!scenariosListRaw.scenarios, scenariosType: typeof scenariosListRaw.scenarios,
+      scenariosIsArray: Array.isArray(scenariosListRaw.scenarios),
+      scenariosLength: Array.isArray(scenariosListRaw.scenarios) ? scenariosListRaw.scenarios.length : 'N/A',
+      count: scenariosListRaw.count || 'N/A', parsedCount: scenariosList.length,
     }
   }, [scenariosListRaw, scenariosList])
 
@@ -163,8 +140,8 @@ export default function Scenarios() {
         actions={
           <Input
             placeholder="Search scenarios..."
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            value={urlFilters.q as string}
+            onChange={(event) => setUrlFilter('q', event.target.value)}
             className="h-9 w-56"
           />
         }
@@ -183,7 +160,7 @@ export default function Scenarios() {
                   {filteredScenarios.length > 0 && (
                     <span className="ml-2">
                       ({filteredScenarios.length} scenario{filteredScenarios.length !== 1 ? 's' : ''} found
-                      {query ? ` of ${scenariosList.length}` : ''})
+                      {urlFilters.q ? ` of ${scenariosList.length}` : ''})
                     </span>
                   )}
                 </CardDescription>
@@ -240,7 +217,7 @@ export default function Scenarios() {
           ) : (
             <EmptyState
               icon={AlertCircle}
-              title={query ? 'No scenarios matched your search' : 'No scenarios installed'}
+              title={urlFilters.q ? 'No scenarios matched your search' : 'No scenarios installed'}
               description={debugInfo ? 'Check the debug info above for more details' : undefined}
             />
           )}

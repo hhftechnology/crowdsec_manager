@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Save, RefreshCw, FileText, RotateCcw } from 'lucide-react'
@@ -9,49 +9,9 @@ import api from '@/lib/api'
 import { ErrorContexts, getErrorMessage } from '@/lib/api/errors'
 import { PageHeader, QueryError } from '@/components/common'
 
-export default function Profiles() {
+function ProfileEditor({ initialContent }: { initialContent: string }) {
   const queryClient = useQueryClient()
-  const [content, setContent] = useState('')
-
-  const {
-    data: profileData,
-    isLoading,
-    isError,
-    error,
-    refetch,
-  } = useQuery({
-    queryKey: ['profiles'],
-    queryFn: async () => {
-      const response = await api.profiles.get()
-      return response.data
-    },
-  })
-
-  // Sync fetched content into local editor state
-  useEffect(() => {
-    if (profileData?.data !== undefined) {
-      setContent(profileData.data ?? '')
-      if (profileData.message) {
-        toast.success(profileData.message)
-      }
-    }
-  }, [profileData])
-
-  const loadDefaultMutation = useMutation({
-    mutationFn: async () => {
-      const response = await api.profiles.get(true)
-      return response.data
-    },
-    onSuccess: (data) => {
-      setContent(data.data ?? '')
-      if (data.message) {
-        toast.success(data.message)
-      }
-    },
-    onError: (error) => {
-      toast.error(getErrorMessage(error, 'Failed to load default template', ErrorContexts.ProfilesLoadDefault))
-    },
-  })
+  const [content, setContent] = useState(initialContent)
 
   const saveMutation = useMutation({
     mutationFn: async ({ restart }: { restart: boolean }) => {
@@ -67,49 +27,50 @@ export default function Profiles() {
     },
   })
 
+  const loadDefaultMutation = useMutation({
+    mutationFn: async () => {
+      const response = await api.profiles.get(true)
+      return response.data
+    },
+    onSuccess: (data) => {
+      setContent(data.data ?? '')
+      if (data.message) toast.success(data.message)
+    },
+    onError: (error) => {
+      toast.error(getErrorMessage(error, 'Failed to load default template', ErrorContexts.ProfilesLoadDefault))
+    },
+  })
+
   const saving = saveMutation.isPending && !saveMutation.variables?.restart
   const restarting = saveMutation.isPending && !!saveMutation.variables?.restart
 
-  if (isLoading) {
-    return <div className="flex items-center justify-center h-full">Loading...</div>
-  }
-
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Profiles"
-        description="Manage your CrowdSec profiles configuration (profiles.yaml)."
-        actions={
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              onClick={() => loadDefaultMutation.mutate()}
-              disabled={saving || restarting || loadDefaultMutation.isPending}
-            >
-              <RotateCcw className="h-4 w-4" />
-              Reset to Default
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => saveMutation.mutate({ restart: false })}
-              disabled={saving || restarting}
-            >
-              <Save className="h-4 w-4" />
-              {saving ? 'Saving...' : 'Save'}
-            </Button>
-            <Button
-              onClick={() => saveMutation.mutate({ restart: true })}
-              disabled={saving || restarting}
-            >
-              <RefreshCw className={`h-4 w-4 ${restarting ? 'animate-spin' : ''}`} />
-              {restarting ? 'Restarting...' : 'Save & Restart'}
-            </Button>
-          </div>
-        }
-      />
-
-      {isError && <QueryError error={error} onRetry={refetch} />}
-
+    <>
+      <div className="flex gap-2 justify-end">
+        <Button
+          variant="outline"
+          onClick={() => loadDefaultMutation.mutate()}
+          disabled={saving || restarting || loadDefaultMutation.isPending}
+        >
+          <RotateCcw className="h-4 w-4" />
+          Reset to Default
+        </Button>
+        <Button
+          variant="outline"
+          onClick={() => saveMutation.mutate({ restart: false })}
+          disabled={saving || restarting}
+        >
+          <Save className="h-4 w-4" />
+          {saving ? 'Saving...' : 'Save'}
+        </Button>
+        <Button
+          onClick={() => saveMutation.mutate({ restart: true })}
+          disabled={saving || restarting}
+        >
+          <RefreshCw className={`h-4 w-4 ${restarting ? 'animate-spin' : ''}`} />
+          {restarting ? 'Restarting...' : 'Save & Restart'}
+        </Button>
+      </div>
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -129,6 +90,42 @@ export default function Profiles() {
           />
         </CardContent>
       </Card>
+    </>
+  )
+}
+
+export default function Profiles() {
+  const {
+    data: profileData,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ['profiles'],
+    queryFn: async () => {
+      const response = await api.profiles.get()
+      return response.data
+    },
+  })
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Profiles"
+        description="Manage your CrowdSec profiles configuration (profiles.yaml)."
+      />
+
+      {isError && <QueryError error={error} onRetry={refetch} />}
+
+      {isLoading ? (
+        <div className="flex items-center justify-center h-full">Loading...</div>
+      ) : (
+        <ProfileEditor
+          key={profileData?.data?.slice(0, 40) ?? 'empty'}
+          initialContent={profileData?.data ?? ''}
+        />
+      )}
     </div>
   )
 }

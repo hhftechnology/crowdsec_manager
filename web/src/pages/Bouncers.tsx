@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useSearchParams } from 'react-router-dom'
 import api, { Bouncer, AxiosErrorResponse } from '@/lib/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -37,16 +36,15 @@ import {
 import { Plus, Trash2, RefreshCw, Copy, Check, Shield, AlertCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { EmptyState, PageHeader, QueryError, ResultsSummary } from '@/components/common'
-import { useSearch } from '@/contexts/SearchContext'
+import { useUrlFilters } from '@/hooks'
 
 export default function Bouncers() {
   const queryClient = useQueryClient()
-  const [searchParams, setSearchParams] = useSearchParams()
+  const [urlFilters, setUrlFilter] = useUrlFilters(['q'], { q: '' })
   const [newBouncerName, setNewBouncerName] = useState('')
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [createdBouncer, setCreatedBouncer] = useState<{ name: string; api_key: string } | null>(null)
   const [copied, setCopied] = useState(false)
-  const { query, setQuery } = useSearch()
 
   const { data: bouncers, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['bouncers'],
@@ -132,33 +130,14 @@ export default function Bouncers() {
   }
 
   const filteredBouncers = useMemo(() => {
-    if (!query) return bouncers ?? []
-    const lower = query.toLowerCase()
+    if (!urlFilters.q) return bouncers ?? []
+    const lower = (urlFilters.q as string).toLowerCase()
     return (bouncers ?? []).filter((bouncer: Bouncer) =>
       bouncer.name?.toLowerCase().includes(lower) ||
       bouncer.ip_address?.toLowerCase().includes(lower) ||
       bouncer.type?.toLowerCase().includes(lower)
     )
-  }, [bouncers, query])
-
-  useEffect(() => {
-    const next = new URLSearchParams(searchParams)
-    if (query) {
-      next.set('q', query)
-    } else {
-      next.delete('q')
-    }
-    if (next.toString() !== searchParams.toString()) {
-      setSearchParams(next, { replace: true })
-    }
-  }, [query, searchParams, setSearchParams])
-
-  useEffect(() => {
-    const q = searchParams.get('q') ?? ''
-    if (q && q !== query) {
-      setQuery(q)
-    }
-  }, [searchParams, query, setQuery])
+  }, [bouncers, urlFilters.q])
 
   return (
     <div className="space-y-6">
@@ -170,8 +149,8 @@ export default function Bouncers() {
           <div className="flex items-center gap-2">
             <Input
               placeholder="Search bouncers..."
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
+              value={urlFilters.q as string}
+              onChange={(event) => setUrlFilter('q', event.target.value)}
               className="h-9 w-56"
             />
             <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
@@ -275,8 +254,8 @@ export default function Bouncers() {
           ) : !filteredBouncers || filteredBouncers.length === 0 ? (
             <EmptyState
               icon={Shield}
-              title={query ? 'No bouncers matched your search' : 'No bouncers found'}
-              description={query ? 'Try a different search term.' : 'Add a bouncer to get started.'}
+              title={urlFilters.q ? 'No bouncers matched your search' : 'No bouncers found'}
+              description={urlFilters.q ? 'Try a different search term.' : 'Add a bouncer to get started.'}
             />
           ) : (
             <div className="rounded-md border">
@@ -285,7 +264,7 @@ export default function Bouncers() {
                   total={bouncers?.length ?? 0}
                   filtered={filteredBouncers.length}
                   label="bouncers"
-                  query={query || undefined}
+                  query={(urlFilters.q as string) || undefined}
                 />
               </div>
               <Table>

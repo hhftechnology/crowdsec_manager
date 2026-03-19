@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import api, { CrowdSecAlert } from '@/lib/api'
@@ -483,7 +483,6 @@ export default function AlertAnalysis() {
   })
 
   const [expandedAlert, setExpandedAlert] = useState<number | null>(null)
-  const [searchQuery, setSearchQuery] = useState('')
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards')
   const [detailAlert, setDetailAlert] = useState<CrowdSecAlert | null>(null)
   const [deleteAlertId, setDeleteAlertId] = useState<number | null>(null)
@@ -501,12 +500,6 @@ export default function AlertAnalysis() {
     refetchInterval: 30000,
   })
 
-  useEffect(() => {
-    if (query !== searchQuery) {
-      setSearchQuery(query)
-    }
-  }, [query, searchQuery])
-
   // ---- Client-side search filtering (includes country + AS) ----
 
   const filteredAlerts = useMemo(() => {
@@ -519,9 +512,9 @@ export default function AlertAnalysis() {
       alerts = alerts.filter((a) => a.source?.cn?.toUpperCase() === countryFilter)
     }
 
-    if (!searchQuery.trim()) return alerts
+    if (!query.trim()) return alerts
 
-    const q = searchQuery.toLowerCase()
+    const q = query.toLowerCase()
     return alerts.filter((alert) => {
       const searchable = [
         String(alert.id),
@@ -539,7 +532,7 @@ export default function AlertAnalysis() {
         .toLowerCase()
       return searchable.includes(q)
     })
-  }, [alertsData, searchQuery, activeFilters.country])
+  }, [alertsData, query, activeFilters.country])
 
   // ---- Infinite scroll ----
 
@@ -575,9 +568,9 @@ export default function AlertAnalysis() {
   const handleResetFilters = useCallback(() => {
     resetFilters()
     setActiveFilters({})
-    setSearchQuery('')
+    setQuery('')
     toast.info('Filters reset')
-  }, [resetFilters])
+  }, [resetFilters, setQuery])
 
   const handleFilterChange = useCallback(
     (key: string, value: string | boolean) => {
@@ -715,8 +708,8 @@ export default function AlertAnalysis() {
             <div>
               <CardTitle>Alert Results</CardTitle>
               <CardDescription>
-                {searchQuery
-                  ? `${displayedCount} of ${totalCount} alerts matching "${searchQuery}"`
+                {query
+                  ? `${displayedCount} of ${totalCount} alerts matching "${query}"`
                   : activeFilters.country
                     ? `${displayedCount} of ${totalCount} alerts from ${activeFilters.country}`
                     : `${totalCount} alerts found`}
@@ -757,11 +750,8 @@ export default function AlertAnalysis() {
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder="Search by IP, scenario, origin, country, AS name..."
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value)
-                setQuery(e.target.value)
-              }}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
               className="pl-9"
             />
           </div>
@@ -772,7 +762,7 @@ export default function AlertAnalysis() {
             total={totalCount}
             filtered={displayedCount}
             label="alerts"
-            query={searchQuery || undefined}
+            query={query || undefined}
           />
           {isLoading ? (
             <PageLoader message="Loading alerts..." />
@@ -929,8 +919,8 @@ export default function AlertAnalysis() {
               icon={AlertCircle}
               title="No alerts found"
               description={
-                searchQuery
-                  ? `No alerts match "${searchQuery}". Try a different search term.`
+                query
+                  ? `No alerts match "${query}". Try a different search term.`
                   : 'Try adjusting your filters or check back later'
               }
             />
