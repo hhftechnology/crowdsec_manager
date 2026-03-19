@@ -6,6 +6,7 @@ import type {
   AllowlistCreateRequest,
   AllowlistAddEntriesRequest,
   AllowlistRemoveEntriesRequest,
+  AllowlistImportResult,
 } from './types'
 
 export const allowlistAPI = {
@@ -23,6 +24,11 @@ export const allowlistAPI = {
 
   removeEntries: (data: AllowlistRemoveEntriesRequest) =>
     apiClient.post<ApiResponse>('/allowlist/remove', data),
+
+  importEntries: (formData: FormData) =>
+    apiClient.post<ApiResponse<AllowlistImportResult>>('/allowlist/import', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
 
   delete: (name: string) =>
     apiClient.delete<ApiResponse>(`/allowlist/${name}`),

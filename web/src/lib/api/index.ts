@@ -48,6 +48,7 @@ export type {
   AllowlistAddEntriesRequest,
   AllowlistRemoveEntriesRequest,
   AllowlistInspectResponse,
+  AllowlistImportResult,
   ServiceUpdateStatus,
   DecisionFilters,
   AlertFilters,

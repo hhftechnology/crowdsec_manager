@@ -60,6 +60,7 @@ func RegisterAllowlistRoutes(router *gin.RouterGroup, dockerClient *docker.Clien
 		allowlist.GET("/inspect/:name", handlers.InspectAllowlist(dockerClient, cfg))
 		allowlist.POST("/add", handlers.AddAllowlistEntries(dockerClient, cfg))
 		allowlist.POST("/remove", handlers.RemoveAllowlistEntries(dockerClient, cfg))
+		allowlist.POST("/import", handlers.ImportAllowlistEntries(dockerClient, cfg))
 		allowlist.DELETE("/:name", handlers.DeleteAllowlist(dockerClient, cfg))
 	}
 }

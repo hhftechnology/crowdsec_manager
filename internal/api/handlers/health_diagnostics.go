@@ -35,8 +35,11 @@ func parseBouncersJSON(bouncerOutput string, computeStatus bool) ([]models.Bounc
 			bouncer.Valid = valid
 		}
 		if lastPull, err := jsonparser.GetString(value, "last_pull"); err == nil {
-			if t, err := time.Parse(time.RFC3339, lastPull); err == nil {
-				bouncer.LastPull = t
+			for _, layout := range []string{time.RFC3339Nano, time.RFC3339} {
+				if t, err := time.Parse(layout, lastPull); err == nil {
+					bouncer.LastPull = t
+					break
+				}
 			}
 		}
 		if bouncerType, err := jsonparser.GetString(value, "type"); err == nil {
@@ -47,12 +50,14 @@ func parseBouncersJSON(bouncerOutput string, computeStatus bool) ([]models.Bounc
 		}
 
 		if computeStatus {
-			if bouncer.Valid && time.Since(bouncer.LastPull) <= 60*time.Minute {
-				bouncer.Status = "connected"
-			} else if bouncer.Valid {
-				bouncer.Status = "stale"
-			} else {
+			if !bouncer.Valid {
 				bouncer.Status = "disconnected"
+			} else if bouncer.LastPull.IsZero() {
+				bouncer.Status = "pending" // valid key, never pulled yet
+			} else if time.Since(bouncer.LastPull) <= 60*time.Minute {
+				bouncer.Status = "connected"
+			} else {
+				bouncer.Status = "stale"
 			}
 		}
 
@@ -171,7 +176,6 @@ func collectContainerHealth(dockerClient *docker.Client, cfg *config.Config) ([]
 
 	return containers, allRunning
 }
-
 
 // checkTraefikIntegrationDiagnostic checks Traefik integration for diagnostics
 func checkTraefikIntegrationDiagnostic(dockerClient *docker.Client, db *database.Database, cfg *config.Config) *models.TraefikIntegration {

@@ -69,7 +69,8 @@ export default function EnrollDialog({ trigger, open: controlledOpen, onOpenChan
     enabled: isOpen, // Only poll when dialog is open
   })
 
-  // Sync state with data
+  // Sync state with data — only handles the approved → success transition.
+  // Do NOT set waiting_approval here; that is handled after key submission or on dialog open.
   useEffect(() => {
     if (!enrollmentData) return
 
@@ -87,15 +88,9 @@ export default function EnrollDialog({ trigger, open: controlledOpen, onOpenChan
           }, 2000)
         }
       }
-    } else {
-      // Not approved yet - keep waiting
-      if (enrollmentStatus === 'idle') {
-        setEnrollmentStatus('waiting_approval')
-      }
     }
+    // Don't set waiting_approval from polling — that would skip the key input form.
     // Don't reset to idle automatically - only when user cancels or closes dialog
-    // This prevents race conditions where status query returns enrolled=false
-    // right after submitting the enrollment key
   }, [enrollmentData, enrollmentStatus])
 
   const enrollMutation = useMutation({
@@ -158,17 +153,18 @@ export default function EnrollDialog({ trigger, open: controlledOpen, onOpenChan
     setEnrollmentKey('')
   }
 
-  // Check status when dialog first opens
+  // Check status when dialog first opens.
+  // Only transition out of 'idle' if enrollment is already complete (success) or
+  // CrowdSec reports manual=true (key was submitted previously, awaiting Console approval).
   useEffect(() => {
     if (isOpen && enrollmentData && enrollmentStatus === 'idle') {
-      // If already approved, show success immediately
       if (isEnrollmentApproved(enrollmentData)) {
         setEnrollmentStatus('success')
-      }
-      // Otherwise show waiting state
-      else {
+      } else if (enrollmentData.manual) {
+        // Key was already submitted to the CLI — restore waiting state on re-open
         setEnrollmentStatus('waiting_approval')
       }
+      // Otherwise stay idle so the user can enter their enrollment key
     }
   }, [isOpen, enrollmentData, enrollmentStatus])
 

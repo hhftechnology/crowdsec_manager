@@ -340,6 +340,14 @@ export interface AllowlistInspectResponse {
   count: number  // Computed by backend
 }
 
+export interface AllowlistImportResult {
+  total_input: number
+  imported: number
+  skipped_invalid: number
+  skipped_private: number
+  skipped_duplicates: number
+}
+
 export interface ServiceUpdateStatus {
   current_tag: string
   latest_warning: boolean
