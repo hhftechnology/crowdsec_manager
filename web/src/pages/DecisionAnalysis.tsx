@@ -134,6 +134,8 @@ export default function DecisionAnalysis() {
   const [searchQuery, setSearchQuery] = useState('')
   const [hideDuplicates, setHideDuplicates] = useState(false)
   const [hideExpired, setHideExpired] = useState(true)
+  const [offenderPage, setOffenderPage] = useState(0)
+  const OFFENDER_PAGE_SIZE = 20
   const { query, setQuery } = useSearch()
   const { lastEvent } = useSSE('/api/events/sse')
   const seenRealtimeEventsRef = useRef<Set<string>>(new Set())
@@ -175,6 +177,11 @@ export default function DecisionAnalysis() {
     },
     refetchInterval: 60000,
   })
+
+  const allOffenders = repeatedOffendersData?.offenders ?? []
+  const offenderTotalPages = Math.ceil(allOffenders.length / OFFENDER_PAGE_SIZE)
+  const safePage = Math.min(offenderPage, Math.max(0, offenderTotalPages - 1))
+  const pagedOffenders = allOffenders.slice(safePage * OFFENDER_PAGE_SIZE, (safePage + 1) * OFFENDER_PAGE_SIZE)
 
   // Build a lookup map: alert_id -> AlertSource
   const alertSourceMap = useMemo(() => {
@@ -458,35 +465,62 @@ export default function DecisionAnalysis() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {repeatedOffendersData?.offenders && repeatedOffendersData.offenders.length > 0 ? (
-            <div className="rounded-md border overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Value</TableHead>
-                    <TableHead>Scope</TableHead>
-                    <TableHead>Hits</TableHead>
-                    <TableHead>First Seen</TableHead>
-                    <TableHead>Last Seen</TableHead>
-                    <TableHead>Last Notified</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {repeatedOffendersData.offenders.map((offender: RepeatedOffender) => (
-                    <TableRow key={`${offender.value}-${offender.scope}`}>
-                      <TableCell className="font-mono text-sm">{offender.value}</TableCell>
-                      <TableCell><Badge variant="outline">{offender.scope}</Badge></TableCell>
-                      <TableCell>{offender.hit_count}</TableCell>
-                      <TableCell><TimeDisplay date={offender.first_decision_at} /></TableCell>
-                      <TableCell><TimeDisplay date={offender.last_decision_at} /></TableCell>
-                      <TableCell>
-                        {offender.last_notified_at ? <TimeDisplay date={offender.last_notified_at} /> : 'Never'}
-                      </TableCell>
+          {allOffenders.length > 0 ? (
+            <>
+              <div className="rounded-md border overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Value</TableHead>
+                      <TableHead>Scope</TableHead>
+                      <TableHead>Hits</TableHead>
+                      <TableHead>First Seen</TableHead>
+                      <TableHead>Last Seen</TableHead>
+                      <TableHead>Last Notified</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+                  </TableHeader>
+                  <TableBody>
+                    {pagedOffenders.map((offender: RepeatedOffender) => (
+                      <TableRow key={`${offender.value}-${offender.scope}`}>
+                        <TableCell className="font-mono text-sm">{offender.value}</TableCell>
+                        <TableCell><Badge variant="outline">{offender.scope}</Badge></TableCell>
+                        <TableCell>{offender.hit_count}</TableCell>
+                        <TableCell><TimeDisplay date={offender.first_decision_at} /></TableCell>
+                        <TableCell><TimeDisplay date={offender.last_decision_at} /></TableCell>
+                        <TableCell>
+                          {offender.last_notified_at ? <TimeDisplay date={offender.last_notified_at} /> : 'Never'}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              {allOffenders.length > OFFENDER_PAGE_SIZE && (
+                <div className="flex items-center justify-between px-2 pt-3">
+                  <span className="text-sm text-muted-foreground">
+                    Page {safePage + 1} of {offenderTotalPages} · {allOffenders.length} total
+                  </span>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={safePage === 0}
+                      onClick={() => setOffenderPage(p => Math.max(0, p - 1))}
+                    >
+                      Previous
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={safePage >= offenderTotalPages - 1}
+                      onClick={() => setOffenderPage(p => Math.min(offenderTotalPages - 1, p + 1))}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
           ) : (
             <div className="text-sm text-muted-foreground">No repeated offenders detected in the last 30 days.</div>
           )}

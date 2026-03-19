@@ -660,7 +660,7 @@ func (s *Store) RecordRepeatedOffenderEvent(ctx context.Context, offender models
 			window_days = excluded.window_days,
 			last_seen_at = excluded.last_seen_at,
 			last_notified_at = CASE
-				WHEN excluded.last_notified_at = '' THEN repeated_offender_events.last_notified_at
+				WHEN excluded.last_notified_at IS NULL THEN repeated_offender_events.last_notified_at
 				ELSE excluded.last_notified_at
 			END
 	`, fp, offender.Value, offender.Scope, offender.HitCount, offender.WindowDays, lastSeen, lastSeen, lastNotify)
