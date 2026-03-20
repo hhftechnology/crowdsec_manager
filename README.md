@@ -23,7 +23,6 @@ CrowdSec Manager is a web-based management interface for CrowdSec operations, Tr
 Click below to download the app to your mobile device, tablet:
 
 **Current Release**
-<p>
 [<img src="https://play.google.com/intl/en_us/badges/images/generic/en_badge_web_generic.png" 
 alt="Download from Google Play" 
 height="80">](https://play.google.com/store/apps/details?id=com.crowdsec.manager.mobile)
@@ -33,7 +32,6 @@ height="80">](https://f-droid.org/packages/com.crowdsec.manager.mobile/)
 [<img src="https://developer.apple.com/assets/elements/badges/download-on-the-app-store.svg"
 alt="We are not on iOS :)"
 height="40">](https://itunes.apple.com/us/app/hhftechnology/0)
-</p>
 
 ## Images
 
