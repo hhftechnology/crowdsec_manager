@@ -48,11 +48,16 @@ export type {
   AllowlistAddEntriesRequest,
   AllowlistRemoveEntriesRequest,
   AllowlistInspectResponse,
+  AllowlistImportResult,
   ServiceUpdateStatus,
   DecisionFilters,
   AlertFilters,
   HostInfo,
   StructuredLogEntry,
+  HistoryConfig,
+  DecisionHistoryRecord,
+  AlertHistoryRecord,
+  RepeatedOffender,
 } from './types'
 
 // Domain API namespaces

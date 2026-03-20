@@ -517,3 +517,81 @@ type FeatureDetectionResult struct {
 	DBConfig       *FeatureConfig         `json:"db_config"`
 	Status         string                 `json:"status"` // "not_configured" | "partially_configured" | "configured" | "applied"
 }
+
+// HistoryConfig stores retention settings for CrowdSec history data.
+type HistoryConfig struct {
+	RetentionDays int    `json:"retention_days"`
+	UpdatedAt     string `json:"updated_at,omitempty"`
+}
+
+// DecisionHistoryFilter narrows decision history queries.
+type DecisionHistoryFilter struct {
+	Stale    *bool
+	Value    string
+	Scenario string
+	Since    string
+	Limit    int
+	Offset   int
+}
+
+// AlertHistoryFilter narrows alert history queries.
+type AlertHistoryFilter struct {
+	Stale    *bool
+	Value    string
+	Scenario string
+	Since    string
+	Limit    int
+	Offset   int
+}
+
+// DecisionHistoryRecord is a persisted decision snapshot entry.
+type DecisionHistoryRecord struct {
+	ID             int64  `json:"id"`
+	DedupeKey      string `json:"dedupe_key"`
+	DecisionID     int64  `json:"decision_id"`
+	AlertID        int64  `json:"alert_id"`
+	Origin         string `json:"origin"`
+	Type           string `json:"type"`
+	Scope          string `json:"scope"`
+	Value          string `json:"value"`
+	Duration       string `json:"duration"`
+	Scenario       string `json:"scenario"`
+	CreatedAt      string `json:"created_at"`
+	Until          string `json:"until,omitempty"`
+	IsStale        bool   `json:"is_stale"`
+	FirstSeenAt    string `json:"first_seen_at"`
+	LastSeenAt     string `json:"last_seen_at"`
+	StaleAt        string `json:"stale_at,omitempty"`
+	LastSnapshotAt string `json:"last_snapshot_at"`
+}
+
+// AlertHistoryRecord is a persisted alert snapshot entry.
+type AlertHistoryRecord struct {
+	ID             int64  `json:"id"`
+	DedupeKey      string `json:"dedupe_key"`
+	AlertID        int64  `json:"alert_id"`
+	Scenario       string `json:"scenario"`
+	Scope          string `json:"scope"`
+	Value          string `json:"value"`
+	Origin         string `json:"origin"`
+	Type           string `json:"type,omitempty"`
+	EventsCount    int    `json:"events_count,omitempty"`
+	StartAt        string `json:"start_at,omitempty"`
+	StopAt         string `json:"stop_at,omitempty"`
+	IsStale        bool   `json:"is_stale"`
+	FirstSeenAt    string `json:"first_seen_at"`
+	LastSeenAt     string `json:"last_seen_at"`
+	StaleAt        string `json:"stale_at,omitempty"`
+	LastSnapshotAt string `json:"last_snapshot_at"`
+}
+
+// RepeatedOffender captures repeated offender statistics.
+type RepeatedOffender struct {
+	Value           string `json:"value"`
+	Scope           string `json:"scope"`
+	HitCount        int    `json:"hit_count"`
+	WindowDays      int    `json:"window_days"`
+	FirstDecisionAt string `json:"first_decision_at"`
+	LastDecisionAt  string `json:"last_decision_at"`
+	LastNotifiedAt  string `json:"last_notified_at,omitempty"`
+}

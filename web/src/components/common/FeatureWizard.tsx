@@ -29,8 +29,6 @@ interface FeatureWizardProps {
 }
 
 export function FeatureWizard({
-  title: _title,
-  description: _description,
   icon,
   steps,
   currentStep,

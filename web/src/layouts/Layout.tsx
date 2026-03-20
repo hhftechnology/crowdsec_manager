@@ -19,6 +19,14 @@ export default function Layout({ children }: LayoutProps) {
     setMobileOpen(false)
   }, [])
 
+  const handleToggleCollapse = useCallback(() => {
+    setIsCollapsed((prev) => {
+      const next = !prev
+      localStorage.setItem('sidebar-collapsed', String(next))
+      return next
+    })
+  }, [])
+
   return (
     <div className="h-full bg-background overflow-hidden">
       {/* Mobile overlay */}
@@ -37,7 +45,6 @@ export default function Layout({ children }: LayoutProps) {
       >
         <Sidebar
           isCollapsed={false}
-          setIsCollapsed={setIsCollapsed}
           onNavigate={handleMobileNavigate}
         />
       </div>
@@ -46,14 +53,14 @@ export default function Layout({ children }: LayoutProps) {
       <div className="flex h-full overflow-hidden">
         {/* Desktop sidebar */}
         <div className="hidden md:block shrink-0">
-          <Sidebar isCollapsed={isCollapsed} setIsCollapsed={setIsCollapsed} />
+          <Sidebar isCollapsed={isCollapsed} />
         </div>
 
         <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
           <Header
             onMenuClick={() => setMobileOpen(true)}
             isCollapsed={isCollapsed}
-            onToggleCollapse={() => setIsCollapsed((prev) => !prev)}
+            onToggleCollapse={handleToggleCollapse}
           />
           <main className="flex-1 overflow-y-auto bg-background p-4 md:p-6">
             <div className="max-w-screen-2xl mx-auto w-full h-full">

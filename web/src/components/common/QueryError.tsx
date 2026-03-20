@@ -9,8 +9,8 @@ export interface QueryErrorProps {
 }
 
 export function QueryError({ error, onRetry }: QueryErrorProps) {
-  if (!error) return null
   const [showDetails, setShowDetails] = useState(false)
+  if (!error) return null
   return (
     <Card className="border-destructive">
       <CardContent className="flex items-center gap-4 p-6">

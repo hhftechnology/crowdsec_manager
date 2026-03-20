@@ -1,8 +1,9 @@
-import { useState, useMemo, useCallback, useEffect } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useSearchParams, Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import api, { Decision } from '@/lib/api'
+import type { RepeatedOffender } from '@/lib/api'
 import type { AlertSource } from '@/lib/api/types'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -28,7 +29,8 @@ import {
 import type { FilterField } from '@/components/common'
 import { ChartCard, AreaTimeline, PieBreakdown, BarDistribution } from '@/components/charts'
 import { groupByField } from '@/lib/chart-utils'
-import { useInfiniteScroll } from '@/hooks'
+import { useInfiniteScroll, useRepeatedOffenderToast } from '@/hooks'
+import { useSSE } from '@/hooks/useSSE'
 import { useSearch } from '@/contexts/SearchContext'
 
 interface DecisionFilters {
@@ -129,10 +131,13 @@ export default function DecisionAnalysis() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [bulkDeleting, setBulkDeleting] = useState(false)
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false)
-  const [searchQuery, setSearchQuery] = useState('')
   const [hideDuplicates, setHideDuplicates] = useState(false)
   const [hideExpired, setHideExpired] = useState(true)
+  const [offenderPage, setOffenderPage] = useState(0)
+  const OFFENDER_PAGE_SIZE = 20
   const { query, setQuery } = useSearch()
+  const { lastEvent } = useSSE('/api/events/sse')
+  useRepeatedOffenderToast(lastEvent)
 
   const { data: decisionsData, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['decisions-analysis', activeFilters],
@@ -163,6 +168,20 @@ export default function DecisionAnalysis() {
     refetchInterval: 60000,
   })
 
+  const { data: repeatedOffendersData } = useQuery({
+    queryKey: ['repeated-offenders'],
+    queryFn: async () => {
+      const response = await api.crowdsec.getRepeatedOffenders()
+      return response.data.data
+    },
+    refetchInterval: 60000,
+  })
+
+  const allOffenders = repeatedOffendersData?.offenders ?? []
+  const offenderTotalPages = Math.ceil(allOffenders.length / OFFENDER_PAGE_SIZE)
+  const safePage = Math.min(offenderPage, Math.max(0, offenderTotalPages - 1))
+  const pagedOffenders = allOffenders.slice(safePage * OFFENDER_PAGE_SIZE, (safePage + 1) * OFFENDER_PAGE_SIZE)
+
   // Build a lookup map: alert_id -> AlertSource
   const alertSourceMap = useMemo(() => {
     const map = new Map<number, AlertSource>()
@@ -174,17 +193,6 @@ export default function DecisionAnalysis() {
     }
     return map
   }, [alertsData])
-
-  // Sync active filters to URL whenever they change
-  useEffect(() => {
-    syncFiltersToParams(activeFilters, setSearchParams)
-  }, [activeFilters, setSearchParams])
-
-  useEffect(() => {
-    if (query !== searchQuery) {
-      setSearchQuery(query)
-    }
-  }, [query, searchQuery])
 
   // --- Chart data ---
 
@@ -218,14 +226,14 @@ export default function DecisionAnalysis() {
       decisions = decisions.filter((d: Decision) => !isExpired(d.until))
     }
 
-    if (!searchQuery.trim()) return decisions
-    const q = searchQuery.toLowerCase()
+    if (!query.trim()) return decisions
+    const q = query.toLowerCase()
     return decisions.filter((d: Decision) =>
       d.value?.toLowerCase().includes(q) ||
       d.scenario?.toLowerCase().includes(q) ||
       d.origin?.toLowerCase().includes(q)
     )
-  }, [decisionsData, searchQuery, hideExpired])
+  }, [decisionsData, query, hideExpired])
 
   // --- Collapse duplicates ---
 
@@ -275,11 +283,6 @@ export default function DecisionAnalysis() {
       setSelectedIds(new Set(visibleDecisions.map(d => d.id)))
     }
   }, [visibleDecisions, selectedIds.size])
-
-  // Clear selection when data changes
-  useEffect(() => {
-    setSelectedIds(new Set())
-  }, [decisionsData, searchQuery, hideDuplicates, hideExpired])
 
   // --- Delete handlers ---
 
@@ -344,12 +347,15 @@ export default function DecisionAnalysis() {
 
   const handleApplyFilters = () => {
     setActiveFilters(filters)
+    syncFiltersToParams(filters, setSearchParams)
+    setSelectedIds(new Set())
     toast.success('Filters applied')
   }
 
   const handleResetFilters = () => {
     setFilters({})
     setActiveFilters({})
+    setSelectedIds(new Set())
     setSearchParams(new URLSearchParams(), { replace: true })
     toast.info('Filters reset')
   }
@@ -420,6 +426,76 @@ export default function DecisionAnalysis() {
         </div>
       )}
 
+      <Card>
+        <CardHeader>
+          <CardTitle>Repeated Offenders (30d)</CardTitle>
+          <CardDescription>
+            Entities with 3 or more decisions in the last 30 days
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {allOffenders.length > 0 ? (
+            <>
+              <div className="rounded-md border overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Value</TableHead>
+                      <TableHead>Scope</TableHead>
+                      <TableHead>Hits</TableHead>
+                      <TableHead>First Seen</TableHead>
+                      <TableHead>Last Seen</TableHead>
+                      <TableHead>Last Notified</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {pagedOffenders.map((offender: RepeatedOffender) => (
+                      <TableRow key={`${offender.value}-${offender.scope}`}>
+                        <TableCell className="font-mono text-sm">{offender.value}</TableCell>
+                        <TableCell><Badge variant="outline">{offender.scope}</Badge></TableCell>
+                        <TableCell>{offender.hit_count}</TableCell>
+                        <TableCell><TimeDisplay date={offender.first_decision_at} /></TableCell>
+                        <TableCell><TimeDisplay date={offender.last_decision_at} /></TableCell>
+                        <TableCell>
+                          {offender.last_notified_at ? <TimeDisplay date={offender.last_notified_at} /> : 'Never'}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              {allOffenders.length > OFFENDER_PAGE_SIZE && (
+                <div className="flex items-center justify-between px-2 pt-3">
+                  <span className="text-sm text-muted-foreground">
+                    Page {safePage + 1} of {offenderTotalPages} · {allOffenders.length} total
+                  </span>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={safePage === 0}
+                      onClick={() => setOffenderPage(p => Math.max(0, p - 1))}
+                    >
+                      Previous
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={safePage >= offenderTotalPages - 1}
+                      onClick={() => setOffenderPage(p => Math.min(offenderTotalPages - 1, p + 1))}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="text-sm text-muted-foreground">No repeated offenders detected in the last 30 days.</div>
+          )}
+        </CardContent>
+      </Card>
+
       <CrowdSecFilterForm
         fields={DECISION_FILTER_FIELDS}
         filters={filters}
@@ -479,10 +555,10 @@ export default function DecisionAnalysis() {
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search by IP, scenario, origin..."
-                value={searchQuery}
+                value={query}
                 onChange={(e) => {
-                  setSearchQuery(e.target.value)
                   setQuery(e.target.value)
+                  setSelectedIds(new Set())
                 }}
                 className="pl-9"
               />
@@ -491,7 +567,7 @@ export default function DecisionAnalysis() {
               <Switch
                 id="hide-duplicates"
                 checked={hideDuplicates}
-                onCheckedChange={setHideDuplicates}
+                onCheckedChange={(v) => { setHideDuplicates(v); setSelectedIds(new Set()) }}
               />
               <label
                 htmlFor="hide-duplicates"
@@ -504,7 +580,7 @@ export default function DecisionAnalysis() {
               <Switch
                 id="hide-expired"
                 checked={hideExpired}
-                onCheckedChange={setHideExpired}
+                onCheckedChange={(v) => { setHideExpired(v); setSelectedIds(new Set()) }}
               />
               <label
                 htmlFor="hide-expired"
@@ -520,7 +596,7 @@ export default function DecisionAnalysis() {
             total={totalCount}
             filtered={searchFiltered.length}
             label="decisions"
-            query={searchQuery || undefined}
+            query={query || undefined}
           />
           {isLoading ? (
             <PageLoader message="Loading decisions..." />

@@ -1,8 +1,13 @@
 package handlers
 
 import (
+	"bufio"
 	"fmt"
+	"io"
+	"net"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"crowdsec-manager/internal/config"
@@ -340,6 +345,237 @@ func DeleteAllowlist(dockerClient *docker.Client, cfg *config.Config) gin.Handle
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
 			Message: fmt.Sprintf("Allowlist '%s' deleted successfully", name),
+		})
+	}
+}
+
+// =============================================================================
+// ALLOWLIST IMPORT
+// =============================================================================
+
+// privateIPRanges holds RFC 1918, loopback, and link-local ranges used by isPrivateIPAddr.
+var privateIPRanges = func() []*net.IPNet {
+	cidrs := []string{
+		"10.0.0.0/8",
+		"172.16.0.0/12",
+		"192.168.0.0/16",
+		"127.0.0.0/8",
+		"::1/128",
+		"fc00::/7",
+		"fe80::/10",
+	}
+	ranges := make([]*net.IPNet, 0, len(cidrs))
+	for _, c := range cidrs {
+		_, ipNet, err := net.ParseCIDR(c)
+		if err == nil {
+			ranges = append(ranges, ipNet)
+		}
+	}
+	return ranges
+}()
+
+// isValidIPOrCIDR returns true if s is a valid IP address or CIDR notation.
+func isValidIPOrCIDR(s string) bool {
+	if net.ParseIP(s) != nil {
+		return true
+	}
+	_, _, err := net.ParseCIDR(s)
+	return err == nil
+}
+
+// isPrivateIPAddr returns true if s falls within a private/loopback address range.
+func isPrivateIPAddr(s string) bool {
+	ip := net.ParseIP(s)
+	if ip == nil {
+		// For CIDRs, check the network address
+		ip, _, _ = net.ParseCIDR(s)
+	}
+	if ip == nil {
+		return false
+	}
+	for _, r := range privateIPRanges {
+		if r.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+// parseAllowlistImportFile reads a reader and returns unique, non-empty candidate strings.
+// Entries can be separated by newlines or commas.
+func parseAllowlistImportFile(r io.Reader) []string {
+	seen := make(map[string]struct{})
+	var out []string
+	scanner := bufio.NewScanner(r)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		for _, part := range strings.Split(line, ",") {
+			entry := strings.TrimSpace(part)
+			if entry == "" {
+				continue
+			}
+			if _, exists := seen[entry]; !exists {
+				seen[entry] = struct{}{}
+				out = append(out, entry)
+			}
+		}
+	}
+	return out
+}
+
+// getExistingAllowlistValues fetches the current values in an allowlist for duplicate detection.
+func getExistingAllowlistValues(dockerClient *docker.Client, containerName, allowlistName string) map[string]struct{} {
+	existing := make(map[string]struct{})
+	output, err := dockerClient.ExecCommand(containerName, []string{"cscli", "allowlists", "inspect", allowlistName, "-o", "json"})
+	if err != nil {
+		return existing
+	}
+	dataBytes, err := parseCLIJSONToBytes(output)
+	if err != nil {
+		return existing
+	}
+	jsonparser.ArrayEach(dataBytes, func(itemValue []byte, _ jsonparser.ValueType, _ int, _ error) {
+		if val, err := jsonparser.GetString(itemValue, "value"); err == nil {
+			existing[val] = struct{}{}
+		}
+	}, "items")
+	return existing
+}
+
+// ImportAllowlistEntries imports a plain-text list of IPs/CIDRs into an allowlist with optional filtering.
+// Accepts multipart/form-data with fields:
+//   - file             – text file, one IP/CIDR per line (or comma-separated)
+//   - allowlist_name   – target allowlist (required)
+//   - expiration       – optional, e.g. "7d", "30d"
+//   - description      – optional note added to entries
+//   - skip_invalid     – "true"/"false" (default true)  – drop non-IP/CIDR tokens
+//   - skip_private     – "true"/"false" (default false) – drop RFC 1918 addresses
+//   - skip_duplicates  – "true"/"false" (default true)  – drop entries already in allowlist
+func ImportAllowlistEntries(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		dockerClient = resolveDockerClient(c, dockerClient)
+
+		allowlistName := strings.TrimSpace(c.PostForm("allowlist_name"))
+		if allowlistName == "" {
+			c.JSON(http.StatusBadRequest, models.Response{
+				Success: false,
+				Error:   "allowlist_name is required",
+			})
+			return
+		}
+
+		expiration := strings.TrimSpace(c.PostForm("expiration"))
+		description := strings.TrimSpace(c.PostForm("description"))
+
+		parseBool := func(key string, defaultVal bool) bool {
+			v := strings.TrimSpace(c.PostForm(key))
+			if v == "" {
+				return defaultVal
+			}
+			b, err := strconv.ParseBool(v)
+			if err != nil {
+				return defaultVal
+			}
+			return b
+		}
+		skipInvalid := parseBool("skip_invalid", true)
+		skipPrivate := parseBool("skip_private", false)
+		skipDuplicates := parseBool("skip_duplicates", true)
+
+		file, _, err := c.Request.FormFile("file")
+		if err != nil {
+			c.JSON(http.StatusBadRequest, models.Response{
+				Success: false,
+				Error:   "file upload required: " + err.Error(),
+			})
+			return
+		}
+		defer file.Close()
+
+		candidates := parseAllowlistImportFile(file)
+
+		var (
+			skippedInvalid    int
+			skippedPrivate    int
+			skippedDuplicates int
+			toAdd             []string
+		)
+
+		var existing map[string]struct{}
+		if skipDuplicates {
+			existing = getExistingAllowlistValues(dockerClient, cfg.CrowdsecContainerName, allowlistName)
+		}
+
+		for _, entry := range candidates {
+			if skipInvalid && !isValidIPOrCIDR(entry) {
+				skippedInvalid++
+				continue
+			}
+			if skipPrivate && isPrivateIPAddr(entry) {
+				skippedPrivate++
+				continue
+			}
+			if skipDuplicates {
+				if _, exists := existing[entry]; exists {
+					skippedDuplicates++
+					continue
+				}
+			}
+			toAdd = append(toAdd, entry)
+		}
+
+		imported := 0
+		const chunkSize = 50
+		for i := 0; i < len(toAdd); i += chunkSize {
+			end := i + chunkSize
+			if end > len(toAdd) {
+				end = len(toAdd)
+			}
+			chunk := toAdd[i:end]
+
+			cmd := []string{"cscli", "allowlists", "add", allowlistName}
+			if expiration != "" {
+				cmd = append(cmd, "--expiration", expiration)
+			}
+			if description != "" {
+				cmd = append(cmd, "--description", description)
+			}
+			cmd = append(cmd, chunk...)
+
+			output, execErr := dockerClient.ExecCommand(cfg.CrowdsecContainerName, cmd)
+			if execErr != nil {
+				logger.Error("Failed to add allowlist chunk", "name", allowlistName, "error", execErr, "output", output)
+				c.JSON(http.StatusInternalServerError, models.Response{
+					Success: false,
+					Error:   fmt.Sprintf("Failed to add entries (imported %d so far): %v", imported, execErr),
+				})
+				return
+			}
+			imported += len(chunk)
+		}
+
+		logger.Info("Allowlist import completed",
+			"name", allowlistName,
+			"total_input", len(candidates),
+			"imported", imported,
+			"skipped_invalid", skippedInvalid,
+			"skipped_private", skippedPrivate,
+			"skipped_duplicates", skippedDuplicates,
+		)
+
+		c.JSON(http.StatusOK, models.Response{
+			Success: true,
+			Message: fmt.Sprintf("Imported %d entries into '%s'", imported, allowlistName),
+			Data: gin.H{
+				"total_input":        len(candidates),
+				"imported":           imported,
+				"skipped_invalid":    skippedInvalid,
+				"skipped_private":    skippedPrivate,
+				"skipped_duplicates": skippedDuplicates,
+			},
 		})
 	}
 }

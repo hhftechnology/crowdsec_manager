@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
-import { navigation } from '@/layouts/Sidebar'
+import { navigation } from '@/layouts/navigation'
 import { Menu, Moon, Shield, Sun, X } from 'lucide-react'
 import { useTheme } from '@/contexts/ThemeContext'
 

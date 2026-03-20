@@ -11,6 +11,10 @@ import type {
   DeleteDecisionRequest,
   DecisionFilters,
   AlertFilters,
+  HistoryConfig,
+  DecisionHistoryRecord,
+  AlertHistoryRecord,
+  RepeatedOffender,
 } from './types'
 
 export const crowdsecAPI = {
@@ -31,6 +35,12 @@ export const crowdsecAPI = {
 
   getDecisionsAnalysis: (filters: DecisionFilters) =>
     apiClient.get<ApiResponse<{ decisions: Decision[]; count: number }>>('/crowdsec/decisions/analysis', { params: filters }),
+
+  getDecisionHistory: (params?: { stale?: boolean; value?: string; scenario?: string; since?: string; limit?: number; offset?: number }) =>
+    apiClient.get<ApiResponse<{ decisions: DecisionHistoryRecord[]; count: number; total: number }>>('/crowdsec/decisions/history', { params }),
+
+  getRepeatedOffenders: () =>
+    apiClient.get<ApiResponse<{ offenders: RepeatedOffender[]; count: number }>>('/crowdsec/decisions/repeated-offenders'),
 
   getMetrics: () =>
     apiClient.get<ApiResponse<{ metrics: string }>>('/crowdsec/metrics'),
@@ -53,6 +63,9 @@ export const crowdsecAPI = {
   getAlertsAnalysis: (filters: AlertFilters) =>
     apiClient.get<ApiResponse<{ alerts: CrowdSecAlert[]; count: number }>>('/crowdsec/alerts/analysis', { params: filters }),
 
+  getAlertHistory: (params?: { stale?: boolean; value?: string; scenario?: string; since?: string; limit?: number; offset?: number }) =>
+    apiClient.get<ApiResponse<{ alerts: AlertHistoryRecord[]; count: number; total: number }>>('/crowdsec/alerts/history', { params }),
+
   inspectAlert: (id: number) =>
     apiClient.get<ApiResponse<CrowdSecAlert>>(`/crowdsec/alerts/${id}`),
 
@@ -74,4 +87,10 @@ export const crowdsecAPI = {
       },
     })
   },
+
+  getHistoryConfig: () =>
+    apiClient.get<ApiResponse<HistoryConfig>>('/crowdsec/history/config'),
+
+  updateHistoryConfig: (retentionDays: number) =>
+    apiClient.put<ApiResponse<HistoryConfig>>('/crowdsec/history/config', { retention_days: retentionDays }),
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import api from '@/lib/api'
 import { EmptyState, PageHeader, QueryError } from '@/components/common'
@@ -9,7 +9,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { CheckCircle2, XCircle, Activity, Shield, Globe, Container } from 'lucide-react'
 
 export default function Health() {
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const { data: diagnostics, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['diagnostics'],
     queryFn: async () => {
@@ -21,16 +20,10 @@ export default function Health() {
 
   const bouncers = diagnostics?.bouncers ?? []
   const allRunning = diagnostics?.health?.allRunning || false
-  useEffect(() => {
-    if (diagnostics) {
-      setLastUpdated(new Date())
-    }
-  }, [diagnostics])
-
   const lastUpdatedLabel = useMemo(() => {
-    if (!lastUpdated) return 'Not refreshed yet'
-    return `Updated ${lastUpdated.toLocaleTimeString()}`
-  }, [lastUpdated])
+    if (!diagnostics) return 'Not refreshed yet'
+    return `Updated ${new Date().toLocaleTimeString()}`
+  }, [diagnostics])
 
   return (
     <div className="space-y-6">

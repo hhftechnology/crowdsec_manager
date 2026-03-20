@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useMemo, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
 /**
@@ -11,41 +11,38 @@ export function useUrlFilters<T extends Record<string, string | boolean | undefi
 ): [T, (key: string, value: string | boolean) => void, () => void] {
   const [searchParams, setSearchParams] = useSearchParams()
 
-  // Initialize from URL or defaults
-  const [filters, setFilters] = useState<T>(() => {
-    const init = { ...defaults }
+  const filters = useMemo(() => {
+    const next = { ...defaults }
     for (const key of keys) {
       const val = searchParams.get(key)
       if (val !== null) {
         if (val === 'true' || val === 'false') {
-          (init as Record<string, string | boolean | undefined>)[key] = val === 'true'
+          (next as Record<string, string | boolean | undefined>)[key] = val === 'true'
         } else {
-          (init as Record<string, string | boolean | undefined>)[key] = val
+          (next as Record<string, string | boolean | undefined>)[key] = val
         }
       }
     }
-    return init
-  })
-
-  // Sync filters → URL
-  useEffect(() => {
-    const params = new URLSearchParams()
-    for (const key of keys) {
-      const val = filters[key]
-      if (val !== undefined && val !== '' && val !== false) {
-        params.set(key, String(val))
-      }
-    }
-    setSearchParams(params, { replace: true })
-  }, [filters, keys, setSearchParams])
+    return next
+  }, [defaults, keys, searchParams])
 
   const setFilter = useCallback((key: string, value: string | boolean) => {
-    setFilters(prev => ({ ...prev, [key]: value }))
-  }, [])
+    const params = new URLSearchParams(searchParams)
+    if (value === undefined || value === '' || value === false) {
+      params.delete(key)
+    } else {
+      params.set(key, String(value))
+    }
+    setSearchParams(params, { replace: true })
+  }, [searchParams, setSearchParams])
 
   const resetFilters = useCallback(() => {
-    setFilters({ ...defaults })
-  }, [defaults])
+    const params = new URLSearchParams(searchParams)
+    for (const key of keys) {
+      params.delete(key)
+    }
+    setSearchParams(params, { replace: true })
+  }, [keys, searchParams, setSearchParams])
 
   return [filters, setFilter, resetFilters]
 }

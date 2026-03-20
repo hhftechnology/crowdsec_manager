@@ -254,6 +254,62 @@ func parseDecisionNode(data []byte) models.Decision {
 	return d
 }
 
+// ParseDecisionsFromOutput parses the raw JSON output of cscli decisions list
+// and extracts the nested decisions effectively.
+func ParseDecisionsFromOutput(output string) ([]models.Decision, error) {
+	// Parse alerts using normalized CLI JSON output.
+	var decisions []models.Decision
+	dataBytes, parseErr := parseCLIJSONToBytes(output)
+	if parseErr != nil {
+		return nil, fmt.Errorf("failed to normalize decisions JSON: %w", parseErr)
+	}
+
+	_, err := jsonparser.ArrayEach(dataBytes, func(alertValue []byte, alertType jsonparser.ValueType, alertOffset int, alertErr error) {
+		// Get alert's created_at for fallback
+		var alertCreatedAt string
+		if createdAt, err := jsonparser.GetString(alertValue, "created_at"); err == nil {
+			alertCreatedAt = createdAt
+		}
+
+		// Get alert's ID
+		var alertID int64
+		if id, err := jsonparser.GetInt(alertValue, "id"); err == nil {
+			alertID = id
+		}
+
+		// Parse decisions array within this alert
+		foundNested := false
+		jsonparser.ArrayEach(alertValue, func(decisionValue []byte, decisionType jsonparser.ValueType, decisionOffset int, decisionErr error) {
+			foundNested = true
+			decision := parseDecisionNode(decisionValue)
+			if decision.CreatedAt == "" {
+				decision.CreatedAt = alertCreatedAt
+			}
+			decision.AlertID = alertID
+			decisions = append(decisions, decision)
+		}, "decisions")
+
+		// Fallback: if no nested decisions found, check if the top-level
+		// item itself has decision fields (manual decisions via cscli decisions add)
+		if !foundNested {
+			if _, _, _, err := jsonparser.Get(alertValue, "type"); err == nil {
+				decision := parseDecisionNode(alertValue)
+				if decision.CreatedAt == "" {
+					decision.CreatedAt = alertCreatedAt
+				}
+				decision.AlertID = alertID
+				decisions = append(decisions, decision)
+			}
+		}
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse alerts JSON: %w", err)
+	}
+
+	return decisions, nil
+}
+
 // CLIFlag represents a CLI flag and its value for building cscli commands.
 type CLIFlag struct {
 	Flag  string

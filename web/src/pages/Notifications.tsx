@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { notificationsAPI } from '@/lib/api/notifications'
@@ -38,99 +38,78 @@ function buildWebhookUrl(id: string, token: string): string {
   return `https://discord.com/api/webhooks/${id}/${token}`
 }
 
-const EMPTY_CONFIG: NotificationConfig = {
-  enabled: false,
-  webhook_id: '',
-  webhook_token: '',
-  geoapify_key: '',
-  crowdsec_cti_api_key: '',
+type DiscordConfig = NotificationConfig & { config_source?: string; manually_configured?: boolean }
+
+interface NotificationsWizardInnerProps {
+  detection: FeatureDetectionResult | undefined
+  currentConfig: DiscordConfig | undefined
+  detecting: boolean
+  detectError: boolean
+  detectErr: Error | null
+  refetchConfig: () => void
+  redetect: () => void
 }
 
-export default function Notifications() {
+function NotificationsWizardInner({
+  detection,
+  currentConfig,
+  detecting,
+  detectError,
+  detectErr,
+  refetchConfig,
+  redetect,
+}: NotificationsWizardInnerProps) {
   const queryClient = useQueryClient()
   const [currentStep, setCurrentStep] = useState(0)
 
-  // Form state
-  const [enabled, setEnabled] = useState(false)
-  const [webhookUrl, setWebhookUrl] = useState('')
-  const [webhookId, setWebhookId] = useState('')
-  const [webhookToken, setWebhookToken] = useState('')
-  const [geoapifyKey, setGeoapifyKey] = useState('')
-  const [ctiKey, setCtiKey] = useState('')
+  // Merge detected values with currentConfig fallback at initialization
+  const detectedVals = detection?.detected_values ?? {}
+
+  const [enabled, setEnabled] = useState<boolean>(() => {
+    if (typeof detectedVals.enabled === 'boolean') return detectedVals.enabled
+    return currentConfig?.enabled ?? false
+  })
+  const [webhookId, setWebhookId] = useState<string>(() =>
+    typeof detectedVals.webhook_id === 'string'
+      ? detectedVals.webhook_id
+      : (currentConfig?.webhook_id ?? '')
+  )
+  const [webhookToken, setWebhookToken] = useState<string>(() =>
+    typeof detectedVals.webhook_token === 'string'
+      ? detectedVals.webhook_token
+      : (currentConfig?.webhook_token ?? '')
+  )
+  const [geoapifyKey, setGeoapifyKey] = useState<string>(() =>
+    typeof detectedVals.geoapify_key === 'string'
+      ? detectedVals.geoapify_key
+      : (currentConfig?.geoapify_key ?? '')
+  )
+  const [ctiKey, setCtiKey] = useState<string>(() =>
+    typeof detectedVals.crowdsec_cti_api_key === 'string'
+      ? detectedVals.crowdsec_cti_api_key
+      : (currentConfig?.crowdsec_cti_api_key ?? '')
+  )
+  const [webhookUrl, setWebhookUrl] = useState<string>(() => {
+    const initId =
+      typeof detectedVals.webhook_id === 'string'
+        ? detectedVals.webhook_id
+        : (currentConfig?.webhook_id ?? '')
+    const initToken =
+      typeof detectedVals.webhook_token === 'string'
+        ? detectedVals.webhook_token
+        : (currentConfig?.webhook_token ?? '')
+    return buildWebhookUrl(initId, initToken)
+  })
   const [rawYaml, setRawYaml] = useState('')
   const [configTab, setConfigTab] = useState<'simple' | 'advanced'>('simple')
 
-  // Wizard state
   const [applySteps, setApplySteps] = useState<StepResult[]>([])
   const [retryingStep, setRetryingStep] = useState<number | undefined>()
-  const [completedSteps, setCompletedSteps] = useState<Set<string>>(new Set())
+  const [completedSteps, setCompletedSteps] = useState<Set<string>>(() =>
+    Object.keys(detectedVals).length > 0 ? new Set(['detect']) : new Set()
+  )
   const [errorSteps, setErrorSteps] = useState<Set<string>>(new Set())
 
-  // ── Detection query ────────────────────────────────────────────────────────
-  const {
-    data: detection,
-    isLoading: detecting,
-    isError: detectError,
-    error: detectErr,
-    refetch: redetect,
-  } = useQuery({
-    queryKey: ['notifications-detect'],
-    queryFn: async () => {
-      const res = await notificationsAPI.detect()
-      return res.data.data as FeatureDetectionResult
-    },
-  })
-
-  // ── Current config query (used for verify step) ────────────────────────────
-  const { data: currentConfig, refetch: refetchConfig } = useQuery({
-    queryKey: ['notifications-discord-config'],
-    queryFn: async () => {
-      const res = await notificationsAPI.getDiscordConfig()
-      return res.data.data
-    },
-  })
-
-  // ── Pre-populate from detection ────────────────────────────────────────────
-  useEffect(() => {
-    if (detection?.detected_values) {
-      const vals = detection.detected_values
-      if (vals.webhook_id && typeof vals.webhook_id === 'string') {
-        setWebhookId(vals.webhook_id)
-      }
-      if (vals.webhook_token && typeof vals.webhook_token === 'string') {
-        setWebhookToken(vals.webhook_token)
-      }
-      if (vals.geoapify_key && typeof vals.geoapify_key === 'string') {
-        setGeoapifyKey(vals.geoapify_key)
-      }
-      if (vals.crowdsec_cti_api_key && typeof vals.crowdsec_cti_api_key === 'string') {
-        setCtiKey(vals.crowdsec_cti_api_key)
-      }
-      if (vals.enabled && typeof vals.enabled === 'boolean') {
-        setEnabled(vals.enabled)
-      }
-      setCompletedSteps((prev) => new Set([...prev, 'detect']))
-    }
-  }, [detection])
-
-  // Keep webhook URL display in sync with parsed id/token
-  useEffect(() => {
-    const url = buildWebhookUrl(webhookId, webhookToken)
-    if (url) setWebhookUrl(url)
-  }, [webhookId, webhookToken])
-
-  // Pre-populate from existing config if detection has no values
-  useEffect(() => {
-    if (currentConfig && !detection?.detected_values) {
-      setEnabled(currentConfig.enabled)
-      if (currentConfig.webhook_id) setWebhookId(currentConfig.webhook_id)
-      if (currentConfig.webhook_token) setWebhookToken(currentConfig.webhook_token)
-      if (currentConfig.geoapify_key) setGeoapifyKey(currentConfig.geoapify_key)
-      if (currentConfig.crowdsec_cti_api_key) setCtiKey(currentConfig.crowdsec_cti_api_key)
-    }
-  }, [currentConfig, detection])
-
-  // ── Webhook URL change handler ─────────────────────────────────────────────
   const handleWebhookUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const url = e.target.value
     setWebhookUrl(url)
@@ -141,8 +120,7 @@ export default function Notifications() {
     }
   }
 
-  // ── Load YAML preview when switching to advanced tab ───────────────────────
-  const handleConfigTabChange = (value: string) => {
+  const handleConfigTabChange = useCallback((value: string) => {
     const tab = value as 'simple' | 'advanced'
     setConfigTab(tab)
     if (tab === 'advanced' && !rawYaml) {
@@ -154,7 +132,7 @@ export default function Notifications() {
         })
         .catch(() => toast.error('Failed to load YAML preview'))
     }
-  }
+  }, [currentConfig?.manually_configured, rawYaml])
 
   const configPayload = (): NotificationConfig => ({
     enabled,
@@ -170,7 +148,6 @@ export default function Notifications() {
       ? webhookId.length > 0 && webhookToken.length > 0
       : rawYaml.trim().length > 0
 
-  // ── Save mutation ──────────────────────────────────────────────────────────
   const saveMutation = useMutation({
     mutationFn: () => notificationsAPI.saveConfig(configPayload()),
     onSuccess: () => {
@@ -181,7 +158,6 @@ export default function Notifications() {
     onError: () => toast.error('Failed to save configuration'),
   })
 
-  // ── Apply mutation ─────────────────────────────────────────────────────────
   const applyMutation = useMutation({
     mutationFn: () => notificationsAPI.applyConfig(),
     onSuccess: (res) => {
@@ -201,14 +177,12 @@ export default function Notifications() {
     onError: () => toast.error('Failed to apply configuration'),
   })
 
-  // ── Retry a single failed step ──────────────────────────────────────────────
-  const handleRetryStep = async (stepNum: number) => {
+  const handleRetryStep = useCallback(async (stepNum: number) => {
     setRetryingStep(stepNum)
     try {
       const res = await notificationsAPI.applyConfig(stepNum)
       const data = res.data.data
       if (data?.steps) {
-        // Merge the retried step result back into the full list.
         setApplySteps((prev) =>
           prev.map((s) => {
             const updated = data.steps.find((u: StepResult) => u.step === s.step)
@@ -218,7 +192,6 @@ export default function Notifications() {
         const retried = data.steps[0]
         if (retried?.success) {
           toast.success(`Step ${stepNum} succeeded`)
-          // If all steps now pass, mark apply as completed.
           setApplySteps((prev) => {
             const allOk = prev.every((s) => s.success || s.skipped)
             if (allOk) {
@@ -242,11 +215,11 @@ export default function Notifications() {
       queryClient.invalidateQueries({ queryKey: ['notifications-discord-config'] })
       queryClient.invalidateQueries({ queryKey: ['notifications-detect'] })
     }
-  }
+  }, [queryClient])
 
-  const isProcessing = saveMutation.isPending || applyMutation.isPending || retryingStep !== undefined || detecting
+  const isProcessing =
+    saveMutation.isPending || applyMutation.isPending || retryingStep !== undefined || detecting
 
-  // ── Wizard steps ───────────────────────────────────────────────────────────
   const steps: WizardStep[] = useMemo(
     () => [
       // ── Step 1: Detect ─────────────────────────────────────────────────────
@@ -354,17 +327,11 @@ export default function Notifications() {
                   Send CrowdSec alerts to a Discord channel
                 </p>
               </div>
-              <Switch
-                checked={enabled}
-                onCheckedChange={setEnabled}
-              />
+              <Switch checked={enabled} onCheckedChange={setEnabled} />
             </div>
 
             {/* Simple / Advanced tabs */}
-            <Tabs
-              value={configTab}
-              onValueChange={handleConfigTabChange}
-            >
+            <Tabs value={configTab} onValueChange={handleConfigTabChange}>
               <div className="flex items-center justify-between mb-4">
                 <TabsList>
                   <TabsTrigger value="simple">Simple</TabsTrigger>
@@ -624,7 +591,11 @@ export default function Notifications() {
               <div className="space-y-4">
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="flex items-center gap-3 rounded-lg border p-4">
-                    {(enabled && applySteps.find((s) => s.name === 'Update CrowdSec profiles.yaml')?.success) || currentConfig.enabled ? (
+                    {(enabled &&
+                      applySteps.find(
+                        (s) => s.name === 'Update CrowdSec profiles.yaml',
+                      )?.success) ||
+                    currentConfig.enabled ? (
                       <CheckCircle className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                     ) : (
                       <AlertCircle className="h-5 w-5 text-muted-foreground" />
@@ -632,7 +603,11 @@ export default function Notifications() {
                     <div>
                       <p className="text-sm font-medium">Notifications Enabled</p>
                       <p className="text-xs text-muted-foreground">
-                        {(enabled && applySteps.find((s) => s.name === 'Update CrowdSec profiles.yaml')?.success) || currentConfig.enabled
+                        {(enabled &&
+                          applySteps.find(
+                            (s) => s.name === 'Update CrowdSec profiles.yaml',
+                          )?.success) ||
+                        currentConfig.enabled
                           ? 'Active'
                           : 'Disabled'}
                       </p>
@@ -705,7 +680,6 @@ export default function Notifications() {
         ),
       },
     ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       detecting,
       detectError,
@@ -722,13 +696,56 @@ export default function Notifications() {
       canProceedConfigure,
       applySteps,
       currentConfig,
-      saveMutation.isPending,
-      applyMutation.isPending,
+      saveMutation,
+      applyMutation,
+      handleConfigTabChange,
+      handleRetryStep,
+      redetect,
+      refetchConfig,
+      retryingStep,
     ],
   )
 
-  // Suppress unused variable warning — payload is constructed inline above
-  void EMPTY_CONFIG
+  return (
+    <FeatureWizard
+      title="Discord Setup"
+      icon={<Bell className="h-6 w-6" />}
+      steps={steps}
+      currentStep={currentStep}
+      onStepChange={setCurrentStep}
+      isProcessing={isProcessing}
+      completedSteps={completedSteps}
+      errorSteps={errorSteps}
+    />
+  )
+}
+
+export default function Notifications() {
+  const {
+    data: detection,
+    isLoading: detecting,
+    isError: detectError,
+    error: detectErr,
+    refetch: redetect,
+  } = useQuery({
+    queryKey: ['notifications-detect'],
+    queryFn: async () => {
+      const res = await notificationsAPI.detect()
+      return res.data.data as FeatureDetectionResult
+    },
+  })
+
+  const { data: currentConfig, refetch: refetchConfig } = useQuery({
+    queryKey: ['notifications-discord-config'],
+    queryFn: async () => {
+      const res = await notificationsAPI.getDiscordConfig()
+      return res.data.data as DiscordConfig | undefined
+    },
+  })
+
+  // Key combines both query results so inner component re-initializes
+  // when either detection or currentConfig data first arrives.
+  const dataKey = `${detection?.status ?? 'dl'}-${currentConfig?.webhook_id ?? 'cl'}`
 
   return (
     <div className="space-y-6">
@@ -738,15 +755,15 @@ export default function Notifications() {
         breadcrumbs="Configuration / Notifications"
       />
 
-      <FeatureWizard
-        title="Discord Setup"
-        icon={<Bell className="h-6 w-6" />}
-        steps={steps}
-        currentStep={currentStep}
-        onStepChange={setCurrentStep}
-        isProcessing={isProcessing}
-        completedSteps={completedSteps}
-        errorSteps={errorSteps}
+      <NotificationsWizardInner
+        key={dataKey}
+        detection={detection}
+        currentConfig={currentConfig}
+        detecting={detecting}
+        detectError={detectError}
+        detectErr={detectErr as Error | null}
+        refetchConfig={refetchConfig}
+        redetect={redetect}
       />
     </div>
   )

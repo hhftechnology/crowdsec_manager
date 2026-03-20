@@ -1,4 +1,5 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useRef, useState, useCallback } from 'react'
+import { useMountEffect } from '@/hooks/useMountEffect'
 import {
   CommandDialog,
   CommandEmpty,
@@ -39,16 +40,19 @@ function CommandPalette({ commands, open: controlledOpen, onOpenChange }: Comman
     [isControlled, onOpenChange]
   )
 
-  useEffect(() => {
+  const toggleRef = useRef<() => void>(() => {})
+  toggleRef.current = () => setOpen(!isOpen)
+
+  useMountEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault()
-        setOpen(!isOpen)
+        toggleRef.current()
       }
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [isOpen, setOpen])
+  })
 
   // Group commands by their group field
   const grouped = commands.reduce<Record<string, CommandEntry[]>>((acc, cmd) => {

@@ -60,6 +60,7 @@ func RegisterAllowlistRoutes(router *gin.RouterGroup, dockerClient *docker.Clien
 		allowlist.GET("/inspect/:name", handlers.InspectAllowlist(dockerClient, cfg))
 		allowlist.POST("/add", handlers.AddAllowlistEntries(dockerClient, cfg))
 		allowlist.POST("/remove", handlers.RemoveAllowlistEntries(dockerClient, cfg))
+		allowlist.POST("/import", handlers.ImportAllowlistEntries(dockerClient, cfg))
 		allowlist.DELETE("/:name", handlers.DeleteAllowlist(dockerClient, cfg))
 	}
 }
@@ -148,9 +149,14 @@ func RegisterServicesRoutes(router *gin.RouterGroup, dockerClient *docker.Client
 		crowdsec.DELETE("/decisions", handlers.DeleteDecision(dockerClient, cfg))
 		crowdsec.POST("/decisions/import", handlers.ImportDecisions(dockerClient, cfg))
 		crowdsec.GET("/decisions/analysis", handlers.GetDecisionsAnalysis(dockerClient, cfg))
+		crowdsec.GET("/decisions/history", handlers.GetDecisionHistory())
+		crowdsec.GET("/decisions/repeated-offenders", handlers.GetRepeatedOffenders())
 		crowdsec.GET("/alerts/analysis", handlers.GetAlertsAnalysis(dockerClient, cfg, c))
+		crowdsec.GET("/alerts/history", handlers.GetAlertHistory())
 		crowdsec.GET("/alerts/:id", handlers.InspectAlert(dockerClient, cfg))
 		crowdsec.DELETE("/alerts/:id", handlers.DeleteAlert(dockerClient, cfg))
+		crowdsec.GET("/history/config", handlers.GetHistoryConfig())
+		crowdsec.PUT("/history/config", handlers.UpdateHistoryConfig())
 		crowdsec.GET("/metrics", handlers.GetMetrics(dockerClient, cfg, c))
 		crowdsec.POST("/enroll", handlers.EnrollCrowdSec(dockerClient, db, cfg))
 		crowdsec.POST("/enroll/finalize", handlers.FinalizeCrowdSecEnrollment(dockerClient, cfg))

@@ -25,7 +25,8 @@ type Config struct {
 	ConfigDir   string
 
 	// Database
-	DatabasePath string
+	DatabasePath        string
+	HistoryDatabasePath string
 
 	// File paths (from environment or database)
 	TraefikDynamicConfig string
@@ -96,6 +97,7 @@ func Load() (*Config, error) {
 		PangolinDir:              getEnv("PANGOLIN_DIR", "."),
 		ConfigDir:                getEnv("CONFIG_DIR", "./config"),
 		DatabasePath:             getEnv("DATABASE_PATH", "./data/settings.db"),
+		HistoryDatabasePath:      getEnv("HISTORY_DATABASE_PATH", "./data/history.db"),
 		TraefikDynamicConfig:     getEnv("TRAEFIK_DYNAMIC_CONFIG", "/etc/traefik/dynamic_config.yml"),
 		TraefikStaticConfig:      getEnv("TRAEFIK_STATIC_CONFIG", "/etc/traefik/traefik_config.yml"),
 		TraefikAccessLog:         getEnv("TRAEFIK_ACCESS_LOG", "/var/log/traefik/access.log"),

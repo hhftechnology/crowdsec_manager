@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type MouseEvent } from 'react'
 import {
   ComposableMap,
   Geographies,
@@ -6,20 +6,15 @@ import {
   Marker,
 } from 'react-simple-maps'
 import { Globe } from 'lucide-react'
-
-const GEO_URL = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json'
-
-interface ThreatMapData {
-  lat: number
-  lng: number
-  value: number
-  country?: string
-}
+import worldMapUrl from 'world-atlas/countries-110m.json?url'
+import type { ThreatMapPoint } from '@/lib/threat-map'
 
 interface ThreatMapProps {
-  data: ThreatMapData[]
+  data: ThreatMapPoint[]
   /** Map height in pixels. Defaults to 400. */
   height?: number
+  onMarkerClick?: (point: ThreatMapPoint) => void
+  formatTooltip?: (point: ThreatMapPoint) => string
 }
 
 /** Scale marker radius based on value, clamped between 4 and 20 pixels. */
@@ -29,7 +24,17 @@ function markerRadius(value: number, maxValue: number): number {
   return Math.max(4, Math.min(20, 4 + normalized * 16))
 }
 
-export default function ThreatMap({ data, height = 400 }: ThreatMapProps) {
+function defaultTooltip(point: ThreatMapPoint): string {
+  const label = point.label ?? point.country ?? `${point.lat.toFixed(1)}, ${point.lng.toFixed(1)}`
+  return `${label}: ${point.value.toLocaleString()}`
+}
+
+export default function ThreatMap({
+  data,
+  height = 400,
+  onMarkerClick,
+  formatTooltip = defaultTooltip,
+}: ThreatMapProps) {
   const [tooltip, setTooltip] = useState<{ x: number; y: number; content: string } | null>(null)
 
   if (data.length === 0) {
@@ -55,7 +60,7 @@ export default function ThreatMap({ data, height = 400 }: ThreatMapProps) {
         height={height}
         style={{ width: '100%', height: '100%' }}
       >
-        <Geographies geography={GEO_URL}>
+        <Geographies geography={worldMapUrl}>
           {({ geographies }) =>
             geographies.map((geo) => (
               <Geography
@@ -78,15 +83,15 @@ export default function ThreatMap({ data, height = 400 }: ThreatMapProps) {
           <Marker
             key={`marker-${index}`}
             coordinates={[point.lng, point.lat]}
-            onMouseEnter={(e: React.MouseEvent) => {
-              const label = point.country ?? `${point.lat.toFixed(1)}, ${point.lng.toFixed(1)}`
+            onMouseEnter={(e: MouseEvent<SVGGElement>) => {
               setTooltip({
                 x: e.clientX,
                 y: e.clientY,
-                content: `${label}: ${point.value.toLocaleString()}`,
+                content: formatTooltip(point),
               })
             }}
             onMouseLeave={() => setTooltip(null)}
+            onClick={() => onMarkerClick?.(point)}
           >
             <circle
               r={markerRadius(point.value, maxValue)}
@@ -95,6 +100,7 @@ export default function ThreatMap({ data, height = 400 }: ThreatMapProps) {
               stroke="hsl(var(--chart-1))"
               strokeWidth={1}
               strokeOpacity={0.3}
+              style={{ cursor: onMarkerClick ? 'pointer' : 'default' }}
             />
           </Marker>
         ))}

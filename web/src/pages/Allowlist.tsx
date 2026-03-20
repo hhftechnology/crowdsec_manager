@@ -15,6 +15,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { PageHeader, EmptyState, QueryError, ResultsSummary } from '@/components/common'
 import { InspectDialog } from '@/components/allowlist/InspectDialog'
+import { ImportEntries } from '@/components/allowlist/ImportEntries'
 import { ManageEntries } from '@/components/allowlist/ManageEntries'
 
 export default function Allowlist() {
@@ -272,15 +273,22 @@ export default function Allowlist() {
       </Card>
 
       {allowlistsData && allowlistsData.length > 0 && (
-        <ManageEntries
-          allowlists={allowlistsData}
-          selectedAllowlist={selectedAllowlist}
-          onSelectAllowlist={setSelectedAllowlist}
-          onAddEntries={handleAddEntries}
-          onRemoveEntries={handleRemoveEntries}
-          isAdding={addEntriesMutation.isPending}
-          isRemoving={removeEntriesMutation.isPending}
-        />
+        <>
+          <ManageEntries
+            allowlists={allowlistsData}
+            selectedAllowlist={selectedAllowlist}
+            onSelectAllowlist={setSelectedAllowlist}
+            onAddEntries={handleAddEntries}
+            onRemoveEntries={handleRemoveEntries}
+            isAdding={addEntriesMutation.isPending}
+            isRemoving={removeEntriesMutation.isPending}
+          />
+          <ImportEntries
+            allowlists={allowlistsData}
+            selectedAllowlist={selectedAllowlist}
+            onSelectAllowlist={setSelectedAllowlist}
+          />
+        </>
       )}
 
       <InspectDialog

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"strconv"
 
 	"crowdsec-manager/internal/config"
 	"crowdsec-manager/internal/docker"
@@ -48,6 +49,13 @@ func DeleteAlert(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFun
 				Error:   fmt.Sprintf("Failed to delete alert %s: %v", alertID, err),
 			})
 			return
+		}
+
+		if historyService != nil {
+			alertIDInt, _ := strconv.ParseInt(alertID, 10, 64)
+			if err := historyService.MarkAlertDeleted(c.Request.Context(), alertIDInt); err != nil {
+				logger.Warn("Failed to mark alert history stale after delete", "alertID", alertID, "error", err)
+			}
 		}
 
 		logger.Info("Alert deleted", "alertID", alertID, "output", output)

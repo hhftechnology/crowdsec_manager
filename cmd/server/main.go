@@ -24,6 +24,7 @@ import (
 	"crowdsec-manager/internal/cron"
 	"crowdsec-manager/internal/database"
 	"crowdsec-manager/internal/docker"
+	"crowdsec-manager/internal/history"
 	"crowdsec-manager/internal/logger"
 	"crowdsec-manager/internal/messaging"
 )
@@ -50,6 +51,13 @@ func main() {
 	defer db.Close()
 	logger.Info("Database initialized", "path", cfg.DatabasePath)
 
+	historyStore, err := history.NewStore(cfg.HistoryDatabasePath)
+	if err != nil {
+		logger.Fatal("Failed to initialize history database", "error", err)
+	}
+	defer historyStore.Close()
+	logger.Info("History database initialized", "path", cfg.HistoryDatabasePath)
+
 	// Initialize multi-host Docker client (falls back to single host if DOCKER_HOSTS is empty)
 	multiHost, err := docker.NewMultiHostClient(cfg.DockerHosts)
 	if err != nil {
@@ -75,6 +83,11 @@ func main() {
 	go hub.Run()
 	defer hub.Stop()
 
+	historyService := history.NewService(historyStore, dockerClient, cfg, hub)
+	historyService.Start()
+	defer historyService.Stop()
+	handlers.SetHistoryService(historyService)
+
 	// Initialize config validator for drift detection and recovery
 	validator := configvalidator.NewValidator(db, dockerClient, hub, cfg)
 	handlers.SetConfigValidator(validator)
@@ -98,13 +111,15 @@ func main() {
 	router.Use(gin.Recovery())
 	router.Use(logger.GinLogger())
 
-	// Configure CORS for frontend development servers
+	// Configure CORS – allow all origins so the Capacitor mobile app
+	// (which runs from capacitor://localhost or https://localhost) can
+	// reach the API alongside browser-based frontends.
 	router.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:3000", "http://localhost:5173"},
+		AllowAllOrigins:  true,
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "X-Docker-Host"},
 		ExposeHeaders:    []string{"Content-Length"},
-		AllowCredentials: true,
+		AllowCredentials: false,
 		MaxAge:           12 * time.Hour,
 	}))
 

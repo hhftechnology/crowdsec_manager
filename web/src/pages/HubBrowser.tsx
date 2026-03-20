@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -138,10 +138,10 @@ export default function HubBrowser() {
   const queryClient = useQueryClient()
   const [searchParams, setSearchParams] = useSearchParams()
   const { query, setQuery } = useSearch()
-  const [activeTab, setActiveTab] = useState<HubItemType>(() => {
+  const activeTab = useMemo<HubItemType>(() => {
     const tab = searchParams.get('tab') as HubItemType | null
     return tab && HUB_TABS.some((entry) => entry.value === tab) ? tab : 'collections'
-  })
+  }, [searchParams])
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set())
 
   const toggleExpanded = (name: string) => {
@@ -203,18 +203,6 @@ export default function HubBrowser() {
     })
   }, [activeItems, query])
 
-  useEffect(() => {
-    const currentTab = searchParams.get('tab') ?? ''
-    const currentQ = searchParams.get('q') ?? ''
-    if (currentTab === activeTab && currentQ === query) return
-
-    const next = new URLSearchParams(searchParams)
-    if (query) next.set('q', query)
-    else next.delete('q')
-    next.set('tab', activeTab)
-    setSearchParams(next, { replace: true })
-  }, [query, activeTab, searchParams, setSearchParams])
-
   return (
     <div className="space-y-6">
       <PageHeader
@@ -262,12 +250,29 @@ export default function HubBrowser() {
             <Input
               placeholder="Search hub items by name, description, or author..."
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => {
+                setQuery(e.target.value)
+                setSearchParams((prev) => {
+                  const next = new URLSearchParams(prev)
+                  if (e.target.value) next.set('q', e.target.value)
+                  else next.delete('q')
+                  return next
+                }, { replace: true })
+              }}
               className="pl-10"
             />
           </div>
 
-          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as HubItemType)}>
+          <Tabs
+            value={activeTab}
+            onValueChange={(v) => {
+              setSearchParams((prev) => {
+                const next = new URLSearchParams(prev)
+                next.set('tab', v)
+                return next
+              }, { replace: true })
+            }}
+          >
             <TabsList>
               {HUB_TABS.map((tab) => (
                 <TabsTrigger key={tab.value} value={tab.value}>{tab.label}</TabsTrigger>

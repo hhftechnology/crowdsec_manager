@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -33,8 +32,9 @@ func GetBouncers(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFun
 			return
 		}
 
-		// Parse and normalize CLI JSON output first, then decode typed payload.
-		dataBytes, parseErr := parseCLIJSONToBytes(output)
+		// Use parseBouncersJSON to handle multiple timestamp formats (RFC3339Nano, RFC3339)
+		// and compute status in one pass (avoids duplicate logic and silent zero-time failures).
+		bouncers, parseErr := parseBouncersJSON(output, true)
 		if parseErr != nil {
 			logger.Warn("Failed to parse bouncers JSON",
 				"error", parseErr,
@@ -45,29 +45,6 @@ func GetBouncers(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFun
 				Error:   fmt.Sprintf("Failed to parse bouncers JSON: %v", parseErr),
 			})
 			return
-		}
-
-		var bouncers []models.Bouncer
-		if err := json.Unmarshal(dataBytes, &bouncers); err != nil {
-			c.JSON(http.StatusInternalServerError, models.Response{
-				Success: false,
-				Error:   fmt.Sprintf("Failed to parse bouncers JSON: %v", err),
-			})
-			return
-		}
-
-		// Compute status for each bouncer
-		for i := range bouncers {
-			// Primary indicator: valid key + pulled within 60 minutes = connected
-			if bouncers[i].Valid && time.Since(bouncers[i].LastPull) <= 60*time.Minute {
-				bouncers[i].Status = "connected"
-			} else if bouncers[i].Valid {
-				// Valid key but hasn't pulled recently - stale but registered
-				bouncers[i].Status = "stale"
-			} else {
-				// Key is invalid/revoked - bouncer is disconnected
-				bouncers[i].Status = "disconnected"
-			}
 		}
 
 		logger.Debug("Bouncers API retrieved successfully", "count", len(bouncers))

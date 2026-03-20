@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import api, { ServiceActionRequest, ServiceInfo } from '@/lib/api'
@@ -13,9 +13,6 @@ import { PageHeader, QueryError } from '@/components/common'
 
 export default function Services() {
   const queryClient = useQueryClient()
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
-
-
 
   const { data: servicesData, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['services'],
@@ -26,16 +23,10 @@ export default function Services() {
     refetchInterval: 10000, // Refresh every 10 seconds
   })
 
-  useEffect(() => {
-    if (servicesData) {
-      setLastUpdated(new Date())
-    }
-  }, [servicesData])
-
   const lastUpdatedLabel = useMemo(() => {
-    if (!lastUpdated) return 'Not refreshed yet'
-    return `Updated ${lastUpdated.toLocaleTimeString()}`
-  }, [lastUpdated])
+    if (!servicesData) return 'Not refreshed yet'
+    return `Updated ${new Date().toLocaleTimeString()}`
+  }, [servicesData])
 
   // Poll for enrollment status (keep this for the page-level awareness if needed, or remove if EnrollDialog handles it all)
   // Actually, the page doesn't use enrollmentData other than for the dialog.
