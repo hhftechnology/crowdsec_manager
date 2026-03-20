@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -167,26 +168,29 @@ func GetCaptchaStatus(dockerClient *docker.Client, db *database.Database, cfg *c
 		dockerClient = resolveDockerClient(c, dockerClient)
 		logger.Info("Getting captcha status")
 
-		// Check if captcha.env exists (saved configuration)
-		output, err := dockerClient.ExecCommand(cfg.TraefikContainerName, []string{
-			"cat", cfg.TraefikCaptchaEnvPath,
-		})
-
+		// Primary source: feature_configs database table
+		// SaveCaptchaConfig writes here, ApplyCaptchaConfig sets applied = true
 		configSaved := false
+		configured := false
 		savedProvider := ""
+		siteKey := ""
+		secretKey := ""
 
-		if err == nil && strings.TrimSpace(output) != "" {
-			configSaved = true
-			lines := strings.Split(output, "\n")
-			for _, line := range lines {
-				if strings.HasPrefix(line, "CAPTCHA_PROVIDER=") {
-					savedProvider = strings.TrimSpace(strings.TrimPrefix(line, "CAPTCHA_PROVIDER="))
-					break
+		if db != nil {
+			if featureCfg, err := db.GetFeatureConfig("captcha"); err == nil && featureCfg != nil {
+				configSaved = true
+				configured = featureCfg.Applied
+
+				var req models.CaptchaSetupRequest
+				if json.Unmarshal([]byte(featureCfg.ConfigJSON), &req) == nil {
+					savedProvider = req.Provider
+					siteKey = req.SiteKey
+					secretKey = req.SecretKey
 				}
 			}
 		}
 
-		// Get dynamic config path from database
+		// Supplementary: check dynamic_config.yml in Traefik container for live state
 		dynamicConfigPath := cfg.TraefikDynamicConfig
 		if db != nil {
 			if path, err := db.GetTraefikDynamicConfigPath(); err == nil {
@@ -194,20 +198,23 @@ func GetCaptchaStatus(dockerClient *docker.Client, db *database.Database, cfg *c
 			}
 		}
 
-		// Check dynamic_config.yml for actual captcha configuration
 		configContent, err := dockerClient.ExecCommand(cfg.TraefikContainerName, []string{
 			"cat", dynamicConfigPath,
 		})
 
-		configured := false
 		detectedProvider := ""
 		hasHTMLPath := false
-		siteKey := ""
-		secretKey := ""
 
 		if err == nil && configContent != "" {
-			configured, detectedProvider, hasHTMLPath = detectCaptchaInConfig(configContent)
-			siteKey, secretKey = extractCaptchaKeys(configContent)
+			var liveConfigured bool
+			liveConfigured, detectedProvider, hasHTMLPath = detectCaptchaInConfig(configContent)
+			liveSiteKey, liveSecretKey := extractCaptchaKeys(configContent)
+			// Use live container values if DB had no data
+			if !configSaved && liveConfigured {
+				configured = true
+				siteKey = liveSiteKey
+				secretKey = liveSecretKey
+			}
 		}
 
 		// Check if captcha.html exists on local filesystem (via /app/config mount)
