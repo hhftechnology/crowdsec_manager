@@ -182,7 +182,9 @@ func GetCaptchaStatus(dockerClient *docker.Client, db *database.Database, cfg *c
 				configured = featureCfg.Applied
 
 				var req models.CaptchaSetupRequest
-				if json.Unmarshal([]byte(featureCfg.ConfigJSON), &req) == nil {
+				if err := json.Unmarshal([]byte(featureCfg.ConfigJSON), &req); err != nil {
+					logger.Warn("Failed to unmarshal captcha config from DB", "error", err)
+				} else {
 					savedProvider = req.Provider
 					siteKey = req.SiteKey
 					secretKey = req.SecretKey
