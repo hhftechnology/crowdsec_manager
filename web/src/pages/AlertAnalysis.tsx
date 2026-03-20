@@ -69,8 +69,9 @@ import {
 } from '@/components/common'
 import type { FilterField } from '@/components/common'
 import { AlertCard } from '@/components/alerts/AlertCard'
-import { ChartCard, AreaTimeline, BarDistribution } from '@/components/charts'
+import { ChartCard, AreaTimeline, BarDistribution, ThreatMap } from '@/components/charts'
 import { groupByField } from '@/lib/chart-utils'
+import { buildThreatMapPoints } from '@/lib/threat-map'
 import { useInfiniteScroll, useUrlFilters } from '@/hooks'
 import { useSearch } from '@/contexts/SearchContext'
 
@@ -558,6 +559,8 @@ export default function AlertAnalysis() {
     return groupByField(alertsData.alerts, 'scenario', 8)
   }, [alertsData])
 
+  const threatMapData = useMemo(() => buildThreatMapPoints(filteredAlerts), [filteredAlerts])
+
   // ---- Handlers ----
 
   const handleApplyFilters = useCallback(() => {
@@ -689,6 +692,22 @@ export default function AlertAnalysis() {
             />
           </ChartCard>
         </div>
+      )}
+
+      {alertsData?.alerts && (alertsData.alerts as CrowdSecAlert[]).length > 0 && (
+        <ChartCard title="Threat Map" description="Geographic distribution of the currently displayed alert set">
+          <ThreatMap
+            data={threatMapData}
+            height={320}
+            formatTooltip={(point) => {
+              const label = point.country ?? point.label ?? 'Unknown source'
+              return `${label}: ${point.value.toLocaleString()} alert${point.value === 1 ? '' : 's'}`
+            }}
+            onMarkerClick={(point) => {
+              handleCountryClick(point.country)
+            }}
+          />
+        </ChartCard>
       )}
 
       <CrowdSecFilterForm

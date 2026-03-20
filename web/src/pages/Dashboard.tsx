@@ -17,8 +17,9 @@ import {
   Globe,
   Radio,
 } from 'lucide-react'
-import { StatCard, ChartCard, AreaTimeline, PieBreakdown, BarDistribution } from '@/components/charts'
+import { StatCard, ChartCard, AreaTimeline, PieBreakdown, BarDistribution, ThreatMap } from '@/components/charts'
 import { groupByField, CHART_COLORS } from '@/lib/chart-utils'
+import { buildThreatMapPoints } from '@/lib/threat-map'
 import {
   BarChart,
   Bar,
@@ -285,6 +286,8 @@ export default function Dashboard() {
     return groupBySourceField(alerts, 'as_name', 5)
   }, [alerts])
 
+  const threatMapData = useMemo(() => buildThreatMapPoints(alerts), [alerts])
+
   const lastUpdatedAt = useMemo(() => {
     const timestamps = [healthUpdatedAt, decisionsUpdatedAt, bouncersUpdatedAt, alertsUpdatedAt].filter(Boolean)
     if (timestamps.length === 0) return null
@@ -416,7 +419,23 @@ export default function Dashboard() {
         )}
       </ChartCard>
 
-      {/* Row 3: Top Countries + Top Autonomous Systems */}
+      {/* Row 3: Threat Map */}
+      <ChartCard title="Threat Map" description="Geographic distribution of alert sources over the last 7 days">
+        <ThreatMap
+          data={threatMapData}
+          height={320}
+          formatTooltip={(point) => {
+            const label = point.country ?? point.label ?? 'Unknown source'
+            return `${label}: ${point.value.toLocaleString()} alert${point.value === 1 ? '' : 's'}`
+          }}
+          onMarkerClick={(point) => {
+            if (!point.country) return
+            navigate(`/alerts?country=${point.country}`)
+          }}
+        />
+      </ChartCard>
+
+      {/* Row 4: Top Countries + Top Autonomous Systems */}
       <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
         {/* Top Countries */}
         <Card>
@@ -495,7 +514,7 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* Row 4: Decisions Over Time + Type Distribution */}
+      {/* Row 5: Decisions Over Time + Type Distribution */}
       <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
         <ChartCard title="Decisions Over Time" description="Recent decision activity">
           {decisionsOverTime.length > 0 ? (
@@ -517,7 +536,7 @@ export default function Dashboard() {
         </ChartCard>
       </div>
 
-      {/* Row 5: Top Scenarios + Top Blocked IPs */}
+      {/* Row 6: Top Scenarios + Top Blocked IPs */}
       <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
         {/* Top Scenarios */}
         <Card>
@@ -566,7 +585,7 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* Row 6: Container Status */}
+      {/* Row 7: Container Status */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-lg">
