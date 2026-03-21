@@ -15,6 +15,10 @@ import type {
   DecisionHistoryRecord,
   AlertHistoryRecord,
   RepeatedOffender,
+  ReapplyDecisionRequest,
+  BulkReapplyDecisionsRequest,
+  BulkReapplyResult,
+  HistoryStats,
 } from './types'
 
 export const crowdsecAPI = {
@@ -93,4 +97,13 @@ export const crowdsecAPI = {
 
   updateHistoryConfig: (retentionDays: number) =>
     apiClient.put<ApiResponse<HistoryConfig>>('/crowdsec/history/config', { retention_days: retentionDays }),
+
+  getHistoryStats: () =>
+    apiClient.get<ApiResponse<HistoryStats>>('/crowdsec/history/stats'),
+
+  reapplyDecision: (data: ReapplyDecisionRequest) =>
+    apiClient.post<ApiResponse<{ message: string }>>('/crowdsec/decisions/history/reapply', data),
+
+  bulkReapplyDecisions: (data: BulkReapplyDecisionsRequest) =>
+    apiClient.post<ApiResponse<BulkReapplyResult>>('/crowdsec/decisions/history/bulk-reapply', data),
 }

@@ -233,6 +233,14 @@ func (s *Service) MarkAlertDeleted(ctx context.Context, alertID int64) error {
 	return s.store.MarkAlertStaleByAlertID(ctx, alertID, time.Now().UTC())
 }
 
+func (s *Service) GetDecisionHistoryRecord(ctx context.Context, id int64) (*models.DecisionHistoryRecord, error) {
+	return s.store.GetDecisionHistoryRecord(ctx, id)
+}
+
+func (s *Service) GetHistoryStats(ctx context.Context) (*models.HistoryStats, error) {
+	return s.store.GetHistoryStats(ctx)
+}
+
 func parseCLIJSONOutput(output string) (interface{}, error) {
 	start := firstCLIJSONStartIndex(output)
 	if start < 0 {

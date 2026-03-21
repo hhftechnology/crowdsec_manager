@@ -23,6 +23,7 @@ import {
   ShieldAlert,
   ScanSearch,
   AppWindow,
+  History,
 } from 'lucide-react'
 
 export const navigation = [
@@ -39,6 +40,7 @@ export const navigation = [
     items: [
       { name: 'Alerts', href: '/alerts', icon: AlertTriangle },
       { name: 'Decisions', href: '/decisions', icon: Target },
+      { name: 'History', href: '/history', icon: History },
       { name: 'Remediation Metrics', href: '/crowdsec-health', icon: Activity },
       { name: 'Engine Metrics', href: '/metrics', icon: BarChart3 },
     ]

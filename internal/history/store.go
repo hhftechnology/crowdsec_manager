@@ -670,3 +670,49 @@ func (s *Store) RecordRepeatedOffenderEvent(ctx context.Context, offender models
 
 	return shouldNotify, nil
 }
+
+// GetDecisionHistoryRecord returns a single decision history entry by primary key.
+func (s *Store) GetDecisionHistoryRecord(ctx context.Context, id int64) (*models.DecisionHistoryRecord, error) {
+	var r models.DecisionHistoryRecord
+	var staleInt int
+	err := s.db.QueryRowContext(ctx, `
+		SELECT
+			id, dedupe_key, decision_id, alert_id, origin, type, scope, value, duration, scenario,
+			created_at, until_at, is_stale, first_seen_at, last_seen_at, COALESCE(stale_at, ''), last_snapshot_at
+		FROM decision_history
+		WHERE id = ?
+	`, id).Scan(
+		&r.ID, &r.DedupeKey, &r.DecisionID, &r.AlertID, &r.Origin, &r.Type, &r.Scope, &r.Value,
+		&r.Duration, &r.Scenario, &r.CreatedAt, &r.Until, &staleInt, &r.FirstSeenAt,
+		&r.LastSeenAt, &r.StaleAt, &r.LastSnapshotAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	r.IsStale = staleInt == 1
+	return &r, nil
+}
+
+// GetHistoryStats returns aggregate counts for the history dashboard.
+func (s *Store) GetHistoryStats(ctx context.Context) (*models.HistoryStats, error) {
+	var stats models.HistoryStats
+	queries := []struct {
+		dest  *int
+		query string
+	}{
+		{&stats.TotalDecisions, "SELECT COUNT(1) FROM decision_history"},
+		{&stats.ActiveDecisions, "SELECT COUNT(1) FROM decision_history WHERE is_stale = 0"},
+		{&stats.TotalAlerts, "SELECT COUNT(1) FROM alert_history"},
+		{&stats.ActiveAlerts, "SELECT COUNT(1) FROM alert_history WHERE is_stale = 0"},
+		{&stats.RepeatedOffenderCount, "SELECT COUNT(1) FROM repeated_offender_events"},
+	}
+	for _, q := range queries {
+		if err := s.db.QueryRowContext(ctx, q.query).Scan(q.dest); err != nil {
+			return nil, err
+		}
+	}
+	return &stats, nil
+}

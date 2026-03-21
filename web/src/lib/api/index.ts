@@ -58,6 +58,10 @@ export type {
   DecisionHistoryRecord,
   AlertHistoryRecord,
   RepeatedOffender,
+  HistoryStats,
+  ReapplyDecisionRequest,
+  BulkReapplyDecisionsRequest,
+  BulkReapplyResult,
 } from './types'
 
 // Domain API namespaces

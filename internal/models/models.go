@@ -595,3 +595,35 @@ type RepeatedOffender struct {
 	LastDecisionAt  string `json:"last_decision_at"`
 	LastNotifiedAt  string `json:"last_notified_at,omitempty"`
 }
+
+// HistoryStats provides aggregate counts for the history dashboard.
+type HistoryStats struct {
+	TotalDecisions        int `json:"total_decisions"`
+	ActiveDecisions       int `json:"active_decisions"`
+	TotalAlerts           int `json:"total_alerts"`
+	ActiveAlerts          int `json:"active_alerts"`
+	RepeatedOffenderCount int `json:"repeated_offender_count"`
+}
+
+// ReapplyDecisionRequest re-inserts a historical decision into CrowdSec.
+type ReapplyDecisionRequest struct {
+	ID       int64  `json:"id"`
+	Type     string `json:"type"`     // "ban" | "captcha"
+	Duration string `json:"duration"` // e.g. "24h", "7d"
+	Reason   string `json:"reason,omitempty"`
+}
+
+// BulkReapplyDecisionsRequest re-inserts multiple historical decisions.
+type BulkReapplyDecisionsRequest struct {
+	IDs      []int64 `json:"ids"`
+	Type     string  `json:"type"`
+	Duration string  `json:"duration"`
+	Reason   string  `json:"reason,omitempty"`
+}
+
+// BulkReapplyResult reports outcomes of a bulk re-apply operation.
+type BulkReapplyResult struct {
+	Succeeded int      `json:"succeeded"`
+	Failed    int      `json:"failed"`
+	Errors    []string `json:"errors,omitempty"`
+}
