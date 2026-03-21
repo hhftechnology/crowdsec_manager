@@ -1,0 +1,214 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: crowdsec-manager
+  namespace: crowdsec
+  labels:
+    app.kubernetes.io/name: crowdsec-manager
+    app.kubernetes.io/component: app
+spec:
+  # ---------------------------------------------------------------------------
+  # IMPORTANT: Keep replicas at 1.
+  # - SQLite on a ReadWriteOnce PVC cannot have two concurrent writers.
+  # - /var/run/docker.sock is a singleton resource per host node.
+  # - Scaling requires migrating to an external database first.
+  # ---------------------------------------------------------------------------
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: crowdsec-manager
+
+  # ---------------------------------------------------------------------------
+  # Recreate strategy: terminates the old Pod before starting the new one.
+  # Required because ReadWriteOnce PVCs can only be attached to one node at a
+  # time. RollingUpdate would deadlock waiting for the PVC to release.
+  # ---------------------------------------------------------------------------
+  strategy:
+    type: Recreate
+
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: crowdsec-manager
+        app.kubernetes.io/component: app
+    spec:
+      # -------------------------------------------------------------------------
+      # Node placement
+      # -------------------------------------------------------------------------
+      # The Pod MUST land on the node that runs the Docker daemon with
+      # CrowdSec and Traefik. Label that node first:
+      #
+      #   kubectl label node <your-node-name> crowdsec-manager/host=true
+      #
+      # If you have a single-node cluster, you can remove nodeSelector entirely.
+      # -------------------------------------------------------------------------
+      nodeSelector:
+        crowdsec-manager/host: "true"
+
+      # Uncomment to pin to a specific node by name instead of a label:
+      # nodeName: my-server-node
+
+      # -------------------------------------------------------------------------
+      # All containers in a Pod share one network namespace.
+      # The Tailscale sidecar creates a WireGuard interface (tailscale0) inside
+      # that shared namespace.  The app container sees traffic arriving on port
+      # 8080 via the Tailscale IP — identical behaviour to Docker Compose's
+      # "network_mode: service:tailscale".
+      # -------------------------------------------------------------------------
+      hostNetwork: false
+
+      containers:
+        # =======================================================================
+        # Container 1: Tailscale sidecar
+        # =======================================================================
+        - name: tailscale
+          image: tailscale/tailscale:latest
+          imagePullPolicy: Always
+          env:
+            - name: TS_AUTHKEY
+              valueFrom:
+                secretKeyRef:
+                  name: crowdsec-manager-tailscale
+                  key: TS_AUTHKEY
+            # Hostname shown in the Tailscale admin console
+            - name: TS_HOSTNAME
+              value: "crowdsec-manager"
+            # Persist WireGuard identity across Pod restarts
+            - name: TS_STATE_DIR
+              value: "/var/lib/tailscale"
+            # false = kernel-mode WireGuard (requires NET_ADMIN + SYS_MODULE + /dev/net/tun)
+            # true  = userspace mode (slower, but works without kernel module access)
+            - name: TS_USERSPACE
+              value: "false"
+            # Keep the Pod's CoreDNS resolver — do not let Tailscale override DNS
+            - name: TS_ACCEPT_DNS
+              value: "false"
+            # Optional: add extra tailscale up flags, e.g. "--advertise-tags=tag:server"
+            # - name: TS_EXTRA_ARGS
+            #   value: ""
+          securityContext:
+            capabilities:
+              add:
+                - NET_ADMIN
+                - SYS_MODULE
+          volumeMounts:
+            - name: tailscale-state
+              mountPath: /var/lib/tailscale
+            # /dev/net/tun is the kernel TUN device required for WireGuard
+            - name: dev-net-tun
+              mountPath: /dev/net/tun
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+
+        # =======================================================================
+        # Container 2: CrowdSec Manager (main application)
+        # =======================================================================
+        - name: crowdsec-manager
+          image: hhftechnology/crowdsec-manager:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          # All non-secret configuration from the ConfigMap
+          envFrom:
+            - configMapRef:
+                name: crowdsec-manager-env
+          # Run as root — matches the Dockerfile (no USER directive) and
+          # is required to write to host-mounted volumes and the Docker socket.
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+          volumeMounts:
+            # Persistent data (SQLite databases)
+            - name: data
+              mountPath: /app/data
+            # Config files managed by the app
+            - name: config
+              mountPath: /app/config
+            # Backup storage
+            - name: backups
+              mountPath: /app/backups
+            # Application logs
+            - name: logs
+              mountPath: /app/logs
+            # Docker socket from the host node.
+            # WARNING: This grants effective root on the host. Pin the Pod to
+            # a trusted node via nodeSelector and limit cluster network access
+            # with a NetworkPolicy.
+            - name: docker-sock
+              mountPath: /var/run/docker.sock
+            # Optional: uncomment if you want to inject a docker-compose.yml
+            # via a ConfigMap (see configmap.yaml for instructions).
+            # - name: docker-compose
+            #   mountPath: /app/docker-compose.yml
+            #   subPath: docker-compose.yml
+            #   readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            failureThreshold: 3
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            failureThreshold: 3
+            timeoutSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+
+      # =========================================================================
+      # Volumes
+      # =========================================================================
+      volumes:
+        # PVCs
+        - name: data
+          persistentVolumeClaim:
+            claimName: crowdsec-manager-data
+        - name: config
+          persistentVolumeClaim:
+            claimName: crowdsec-manager-config
+        - name: backups
+          persistentVolumeClaim:
+            claimName: crowdsec-manager-backups
+        - name: logs
+          persistentVolumeClaim:
+            claimName: crowdsec-manager-logs
+        - name: tailscale-state
+          persistentVolumeClaim:
+            claimName: crowdsec-manager-tailscale-state
+
+        # Docker daemon socket from the host node (not a PVC — it is a live socket)
+        - name: docker-sock
+          hostPath:
+            path: /var/run/docker.sock
+            type: Socket
+
+        # Kernel TUN device for WireGuard (required when TS_USERSPACE=false)
+        - name: dev-net-tun
+          hostPath:
+            path: /dev/net/tun
+            type: CharDevice
+
+        # Optional: inject docker-compose.yml from a ConfigMap
+        # Uncomment the volumeMount above and create the ConfigMap first.
+        # - name: docker-compose
+        #   configMap:
+        #     name: crowdsec-manager-compose

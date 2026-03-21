@@ -14,8 +14,29 @@ CrowdSec Manager is a web-based management interface for CrowdSec operations, Tr
 
 ## Stable release
 
-- Current baseline: `1.0.0`
+- Current baseline: `2.0.0`
 - Multi-proxy support: not available in this release
+
+### Crowdsec-Manager mobile app.
+
+### Download
+Click below to download the app to your mobile device, tablet:
+
+### Current Release
+
+[<img src="https://play.google.com/intl/en_us/badges/images/generic/en_badge_web_generic.png" 
+alt="Download from Google Play" 
+height="80">](https://play.google.com/store/apps/details?id=com.crowdsec.manager.mobile)
+
+[<img src="https://f-droid.org/badge/get-it-on.png"
+alt="Get it on F-Droid"
+height="80">](https://f-droid.org/packages/com.crowdsec.manager.mobile/)
+
+[<img src="https://developer.apple.com/assets/elements/badges/download-on-the-app-store.svg"
+alt="We are not on iOS :)"
+height="80">](https://itunes.apple.com/us/app/hhftechnology/0)
+
+
 
 ## Images
 
@@ -89,16 +110,39 @@ CrowdSec Manager is a web-based management interface for CrowdSec operations, Tr
 | `terminal-container-shell.png` | Terminal (container shell) |
 | `whitelist-management.jpeg` | Whitelist Management |
 
-## Minimum Docker Compose
+## Minimum Docker Compose with tailscale
 
 ```yaml
 services:
-  crowdsec-manager:
-    image: hhftechnology/crowdsec-manager:1.1.0
-    container_name: crowdsec-manager
+  tailscale:
+    image: tailscale/tailscale:latest
+    container_name: tailscale-crowdsec
+    hostname: crowdsec-manager-ts # The name that will appear in your Tailscale admin panel
+    environment:
+      - TS_AUTHKEY=
+      - TS_STATE_DIR=/var/lib/tailscale
+    volumes:
+      - tailscale-data:/var/lib/tailscale
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - net_admin
+      - sys_module
+    ports:
+      - "8080:8080"
+    networks:
+      pangolin:
+        aliases:
+          - crowdsec-manager # Ensures other containers on the network can still reach it by its original name!
     restart: unless-stopped
-    expose:
-      - "8080"
+
+  crowdsec-manager:
+    image: hhftechnology/crowdsec-manager:pangolin
+    container_name: crowdsec-manager
+    network_mode: service:tailscale # This is the magic: it merges networking with the Tailscale container
+    depends_on:
+      - tailscale
+    restart: unless-stopped
+    # 'expose' and 'networks' are removed here because Tailscale manages the network connection now
     environment:
       # Core Configuration
       - PORT=8080
@@ -106,18 +150,20 @@ services:
       - TRAEFIK_DYNAMIC_CONFIG=/etc/traefik/dynamic_config.yml
       - TRAEFIK_CONTAINER_NAME=traefik
       - TRAEFIK_STATIC_CONFIG=/etc/traefik/traefik_config.yml
+      - CROWDSEC_METRICS_URL=http://crowdsec:6060/metrics
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /root/config:/app/config
       - /root/docker-compose.yml:/app/docker-compose.yml
-      - ./backups:/app/backups
+      - ./backups:/app/config/backups
       - ./data:/app/data
-    networks:
-      - pangolin
 
 networks:
   pangolin:
     external: true
+
+volumes:
+  tailscale-data:
 ```
 
 ## Run
