@@ -1,0 +1,22 @@
+{{- if and .Values.persistence.data.enabled (not .Values.persistence.data.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "crowdsec-manager.fullname" . }}-data
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "crowdsec-manager.labels" . | nindent 4 }}
+  annotations:
+    # SQLite databases — preserve across helm uninstall.
+    # To fully delete: kubectl delete pvc {{ include "crowdsec-manager.fullname" . }}-data -n {{ .Release.Namespace }}
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    - {{ .Values.persistence.data.accessMode }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.data.size }}
+  {{- if .Values.persistence.data.storageClass }}
+  storageClassName: {{ .Values.persistence.data.storageClass }}
+  {{- end }}
+{{- end }}

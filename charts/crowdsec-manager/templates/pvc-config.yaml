@@ -1,0 +1,20 @@
+{{- if and .Values.persistence.config.enabled (not .Values.persistence.config.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "crowdsec-manager.fullname" . }}-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "crowdsec-manager.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    - {{ .Values.persistence.config.accessMode }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.config.size }}
+  {{- if .Values.persistence.config.storageClass }}
+  storageClassName: {{ .Values.persistence.config.storageClass }}
+  {{- end }}
+{{- end }}

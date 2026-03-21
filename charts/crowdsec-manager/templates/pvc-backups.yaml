@@ -1,0 +1,18 @@
+{{- if and .Values.persistence.backups.enabled (not .Values.persistence.backups.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "crowdsec-manager.fullname" . }}-backups
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "crowdsec-manager.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.persistence.backups.accessMode }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.backups.size }}
+  {{- if .Values.persistence.backups.storageClass }}
+  storageClassName: {{ .Values.persistence.backups.storageClass }}
+  {{- end }}
+{{- end }}

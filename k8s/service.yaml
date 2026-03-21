@@ -1,0 +1,30 @@
+# =============================================================================
+# Service — ClusterIP only
+# =============================================================================
+# External access is exclusively via the Tailscale VPN. The app is reachable
+# at http://<tailscale-ip>:8080 from any device on your tailnet.
+#
+# This Service provides in-cluster DNS (crowdsec-manager.crowdsec.svc.cluster.local)
+# for Prometheus scraping or other in-cluster consumers.
+#
+# To find the Tailscale IP after the Pod starts:
+#   kubectl logs -n crowdsec deployment/crowdsec-manager -c tailscale | grep "100\."
+# Or check: https://login.tailscale.com/admin/machines
+# =============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: crowdsec-manager
+  namespace: crowdsec
+  labels:
+    app.kubernetes.io/name: crowdsec-manager
+    app.kubernetes.io/component: app
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: crowdsec-manager
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP

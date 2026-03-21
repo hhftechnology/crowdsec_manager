@@ -1,0 +1,70 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "crowdsec-manager.fullname" . }}-env
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "crowdsec-manager.labels" . | nindent 4 }}
+data:
+  PORT: {{ .Values.app.port | toString | quote }}
+  ENVIRONMENT: {{ .Values.app.environment | quote }}
+  LOG_LEVEL: {{ .Values.app.logLevel | quote }}
+  LOG_FILE: {{ .Values.app.logFile | quote }}
+
+  DOCKER_HOST: {{ .Values.app.dockerHost | quote }}
+  COMPOSE_FILE: {{ .Values.app.composeFile | quote }}
+  PANGOLIN_DIR: {{ .Values.app.pangolinDir | quote }}
+  CONFIG_DIR: {{ .Values.app.configDir | quote }}
+
+  DATABASE_PATH: {{ .Values.app.databasePath | quote }}
+  HISTORY_DATABASE_PATH: {{ .Values.app.historyDatabasePath | quote }}
+
+  TRAEFIK_CONTAINER_NAME: {{ .Values.app.traefik.containerName | quote }}
+  TRAEFIK_DYNAMIC_CONFIG: {{ .Values.app.traefik.dynamicConfig | quote }}
+  TRAEFIK_STATIC_CONFIG: {{ .Values.app.traefik.staticConfig | quote }}
+  TRAEFIK_ACCESS_LOG: {{ .Values.app.traefik.accessLog | quote }}
+  TRAEFIK_ERROR_LOG: {{ .Values.app.traefik.errorLog | quote }}
+  TRAEFIK_CAPTCHA_HTML_PATH: {{ .Values.app.traefik.captchaHtmlPath | quote }}
+  TRAEFIK_CAPTCHA_ENV_PATH: {{ .Values.app.traefik.captchaEnvPath | quote }}
+
+  CROWDSEC_CONTAINER_NAME: {{ .Values.app.crowdsec.containerName | quote }}
+  CROWDSEC_ACQUIS_FILE: {{ .Values.app.crowdsec.acquisFile | quote }}
+  CROWDSEC_METRICS_URL: {{ .Values.app.crowdsec.metricsUrl | quote }}
+  CROWDSEC_WHITELIST_PATH: {{ .Values.app.crowdsec.whitelistPath | quote }}
+  CROWDSEC_PROFILES_PATH: {{ .Values.app.crowdsec.profilesPath | quote }}
+  CROWDSEC_NOTIFICATIONS_DIR: {{ .Values.app.crowdsec.notificationsDir | quote }}
+  CROWDSEC_SCENARIOS_DIR: {{ .Values.app.crowdsec.scenariosDir | quote }}
+
+  PANGOLIN_CONTAINER_NAME: {{ .Values.app.pangolin.containerName | quote }}
+  INCLUDE_PANGOLIN: {{ .Values.app.pangolin.enabled | quote }}
+  GERBIL_CONTAINER_NAME: {{ .Values.app.gerbil.containerName | quote }}
+  INCLUDE_GERBIL: {{ .Values.app.gerbil.enabled | quote }}
+  INCLUDE_CROWDSEC: {{ .Values.app.includeCrowdsec | quote }}
+
+  BACKUP_DIR: {{ .Values.app.backupDir | quote }}
+  RETENTION_DAYS: {{ .Values.app.retentionDays | quote }}
+
+  DECISION_LIST_LIMIT: {{ .Values.app.decisionListLimit | quote }}
+  ALERT_LIST_LIMIT: {{ .Values.app.alertListLimit | quote }}
+
+  SHUTDOWN_TIMEOUT: {{ .Values.app.shutdownTimeout | quote }}
+  READ_TIMEOUT: {{ .Values.app.readTimeout | quote }}
+  WRITE_TIMEOUT: {{ .Values.app.writeTimeout | quote }}
+
+  NATS_ENABLED: {{ .Values.app.nats.enabled | toString | quote }}
+  {{- if .Values.app.nats.url }}
+  NATS_URL: {{ .Values.app.nats.url | quote }}
+  {{- end }}
+{{- if .Values.dockerCompose.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "crowdsec-manager.fullname" . }}-compose
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "crowdsec-manager.labels" . | nindent 4 }}
+data:
+  docker-compose.yml: |
+    {{- .Values.dockerCompose.content | nindent 4 }}
+{{- end }}

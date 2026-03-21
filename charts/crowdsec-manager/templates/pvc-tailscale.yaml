@@ -1,0 +1,22 @@
+{{- if and .Values.persistence.tailscaleState.enabled (not .Values.persistence.tailscaleState.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "crowdsec-manager.fullname" . }}-tailscalestate
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "crowdsec-manager.labels" . | nindent 4 }}
+  annotations:
+    # Tailscale WireGuard identity — preserve to avoid re-registration.
+    # To fully delete: kubectl delete pvc {{ include "crowdsec-manager.fullname" . }}-tailscalestate -n {{ .Release.Namespace }}
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    - {{ .Values.persistence.tailscaleState.accessMode }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.tailscaleState.size }}
+  {{- if .Values.persistence.tailscaleState.storageClass }}
+  storageClassName: {{ .Values.persistence.tailscaleState.storageClass }}
+  {{- end }}
+{{- end }}

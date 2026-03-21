@@ -1,0 +1,250 @@
+# =============================================================================
+# CrowdSec Manager — Helm Chart Values
+# =============================================================================
+
+# -- Replica count. Must stay at 1: SQLite + ReadWriteOnce PVC + Docker socket
+# are all single-node singleton resources.
+replicaCount: 1
+
+# ---------------------------------------------------------------------------
+# Main application image
+# ---------------------------------------------------------------------------
+image:
+  repository: hhftechnology/crowdsec-manager
+  tag: latest
+  pullPolicy: Always
+
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+# =============================================================================
+# Node Placement
+# =============================================================================
+# The Pod MUST land on the node that runs Docker/CrowdSec/Traefik.
+# Label that node first:
+#   kubectl label node <node-name> crowdsec-manager/host=true
+#
+# To use a specific node name instead, set nodeName (takes precedence).
+# For single-node clusters, set nodeSelector: {} to disable label filtering.
+# =============================================================================
+nodeName: ""
+
+nodeSelector:
+  crowdsec-manager/host: "true"
+
+tolerations: []
+
+affinity: {}
+
+# =============================================================================
+# Application Configuration
+# =============================================================================
+app:
+  port: 8080
+  environment: production
+  logLevel: info
+
+  # Absolute paths inside the container (must match persistence mount paths)
+  logFile: /app/logs/crowdsec-manager.log
+  configDir: /app/config
+  databasePath: /app/data/settings.db
+  historyDatabasePath: /app/data/history.db
+  backupDir: /app/backups
+  retentionDays: "60"
+  composeFile: /app/docker-compose.yml
+  pangolinDir: /app
+
+  # Docker socket on the host node
+  dockerHost: "unix:///var/run/docker.sock"
+
+  traefik:
+    containerName: traefik
+    dynamicConfig: /etc/traefik/dynamic_config.yml
+    staticConfig: /etc/traefik/traefik_config.yml
+    accessLog: /var/log/traefik/access.log
+    errorLog: /var/log/traefik/traefik.log
+    captchaHtmlPath: /etc/traefik/conf/captcha.html
+    captchaEnvPath: /etc/traefik/captcha.env
+
+  crowdsec:
+    containerName: crowdsec
+    acquisFile: /etc/crowdsec/acquis.yaml
+    metricsUrl: http://crowdsec:6060/metrics
+    whitelistPath: /etc/crowdsec/parsers/s02-enrich/mywhitelists.yaml
+    profilesPath: /etc/crowdsec/profiles.yaml
+    notificationsDir: /etc/crowdsec/notifications
+    scenariosDir: /etc/crowdsec/scenarios
+
+  pangolin:
+    containerName: pangolin
+    enabled: "true"
+
+  gerbil:
+    containerName: gerbil
+    enabled: "true"
+
+  includeCrowdsec: "true"
+
+  nats:
+    enabled: false
+    url: ""
+    # NATS token comes from natsSecret below, not here
+
+  decisionListLimit: "200"
+  alertListLimit: "200"
+
+  shutdownTimeout: "30"
+  readTimeout: "15"
+  writeTimeout: "15"
+
+# =============================================================================
+# docker-compose.yml injection (optional)
+# =============================================================================
+# When enabled, creates a ConfigMap from 'content' and mounts it at
+# app.composeFile inside the container. Set enabled: false if you do not need
+# the app to manage Docker Compose services.
+# =============================================================================
+dockerCompose:
+  enabled: false
+  content: |
+    version: '3.8'
+    services: {}
+
+# =============================================================================
+# Tailscale Sidecar
+# =============================================================================
+tailscale:
+  image:
+    repository: tailscale/tailscale
+    tag: latest
+    pullPolicy: Always
+
+  # Hostname shown in the Tailscale admin console
+  hostname: crowdsec-manager
+
+  # Path inside the sidecar where Tailscale persists its WireGuard identity
+  stateDir: /var/lib/tailscale
+
+  # false = kernel WireGuard (requires NET_ADMIN + SYS_MODULE + /dev/net/tun)
+  # true  = userspace mode (no kernel requirements, lower throughput)
+  userspace: false
+
+  # Optional extra flags passed to 'tailscale up', e.g. "--advertise-tags=tag:server"
+  extraArgs: ""
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+# =============================================================================
+# Secrets
+# =============================================================================
+
+# Tailscale auth key.
+# Option A — let the chart manage the Secret (supply authKey at install time):
+#   helm install ... --set tailscaleSecret.authKey="tskey-auth-XXXX"
+#
+# Option B — bring your own Secret (recommended for GitOps):
+#   kubectl create secret generic my-ts-secret --from-literal=TS_AUTHKEY="tskey-auth-XXXX"
+#   helm install ... --set tailscaleSecret.existingSecret=my-ts-secret
+tailscaleSecret:
+  existingSecret: ""
+  existingSecretKey: TS_AUTHKEY
+  authKey: ""
+
+# NATS token (only needed when app.nats.enabled=true)
+natsSecret:
+  existingSecret: ""
+  existingSecretKey: NATS_TOKEN
+  token: ""
+
+# =============================================================================
+# Persistent Volume Claims
+# =============================================================================
+# Set storageClass: "" to use the cluster default.
+# For SQLite (data PVC) use a local provisioner — NOT NFS.
+# Set existingClaim to reuse a pre-existing PVC (chart will not create a new one).
+# =============================================================================
+persistence:
+  data:
+    enabled: true
+    storageClass: ""
+    accessMode: ReadWriteOnce
+    size: 1Gi
+    existingClaim: ""
+
+  config:
+    enabled: true
+    storageClass: ""
+    accessMode: ReadWriteOnce
+    size: 500Mi
+    existingClaim: ""
+
+  backups:
+    enabled: true
+    storageClass: ""
+    accessMode: ReadWriteOnce
+    size: 5Gi
+    existingClaim: ""
+
+  logs:
+    enabled: true
+    storageClass: ""
+    accessMode: ReadWriteOnce
+    size: 1Gi
+    existingClaim: ""
+
+  tailscaleState:
+    enabled: true
+    storageClass: ""
+    accessMode: ReadWriteOnce
+    size: 100Mi
+    existingClaim: ""
+
+# =============================================================================
+# Service — ClusterIP only
+# External access is via Tailscale, not NodePort or LoadBalancer.
+# =============================================================================
+service:
+  type: ClusterIP
+  port: 8080
+  annotations: {}
+
+# =============================================================================
+# Resource limits for the main container
+# =============================================================================
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# =============================================================================
+# Security context
+# The app runs as root (no USER in Dockerfile) to write volumes + docker socket.
+# =============================================================================
+securityContext:
+  runAsUser: 0
+  runAsGroup: 0
+
+podSecurityContext: {}
+
+podAnnotations: {}
+
+# =============================================================================
+# Optional init container to fix volume permissions
+# (disabled by default because the app runs as root)
+# =============================================================================
+initContainers:
+  fixPermissions:
+    enabled: false
+    uid: 1000
+    gid: 1000
