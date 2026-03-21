@@ -19,6 +19,40 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func parsePaginationParams(c *gin.Context, defaultLimit, maxLimit int) (int, int) {
+	limit := defaultLimit
+	if raw := c.Query("limit"); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil {
+			limit = parsed
+		}
+	}
+	if limit <= 0 || limit > maxLimit {
+		limit = maxLimit
+	}
+
+	offset := 0
+	if raw := c.Query("offset"); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
+			offset = parsed
+		}
+	}
+
+	return limit, offset
+}
+
+func paginateDecisions(decisions []models.Decision, limit, offset int) []models.Decision {
+	if offset >= len(decisions) {
+		return []models.Decision{}
+	}
+
+	end := offset + limit
+	if end > len(decisions) {
+		end = len(decisions)
+	}
+
+	return decisions[offset:end]
+}
+
 // =============================================================================
 // DASHBOARD & METRICS
 // =============================================================================
@@ -46,8 +80,14 @@ func GetDecisions(dockerClient *docker.Client, cfg *config.Config, ttlCache ...*
 
 		logger.Info("Getting CrowdSec decisions via cscli")
 
-		limit := config.EffectiveLimit(cfg.DecisionListLimit, constants.MaxListLimit)
-		cmd := []string{"cscli", "decisions", "list", "-o", "json", "--limit", strconv.Itoa(limit)}
+		defaultLimit := config.EffectiveLimit(cfg.DecisionListLimit, constants.MaxListLimit)
+		limit, offset := parsePaginationParams(c, defaultLimit, constants.MaxListLimit)
+		fetchLimit := defaultLimit
+		if c.Query("limit") != "" || c.Query("offset") != "" {
+			fetchLimit = constants.MaxListLimit
+		}
+
+		cmd := []string{"cscli", "decisions", "list", "-o", "json", "--limit", strconv.Itoa(fetchLimit)}
 		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, cmd)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, models.Response{
@@ -61,7 +101,7 @@ func GetDecisions(dockerClient *docker.Client, cfg *config.Config, ttlCache ...*
 		if output == "null" || output == "" || output == "[]" {
 			c.JSON(http.StatusOK, models.Response{
 				Success: true,
-				Data:    gin.H{"decisions": []models.Decision{}, "count": 0},
+				Data:    gin.H{"decisions": []models.Decision{}, "count": 0, "total": 0, "limit": limit, "offset": offset},
 			})
 			return
 		}
@@ -106,7 +146,15 @@ func GetDecisions(dockerClient *docker.Client, cfg *config.Config, ttlCache ...*
 			return
 		}
 
-		result := gin.H{"decisions": decisions, "count": len(decisions)}
+		total := len(decisions)
+		pagedDecisions := paginateDecisions(decisions, limit, offset)
+		result := gin.H{
+			"decisions": pagedDecisions,
+			"count":     len(pagedDecisions),
+			"total":     total,
+			"limit":     limit,
+			"offset":    offset,
+		}
 		if len(ttlCache) > 0 && ttlCache[0] != nil {
 			ttlCache[0].Set(cacheKey, result, 15*time.Second)
 		}
