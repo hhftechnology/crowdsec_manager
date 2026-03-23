@@ -31,14 +31,22 @@ func parseBouncersJSON(bouncerOutput string, computeStatus bool) ([]models.Bounc
 		if ipAddr, err := jsonparser.GetString(value, "ip_address"); err == nil {
 			bouncer.IPAddress = ipAddr
 		}
-		if lastPull, err := jsonparser.GetString(value, "last_pull"); err == nil {
-			for _, layout := range []string{time.RFC3339Nano, time.RFC3339} {
-				if t, err := time.Parse(layout, lastPull); err == nil {
-					bouncer.LastPull = t
-					break
+		// Parse timestamps with multiple format support
+		parseTime := func(key string) time.Time {
+			if s, err := jsonparser.GetString(value, key); err == nil {
+				for _, layout := range []string{time.RFC3339Nano, time.RFC3339} {
+					if t, err := time.Parse(layout, s); err == nil {
+						return t
+					}
 				}
 			}
+			return time.Time{}
 		}
+
+		bouncer.LastPull = parseTime("last_pull")
+		bouncer.CreatedAt = parseTime("created_at")
+		bouncer.UpdatedAt = parseTime("updated_at")
+
 		if bouncerType, err := jsonparser.GetString(value, "type"); err == nil {
 			bouncer.Type = bouncerType
 		}
@@ -46,25 +54,26 @@ func parseBouncersJSON(bouncerOutput string, computeStatus bool) ([]models.Bounc
 			bouncer.Version = version
 		}
 
-		// Determine bouncer validity in a single block for clarity and efficiency.
-		// CrowdSec >= v1.7.x uses "revoked", older versions use "valid".
-		if revoked, err := jsonparser.GetBoolean(value, "revoked"); err == nil {
-			bouncer.Revoked = revoked
-			bouncer.Valid = !revoked
-		} else if valid, err := jsonparser.GetBoolean(value, "valid"); err == nil {
-			bouncer.Valid = valid
-		} else {
-			// Neither field present — the bouncer exists in the list,
-			// so it was not deleted. Treat as valid.
-			bouncer.Valid = true
-		}
+		// A bouncer that exists in the list is valid by definition.
+		// CrowdSec deletes revoked bouncers rather than marking them,
+		// so the "revoked" and legacy "valid" fields are not reliable
+		// indicators of actual connectivity (confirmed by CrowdSec team, see #47).
+		bouncer.Valid = true
 
 		if computeStatus {
-			if !bouncer.Valid {
-				bouncer.Status = "disconnected"
-			} else if bouncer.LastPull.IsZero() {
-				bouncer.Status = "pending" // valid key, never pulled yet
-			} else if time.Since(bouncer.LastPull) <= 60*time.Minute {
+			// Determine last activity: prefer last_pull, fall back to updated_at
+			// if the bouncer has been active since registration (updated_at > created_at + 5s).
+			lastActivity := bouncer.LastPull
+			if lastActivity.IsZero() &&
+				bouncer.UpdatedAt.After(bouncer.CreatedAt.Add(5*time.Second)) {
+				lastActivity = bouncer.UpdatedAt
+			}
+
+			if !lastActivity.IsZero() && time.Since(lastActivity) <= 5*time.Minute {
+				bouncer.Status = "connected"
+			} else if lastActivity.IsZero() {
+				bouncer.Status = "registered" // enrolled but never pulled
+			} else if time.Since(lastActivity) <= 60*time.Minute {
 				bouncer.Status = "connected"
 			} else {
 				bouncer.Status = "stale"
@@ -109,7 +118,12 @@ func checkBouncersHealth(dockerClient *docker.Client, containerName string) mode
 
 	activeBouncers := 0
 	for _, b := range bouncers {
-		if b.Valid && time.Since(b.LastPull) <= 60*time.Minute {
+		lastActivity := b.LastPull
+		if lastActivity.IsZero() &&
+			b.UpdatedAt.After(b.CreatedAt.Add(5*time.Second)) {
+			lastActivity = b.UpdatedAt
+		}
+		if !lastActivity.IsZero() && time.Since(lastActivity) <= 60*time.Minute {
 			activeBouncers++
 		}
 	}

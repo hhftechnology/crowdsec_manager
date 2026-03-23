@@ -124,6 +124,8 @@ export default function Bouncers() {
         return <Badge variant="warning">Stale</Badge>
       case 'pending':
         return <Badge variant="warning">Pending</Badge>
+      case 'registered':
+        return <Badge variant="outline">Registered</Badge>
       default:
         return <Badge variant="secondary">{status || 'Unknown'}</Badge>
     }
