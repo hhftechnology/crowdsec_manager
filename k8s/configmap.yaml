@@ -1,0 +1,88 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: crowdsec-manager-env
+  namespace: crowdsec
+  labels:
+    app.kubernetes.io/name: crowdsec-manager
+    app.kubernetes.io/component: app
+data:
+  # ---------------------------------------------------------------------------
+  # Server
+  # ---------------------------------------------------------------------------
+  PORT: "8080"
+  ENVIRONMENT: "production"
+  LOG_LEVEL: "info"
+  LOG_FILE: "/app/logs/crowdsec-manager.log"
+
+  # ---------------------------------------------------------------------------
+  # Docker
+  # ---------------------------------------------------------------------------
+  # The app communicates with the host Docker daemon via the mounted socket.
+  DOCKER_HOST: "unix:///var/run/docker.sock"
+  COMPOSE_FILE: "/app/docker-compose.yml"
+  PANGOLIN_DIR: "/app"
+  CONFIG_DIR: "/app/config"
+
+  # ---------------------------------------------------------------------------
+  # Database (SQLite — stored on the 'data' PVC)
+  # ---------------------------------------------------------------------------
+  DATABASE_PATH: "/app/data/settings.db"
+  HISTORY_DATABASE_PATH: "/app/data/history.db"
+
+  # ---------------------------------------------------------------------------
+  # Traefik — update container name/paths to match your setup
+  # ---------------------------------------------------------------------------
+  TRAEFIK_CONTAINER_NAME: "traefik"
+  TRAEFIK_DYNAMIC_CONFIG: "/etc/traefik/dynamic_config.yml"
+  TRAEFIK_STATIC_CONFIG: "/etc/traefik/traefik_config.yml"
+  TRAEFIK_ACCESS_LOG: "/var/log/traefik/access.log"
+  TRAEFIK_ERROR_LOG: "/var/log/traefik/traefik.log"
+  TRAEFIK_CAPTCHA_HTML_PATH: "/etc/traefik/conf/captcha.html"
+  TRAEFIK_CAPTCHA_ENV_PATH: "/etc/traefik/captcha.env"
+
+  # ---------------------------------------------------------------------------
+  # CrowdSec — update container name/paths to match your setup
+  # ---------------------------------------------------------------------------
+  CROWDSEC_CONTAINER_NAME: "crowdsec"
+  CROWDSEC_ACQUIS_FILE: "/etc/crowdsec/acquis.yaml"
+  CROWDSEC_METRICS_URL: "http://crowdsec:6060/metrics"
+  CROWDSEC_WHITELIST_PATH: "/etc/crowdsec/parsers/s02-enrich/mywhitelists.yaml"
+  CROWDSEC_PROFILES_PATH: "/etc/crowdsec/profiles.yaml"
+  CROWDSEC_NOTIFICATIONS_DIR: "/etc/crowdsec/notifications"
+  CROWDSEC_SCENARIOS_DIR: "/etc/crowdsec/scenarios"
+
+  # ---------------------------------------------------------------------------
+  # Optional services (Pangolin / Gerbil stack)
+  # Set to "false" if you are not running Pangolin/Gerbil
+  # ---------------------------------------------------------------------------
+  PANGOLIN_CONTAINER_NAME: "pangolin"
+  INCLUDE_PANGOLIN: "true"
+  GERBIL_CONTAINER_NAME: "gerbil"
+  INCLUDE_GERBIL: "true"
+  INCLUDE_CROWDSEC: "true"
+
+  # ---------------------------------------------------------------------------
+  # Backup
+  # ---------------------------------------------------------------------------
+  BACKUP_DIR: "/app/backups"
+  RETENTION_DAYS: "60"
+
+  # ---------------------------------------------------------------------------
+  # API limits
+  # ---------------------------------------------------------------------------
+  DECISION_LIST_LIMIT: "200"
+  ALERT_LIST_LIMIT: "200"
+
+  # ---------------------------------------------------------------------------
+  # Server timeouts (seconds)
+  # ---------------------------------------------------------------------------
+  SHUTDOWN_TIMEOUT: "30"
+  READ_TIMEOUT: "15"
+  WRITE_TIMEOUT: "15"
+
+  # ---------------------------------------------------------------------------
+  # NATS (optional — leave NATS_ENABLED=false to disable)
+  # ---------------------------------------------------------------------------
+  NATS_ENABLED: "false"
+  NATS_URL: ""

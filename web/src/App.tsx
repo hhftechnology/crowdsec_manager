@@ -31,6 +31,7 @@ const Hub = lazy(() => import('./pages/Hub'))
 const HubBrowser = lazy(() => import('./pages/HubBrowser'))
 const HubCategory = lazy(() => import('./pages/HubCategory'))
 const Metrics = lazy(() => import('./pages/Metrics'))
+const History = lazy(() => import('./pages/History'))
 
 function App() {
   return (
@@ -65,6 +66,7 @@ function App() {
                 <Route path="/hub/browser" element={<HubBrowser />} />
                 <Route path="/hub/:category" element={<HubCategory />} />
                 <Route path="/metrics" element={<Metrics />} />
+                <Route path="/history" element={<History />} />
               </Routes>
             </Suspense>
           </Layout>

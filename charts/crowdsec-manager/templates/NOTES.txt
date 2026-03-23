@@ -1,0 +1,45 @@
+CrowdSec Manager has been deployed!
+
+=== Access ===
+
+Access is exclusively via Tailscale VPN — no Ingress or NodePort is exposed.
+
+1. Find your Tailscale IP:
+
+   kubectl logs -n {{ .Release.Namespace }} \
+     deployment/{{ include "crowdsec-manager.fullname" . }} \
+     -c tailscale | grep -E "100\.[0-9]"
+
+   Or check: https://login.tailscale.com/admin/machines (look for "{{ .Values.tailscale.hostname }}")
+
+2. Open the dashboard from any Tailscale-connected device:
+
+   http://<tailscale-ip>:{{ .Values.app.port }}
+
+=== Verify ===
+
+   # Pod status (both containers should be Running)
+   kubectl get pods -n {{ .Release.Namespace }} -l app.kubernetes.io/instance={{ .Release.Name }}
+
+   # Health check (run from a Tailscale-connected device)
+   curl http://<tailscale-ip>:{{ .Values.app.port }}/health
+
+   # PVC status
+   kubectl get pvc -n {{ .Release.Namespace }}
+
+=== Upgrade ===
+
+   helm upgrade {{ .Release.Name }} ./charts/crowdsec-manager \
+     --namespace {{ .Release.Namespace }} \
+     --reuse-values
+
+=== Notes ===
+
+- Deployment strategy is Recreate — expect brief downtime during upgrades.
+- PVCs annotated with helm.sh/resource-policy=keep are NOT deleted on helm uninstall.
+  Delete them manually if you want a full teardown:
+    kubectl delete pvc -n {{ .Release.Namespace }} \
+      {{ include "crowdsec-manager.fullname" . }}-data \
+      {{ include "crowdsec-manager.fullname" . }}-config \
+      {{ include "crowdsec-manager.fullname" . }}-tailscalestate
+- Use a reusable Tailscale auth key so the Pod can re-authenticate if the state PVC is lost.

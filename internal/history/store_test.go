@@ -136,3 +136,42 @@ func TestParseDecisionsOutputNestedAndFlat(t *testing.T) {
 		t.Fatalf("expected flat decision value")
 	}
 }
+
+func TestParseAlertsOutputNestedSource(t *testing.T) {
+	input := `[{
+		"id": 7,
+		"scenario": "crowdsecurity/http-probing",
+		"events_count": 11,
+		"start_at": "2024-01-01T00:00:00Z",
+		"stop_at":  "2024-01-01T00:05:00Z",
+		"source": {"scope": "Ip", "value": "1.2.3.4"},
+		"decisions": [{"origin": "crowdsec", "type": "ban"}]
+	}]`
+
+	alerts, err := parseAlertsOutput(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(alerts) != 1 {
+		t.Fatalf("expected 1 alert, got %d", len(alerts))
+	}
+	a := alerts[0]
+	if a.Value != "1.2.3.4" {
+		t.Errorf("Value: got %q, want %q", a.Value, "1.2.3.4")
+	}
+	if a.Scope != "Ip" {
+		t.Errorf("Scope: got %q, want %q", a.Scope, "Ip")
+	}
+	if a.Origin != "crowdsec" {
+		t.Errorf("Origin: got %q, want %q", a.Origin, "crowdsec")
+	}
+	if a.Type != "ban" {
+		t.Errorf("Type: got %q, want %q", a.Type, "ban")
+	}
+	if a.Scenario != "crowdsecurity/http-probing" {
+		t.Errorf("Scenario: got %q, want crowdsecurity/http-probing", a.Scenario)
+	}
+	if a.EventsCount != 11 {
+		t.Errorf("EventsCount: got %d, want 11", a.EventsCount)
+	}
+}

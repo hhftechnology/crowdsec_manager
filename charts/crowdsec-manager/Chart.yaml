@@ -1,0 +1,17 @@
+apiVersion: v2
+name: crowdsec-manager
+description: CrowdSec Manager — Go+React security management UI with Tailscale sidecar for VPN-only access
+type: application
+version: 0.1.0
+appVersion: "latest"
+keywords:
+  - crowdsec
+  - tailscale
+  - security
+  - traefik
+  - wireguard
+home: https://github.com/hhftechnology/crowdsec_manager
+sources:
+  - https://github.com/hhftechnology/crowdsec_manager
+maintainers:
+  - name: hhftechnology

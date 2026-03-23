@@ -233,6 +233,14 @@ func (s *Service) MarkAlertDeleted(ctx context.Context, alertID int64) error {
 	return s.store.MarkAlertStaleByAlertID(ctx, alertID, time.Now().UTC())
 }
 
+func (s *Service) GetDecisionHistoryRecord(ctx context.Context, id int64) (*models.DecisionHistoryRecord, error) {
+	return s.store.GetDecisionHistoryRecord(ctx, id)
+}
+
+func (s *Service) GetHistoryStats(ctx context.Context) (*models.HistoryStats, error) {
+	return s.store.GetHistoryStats(ctx)
+}
+
 func parseCLIJSONOutput(output string) (interface{}, error) {
 	start := firstCLIJSONStartIndex(output)
 	if start < 0 {
@@ -355,13 +363,26 @@ func parseAlertsOutput(output string) ([]AlertSnapshot, error) {
 		if !ok {
 			continue
 		}
+
+		// value and scope are nested under the "source" sub-object
+		source, _ := node["source"].(map[string]interface{})
+
+		// origin and type come from the first decision entry
+		var origin, decType string
+		if decs, ok := node["decisions"].([]interface{}); ok && len(decs) > 0 {
+			if d, ok := decs[0].(map[string]interface{}); ok {
+				origin = asString(d["origin"])
+				decType = asString(d["type"])
+			}
+		}
+
 		alerts = append(alerts, AlertSnapshot{
 			ID:          asInt64(node["id"]),
 			Scenario:    asString(node["scenario"]),
-			Scope:       asString(node["scope"]),
-			Value:       asString(node["value"]),
-			Origin:      asString(node["origin"]),
-			Type:        asString(node["type"]),
+			Scope:       asString(source["scope"]),
+			Value:       asString(source["value"]),
+			Origin:      origin,
+			Type:        decType,
 			EventsCount: int(asInt64(node["events_count"])),
 			StartAt:     asString(node["start_at"]),
 			StopAt:      asString(node["stop_at"]),

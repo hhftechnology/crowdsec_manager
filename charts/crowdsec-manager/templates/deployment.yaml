@@ -1,0 +1,232 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "crowdsec-manager.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "crowdsec-manager.labels" . | nindent 4 }}
+spec:
+  # ---------------------------------------------------------------------------
+  # Keep replicas at 1. SQLite + ReadWriteOnce PVC + Docker socket are all
+  # single-node singleton resources. Scale requires an external database.
+  # ---------------------------------------------------------------------------
+  replicas: 1
+
+  selector:
+    matchLabels:
+      {{- include "crowdsec-manager.selectorLabels" . | nindent 6 }}
+
+  # Recreate: terminate old Pod before starting new one.
+  # Required because ReadWriteOnce PVCs can only attach to one node at a time.
+  strategy:
+    type: Recreate
+
+  template:
+    metadata:
+      labels:
+        {{- include "crowdsec-manager.selectorLabels" . | nindent 8 }}
+      annotations:
+        # Trigger Pod restart when ConfigMap changes (env vars are baked in at creation).
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      # -----------------------------------------------------------------------
+      # Node placement — pin to the node running Docker/CrowdSec/Traefik.
+      # -----------------------------------------------------------------------
+      {{- if .Values.nodeName }}
+      nodeName: {{ .Values.nodeName }}
+      {{- else if .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+      {{- end }}
+
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      # All containers share this Pod's network namespace. The Tailscale sidecar
+      # creates a WireGuard interface visible to the app container — equivalent to
+      # Docker Compose's "network_mode: service:tailscale".
+      hostNetwork: false
+
+      # -----------------------------------------------------------------------
+      # Optional init container to fix volume permissions
+      # -----------------------------------------------------------------------
+      {{- if .Values.initContainers.fixPermissions.enabled }}
+      initContainers:
+        - name: fix-permissions
+          image: busybox:latest
+          command:
+            - sh
+            - -c
+            - |
+              chown -R {{ .Values.initContainers.fixPermissions.uid }}:{{ .Values.initContainers.fixPermissions.gid }} \
+                /app/data /app/config /app/backups /app/logs
+          securityContext:
+            runAsUser: 0
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+            - name: config
+              mountPath: /app/config
+            - name: backups
+              mountPath: /app/backups
+            - name: logs
+              mountPath: /app/logs
+      {{- end }}
+
+      containers:
+        # =====================================================================
+        # Container 1: Tailscale sidecar
+        # Builds a WireGuard interface in the shared network namespace.
+        # =====================================================================
+        - name: tailscale
+          image: "{{ .Values.tailscale.image.repository }}:{{ .Values.tailscale.image.tag }}"
+          imagePullPolicy: {{ .Values.tailscale.image.pullPolicy }}
+          env:
+            - name: TS_AUTHKEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "crowdsec-manager.tailscaleSecretName" . }}
+                  key: {{ .Values.tailscaleSecret.existingSecretKey }}
+            - name: TS_HOSTNAME
+              value: {{ .Values.tailscale.hostname | quote }}
+            - name: TS_STATE_DIR
+              value: {{ .Values.tailscale.stateDir | quote }}
+            - name: TS_USERSPACE
+              value: {{ .Values.tailscale.userspace | toString | quote }}
+            # Preserve CoreDNS for in-cluster service discovery
+            - name: TS_ACCEPT_DNS
+              value: "false"
+            {{- if .Values.tailscale.extraArgs }}
+            - name: TS_EXTRA_ARGS
+              value: {{ .Values.tailscale.extraArgs | quote }}
+            {{- end }}
+          securityContext:
+            capabilities:
+              add:
+                - NET_ADMIN
+                - SYS_MODULE
+          volumeMounts:
+            - name: tailscale-state
+              mountPath: {{ .Values.tailscale.stateDir }}
+            - name: dev-net-tun
+              mountPath: /dev/net/tun
+          resources:
+            {{- toYaml .Values.tailscale.resources | nindent 12 }}
+
+        # =====================================================================
+        # Container 2: CrowdSec Manager
+        # =====================================================================
+        - name: crowdsec-manager
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.app.port }}
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "crowdsec-manager.fullname" . }}-env
+          env:
+            {{- if .Values.app.nats.enabled }}
+            - name: NATS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "crowdsec-manager.natsSecretName" . }}
+                  key: {{ .Values.natsSecret.existingSecretKey }}
+            {{- end }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+            - name: config
+              mountPath: /app/config
+            - name: backups
+              mountPath: /app/backups
+            - name: logs
+              mountPath: /app/logs
+            # Docker socket — grants effective root on host node.
+            # Restrict with nodeSelector + NetworkPolicy.
+            - name: docker-sock
+              mountPath: /var/run/docker.sock
+            {{- if .Values.dockerCompose.enabled }}
+            - name: docker-compose
+              mountPath: /app/docker-compose.yml
+              subPath: docker-compose.yml
+              readOnly: true
+            {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            failureThreshold: 3
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            failureThreshold: 3
+            timeoutSeconds: 5
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+
+      # =======================================================================
+      # Volumes
+      # =======================================================================
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "crowdsec-manager.pvcName" (dict "root" . "key" "data") }}
+        - name: config
+          persistentVolumeClaim:
+            claimName: {{ include "crowdsec-manager.pvcName" (dict "root" . "key" "config") }}
+        - name: backups
+          persistentVolumeClaim:
+            claimName: {{ include "crowdsec-manager.pvcName" (dict "root" . "key" "backups") }}
+        - name: logs
+          persistentVolumeClaim:
+            claimName: {{ include "crowdsec-manager.pvcName" (dict "root" . "key" "logs") }}
+        - name: tailscale-state
+          persistentVolumeClaim:
+            claimName: {{ include "crowdsec-manager.pvcName" (dict "root" . "key" "tailscaleState") }}
+        # Host Docker socket (not a PVC — live socket on the node filesystem)
+        - name: docker-sock
+          hostPath:
+            path: /var/run/docker.sock
+            type: Socket
+        # Kernel TUN device for WireGuard
+        - name: dev-net-tun
+          hostPath:
+            path: /dev/net/tun
+            type: CharDevice
+        {{- if .Values.dockerCompose.enabled }}
+        - name: docker-compose
+          configMap:
+            name: {{ include "crowdsec-manager.fullname" . }}-compose
+        {{- end }}

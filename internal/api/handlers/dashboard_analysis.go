@@ -24,8 +24,14 @@ func GetDecisionsAnalysis(dockerClient *docker.Client, cfg *config.Config) gin.H
 		dockerClient = resolveDockerClient(c, dockerClient)
 		logger.Info("Getting CrowdSec decisions analysis via cscli")
 
-		limit := config.EffectiveLimit(cfg.DecisionListLimit, constants.MaxListLimit)
-		cmd := []string{"cscli", "decisions", "list", "-o", "json", "--limit", strconv.Itoa(limit)}
+		defaultLimit := config.EffectiveLimit(cfg.DecisionListLimit, constants.MaxListLimit)
+		limit, offset := parsePaginationParams(c, defaultLimit, constants.MaxListLimit)
+		fetchLimit := defaultLimit
+		if c.Query("limit") != "" || c.Query("offset") != "" {
+			fetchLimit = constants.MaxListLimit
+		}
+
+		cmd := []string{"cscli", "decisions", "list", "-o", "json", "--limit", strconv.Itoa(fetchLimit)}
 
 		// Add filters based on query parameters
 		if v := c.Query("ip"); v != "" {
@@ -69,7 +75,7 @@ func GetDecisionsAnalysis(dockerClient *docker.Client, cfg *config.Config) gin.H
 		if output == "null" || output == "" || output == "[]" {
 			c.JSON(http.StatusOK, models.Response{
 				Success: true,
-				Data:    gin.H{"decisions": []models.Decision{}, "count": 0},
+				Data:    gin.H{"decisions": []models.Decision{}, "count": 0, "total": 0, "limit": limit, "offset": offset},
 			})
 			return
 		}
@@ -138,9 +144,18 @@ func GetDecisionsAnalysis(dockerClient *docker.Client, cfg *config.Config) gin.H
 			"count", len(decisions),
 			"cmd", cmd)
 
+		total := len(decisions)
+		pagedDecisions := paginateDecisions(decisions, limit, offset)
+
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
-			Data:    gin.H{"decisions": decisions, "count": len(decisions)},
+			Data: gin.H{
+				"decisions": pagedDecisions,
+				"count":     len(pagedDecisions),
+				"total":     total,
+				"limit":     limit,
+				"offset":    offset,
+			},
 		})
 	}
 }
@@ -252,6 +267,25 @@ func GetAlertsAnalysis(dockerClient *docker.Client, cfg *config.Config, ttlCache
 					Error:   fmt.Sprintf("Failed to parse alerts: %v", err),
 				})
 				return
+			}
+		}
+
+		// Normalize nested cscli fields to match the CrowdSecAlert contract.
+		// cscli nests value/scope under source{} and origin/type under decisions[0].
+		for _, item := range alerts {
+			node, ok := item.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			if src, ok := node["source"].(map[string]interface{}); ok {
+				node["value"] = src["value"]
+				node["scope"] = src["scope"]
+			}
+			if decs, ok := node["decisions"].([]interface{}); ok && len(decs) > 0 {
+				if d, ok := decs[0].(map[string]interface{}); ok {
+					node["origin"] = d["origin"]
+					node["type"] = d["type"]
+				}
 			}
 		}
 

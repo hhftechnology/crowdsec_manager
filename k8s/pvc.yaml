@@ -1,0 +1,116 @@
+# =============================================================================
+# Persistent Volume Claims for CrowdSec Manager
+# =============================================================================
+# All PVCs use ReadWriteOnce — only one Pod (on one node) can mount them at
+# a time.  This is intentional: the Deployment uses strategy.type: Recreate,
+# so only one Pod exists at any point.
+#
+# StorageClass guidance:
+#   - Single-node (k3s, microk8s): use "local-path" or leave storageClassName
+#     commented out to use the cluster default.
+#   - Multi-node: use a node-local provisioner (openebs-hostpath, local-path).
+#     Do NOT use NFS for the 'data' PVC — SQLite + NFS causes corruption.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# 1. Application databases (SQLite)
+#    Annotated keep — never deleted by helm/kubectl accidentally.
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: crowdsec-manager-data
+  namespace: crowdsec
+  labels:
+    app.kubernetes.io/name: crowdsec-manager
+    app.kubernetes.io/component: storage
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  # storageClassName: local-path   # uncomment and set for your cluster
+---
+# -----------------------------------------------------------------------------
+# 2. Config files (CrowdSec / Traefik configs managed by the app)
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: crowdsec-manager-config
+  namespace: crowdsec
+  labels:
+    app.kubernetes.io/name: crowdsec-manager
+    app.kubernetes.io/component: storage
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 500Mi
+  # storageClassName: local-path
+---
+# -----------------------------------------------------------------------------
+# 3. Automated backups
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: crowdsec-manager-backups
+  namespace: crowdsec
+  labels:
+    app.kubernetes.io/name: crowdsec-manager
+    app.kubernetes.io/component: storage
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  # storageClassName: local-path
+---
+# -----------------------------------------------------------------------------
+# 4. Application logs
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: crowdsec-manager-logs
+  namespace: crowdsec
+  labels:
+    app.kubernetes.io/name: crowdsec-manager
+    app.kubernetes.io/component: storage
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  # storageClassName: local-path
+---
+# -----------------------------------------------------------------------------
+# 5. Tailscale state (WireGuard identity + node key)
+#    Annotated keep — losing this forces re-registration with Tailscale.
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: crowdsec-manager-tailscale-state
+  namespace: crowdsec
+  labels:
+    app.kubernetes.io/name: crowdsec-manager
+    app.kubernetes.io/component: tailscale
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Mi
+  # storageClassName: local-path

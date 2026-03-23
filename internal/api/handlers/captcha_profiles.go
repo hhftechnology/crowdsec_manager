@@ -147,9 +147,6 @@ func updateCrowdSecProfiles(dockerClient *docker.Client, cfg *config.Config) err
 	encoder.SetIndent(2)
 
 	for i, doc := range documents {
-		if i > 0 {
-			buf.WriteString("\n---\n")
-		}
 		if err := encoder.Encode(doc); err != nil {
 			return fmt.Errorf("failed to marshal profiles.yaml document %d: %v", i, err)
 		}

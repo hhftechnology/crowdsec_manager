@@ -478,3 +478,32 @@ export interface StepResult {
   error?: string
   skipped?: boolean
 }
+
+// History re-insertion types
+export interface ReapplyDecisionRequest {
+  id: number
+  type: string      // "ban" | "captcha"
+  duration: string  // e.g. "24h", "7d"
+  reason?: string
+}
+
+export interface BulkReapplyDecisionsRequest {
+  ids: number[]
+  type: string
+  duration: string
+  reason?: string
+}
+
+export interface BulkReapplyResult {
+  succeeded: number
+  failed: number
+  errors?: string[]
+}
+
+export interface HistoryStats {
+  total_decisions: number
+  active_decisions: number
+  total_alerts: number
+  active_alerts: number
+  repeated_offender_count: number
+}

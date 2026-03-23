@@ -28,7 +28,7 @@ export const metadata: Metadata = {
 
 const quickInstall = `services:
   crowdsec-manager:
-    image: hhftechnology/crowdsec-manager:1.1.0
+    image: hhftechnology/crowdsec-manager:2.1.0
     container_name: crowdsec-manager
     restart: unless-stopped
     expose:
@@ -61,7 +61,7 @@ export default function HomePage() {
             Stable Release
           </p>
           <h1 className="mb-4 text-4xl font-extrabold tracking-tight text-foreground lg:text-6xl">
-            CrowdSec Manager 1.1.0
+            CrowdSec Manager 2.1.0
           </h1>
           <p className="mx-auto mb-8 max-w-3xl text-base text-muted-foreground lg:text-lg">
             Manage CrowdSec, Traefik integration, decisions, scenarios, logs, backups, and updates
