@@ -31,9 +31,6 @@ func parseBouncersJSON(bouncerOutput string, computeStatus bool) ([]models.Bounc
 		if ipAddr, err := jsonparser.GetString(value, "ip_address"); err == nil {
 			bouncer.IPAddress = ipAddr
 		}
-		if valid, err := jsonparser.GetBoolean(value, "valid"); err == nil {
-			bouncer.Valid = valid
-		}
 		if lastPull, err := jsonparser.GetString(value, "last_pull"); err == nil {
 			for _, layout := range []string{time.RFC3339Nano, time.RFC3339} {
 				if t, err := time.Parse(layout, lastPull); err == nil {
@@ -49,20 +46,17 @@ func parseBouncersJSON(bouncerOutput string, computeStatus bool) ([]models.Bounc
 			bouncer.Version = version
 		}
 
-		// CrowdSec >= v1.7.x replaced "valid: true" with "revoked: false".
-		// Read the revoked field; if present, derive Valid from it.
+		// Determine bouncer validity in a single block for clarity and efficiency.
+		// CrowdSec >= v1.7.x uses "revoked", older versions use "valid".
 		if revoked, err := jsonparser.GetBoolean(value, "revoked"); err == nil {
 			bouncer.Revoked = revoked
 			bouncer.Valid = !revoked
-		}
-		// If neither "valid" nor "revoked" was found (edge case),
-		// treat the bouncer as valid — it exists in the list, so it was not deleted.
-		if !bouncer.Valid {
-			if _, validErr := jsonparser.GetBoolean(value, "valid"); validErr != nil {
-				if _, revokedErr := jsonparser.GetBoolean(value, "revoked"); revokedErr != nil {
-					bouncer.Valid = true
-				}
-			}
+		} else if valid, err := jsonparser.GetBoolean(value, "valid"); err == nil {
+			bouncer.Valid = valid
+		} else {
+			// Neither field present — the bouncer exists in the list,
+			// so it was not deleted. Treat as valid.
+			bouncer.Valid = true
 		}
 
 		if computeStatus {
