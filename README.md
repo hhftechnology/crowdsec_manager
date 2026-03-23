@@ -136,7 +136,7 @@ services:
     restart: unless-stopped
 
   crowdsec-manager:
-    image: hhftechnology/crowdsec-manager:pangolin
+    image: hhftechnology/crowdsec-manager:latest
     container_name: crowdsec-manager
     network_mode: service:tailscale # This is the magic: it merges networking with the Tailscale container
     depends_on:
