@@ -270,6 +270,25 @@ func GetAlertsAnalysis(dockerClient *docker.Client, cfg *config.Config, ttlCache
 			}
 		}
 
+		// Normalize nested cscli fields to match the CrowdSecAlert contract.
+		// cscli nests value/scope under source{} and origin/type under decisions[0].
+		for _, item := range alerts {
+			node, ok := item.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			if src, ok := node["source"].(map[string]interface{}); ok {
+				node["value"] = src["value"]
+				node["scope"] = src["scope"]
+			}
+			if decs, ok := node["decisions"].([]interface{}); ok && len(decs) > 0 {
+				if d, ok := decs[0].(map[string]interface{}); ok {
+					node["origin"] = d["origin"]
+					node["type"] = d["type"]
+				}
+			}
+		}
+
 		logger.Info("Alerts analysis retrieved successfully", "count", len(alerts))
 
 		result := gin.H{"alerts": alerts, "count": len(alerts)}
