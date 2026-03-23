@@ -62,11 +62,16 @@ func GetDecisions(dockerClient *docker.Client, cfg *config.Config, ttlCache ...*
 	return func(c *gin.Context) {
 		dockerClient = resolveDockerClient(c, dockerClient)
 
-		// Check cache first
+		// Resolve pagination before building cache key so key includes limit/offset.
 		summary := c.Query("summary") == "true"
-		cacheKey := "decisions"
+		defaultLimit := config.EffectiveLimit(cfg.DecisionListLimit, constants.MaxListLimit)
+		limit, offset := parsePaginationParams(c, defaultLimit, constants.MaxListLimit)
+
+		var cacheKey string
 		if summary {
 			cacheKey = "decisions-summary"
+		} else {
+			cacheKey = fmt.Sprintf("decisions:limit=%d:offset=%d", limit, offset)
 		}
 		if len(ttlCache) > 0 && ttlCache[0] != nil {
 			if cached, ok := ttlCache[0].Get(cacheKey); ok {
@@ -80,8 +85,6 @@ func GetDecisions(dockerClient *docker.Client, cfg *config.Config, ttlCache ...*
 
 		logger.Info("Getting CrowdSec decisions via cscli")
 
-		defaultLimit := config.EffectiveLimit(cfg.DecisionListLimit, constants.MaxListLimit)
-		limit, offset := parsePaginationParams(c, defaultLimit, constants.MaxListLimit)
 		fetchLimit := defaultLimit
 		if c.Query("limit") != "" || c.Query("offset") != "" {
 			fetchLimit = constants.MaxListLimit

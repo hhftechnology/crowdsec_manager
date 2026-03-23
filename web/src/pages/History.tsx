@@ -124,7 +124,7 @@ export default function History() {
   const [decisionValue, setDecisionValue] = useState('')
   const [decisionScenario, setDecisionScenario] = useState('')
   const [decisionSelected, setDecisionSelected] = useState<Set<number>>(new Set())
-  const [reapplyRecord, setReapplyRecord] = useState<DecisionHistoryRecord | RepeatedOffender | null>(null)
+  const [reapplyRecord, setReapplyRecord] = useState<DecisionHistoryRecord | null>(null)
   const [bulkReapplyOpen, setBulkReapplyOpen] = useState(false)
 
   // Alerts tab state
@@ -663,16 +663,7 @@ export default function History() {
                           : <span className="text-muted-foreground text-xs">-</span>
                         }
                       </TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 gap-1 text-xs"
-                          onClick={() => setReapplyRecord(o)}
-                        >
-                          <RotateCcw className="h-3 w-3" /> Re-apply
-                        </Button>
-                      </TableCell>
+                      <TableCell className="text-right" />
                     </TableRow>
                   ))
                 )}

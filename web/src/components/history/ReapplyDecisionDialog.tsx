@@ -3,7 +3,7 @@ import { useForm, Controller } from 'react-hook-form'
 import { toast } from 'sonner'
 import { RotateCcw, Loader2 } from 'lucide-react'
 import api from '@/lib/api'
-import type { DecisionHistoryRecord, RepeatedOffender } from '@/lib/api'
+import type { DecisionHistoryRecord } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -31,7 +31,7 @@ interface ReapplyFormValues {
 }
 
 interface ReapplyDecisionDialogProps {
-  record: DecisionHistoryRecord | RepeatedOffender | null
+  record: DecisionHistoryRecord | null
   open: boolean
   onClose: () => void
   onSuccess: () => void
@@ -47,12 +47,7 @@ const DURATION_PRESETS = [
   { value: 'custom', label: 'Custom…' },
 ]
 
-function getRecordId(record: DecisionHistoryRecord | RepeatedOffender): number | null {
-  if ('id' in record) return record.id
-  return null
-}
-
-function getRecordValue(record: DecisionHistoryRecord | RepeatedOffender): string {
+function getRecordValue(record: DecisionHistoryRecord): string {
   return record.value
 }
 
@@ -72,11 +67,7 @@ export function ReapplyDecisionDialog({ record, open, onClose, onSuccess }: Reap
 
   const onSubmit = async (data: ReapplyFormValues) => {
     if (!record) return
-    const id = getRecordId(record)
-    if (!id) {
-      toast.error('Cannot reapply: no record ID available')
-      return
-    }
+    const id = record.id
 
     const duration = data.duration === 'custom' ? data.customDuration : data.duration
     if (!duration) {

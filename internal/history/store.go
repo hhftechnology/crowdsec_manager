@@ -699,20 +699,29 @@ func (s *Store) GetDecisionHistoryRecord(ctx context.Context, id int64) (*models
 // GetHistoryStats returns aggregate counts for the history dashboard.
 func (s *Store) GetHistoryStats(ctx context.Context) (*models.HistoryStats, error) {
 	var stats models.HistoryStats
-	queries := []struct {
-		dest  *int
-		query string
-	}{
-		{&stats.TotalDecisions, "SELECT COUNT(1) FROM decision_history"},
-		{&stats.ActiveDecisions, "SELECT COUNT(1) FROM decision_history WHERE is_stale = 0"},
-		{&stats.TotalAlerts, "SELECT COUNT(1) FROM alert_history"},
-		{&stats.ActiveAlerts, "SELECT COUNT(1) FROM alert_history WHERE is_stale = 0"},
-		{&stats.RepeatedOffenderCount, "SELECT COUNT(1) FROM repeated_offender_events"},
-	}
-	for _, q := range queries {
-		if err := s.db.QueryRowContext(ctx, q.query).Scan(q.dest); err != nil {
-			return nil, err
-		}
+	query := `
+		SELECT
+			(SELECT COUNT(1) FROM decision_history),
+			(SELECT COUNT(1) FROM decision_history WHERE is_stale = 0),
+			(SELECT COUNT(1) FROM alert_history),
+			(SELECT COUNT(1) FROM alert_history WHERE is_stale = 0),
+			(SELECT COUNT(DISTINCT value || '|' || scope)
+			 FROM (
+			   SELECT value, scope FROM decision_history
+			   WHERE datetime(created_at) >= datetime('now', '-30 days')
+			   GROUP BY value, scope
+			   HAVING COUNT(1) >= 3
+			 ))
+	`
+	err := s.db.QueryRowContext(ctx, query).Scan(
+		&stats.TotalDecisions,
+		&stats.ActiveDecisions,
+		&stats.TotalAlerts,
+		&stats.ActiveAlerts,
+		&stats.RepeatedOffenderCount,
+	)
+	if err != nil {
+		return nil, err
 	}
 	return &stats, nil
 }
