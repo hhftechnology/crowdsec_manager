@@ -151,6 +151,8 @@ type Bouncer struct {
 	IPAddress string    `json:"ip_address"`
 	Valid     bool      `json:"valid"`
 	LastPull  time.Time `json:"last_pull"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 	Type      string    `json:"type"`
 	Version   string    `json:"version"`
 	Status    string    `json:"status"`
