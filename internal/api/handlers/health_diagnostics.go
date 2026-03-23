@@ -49,6 +49,22 @@ func parseBouncersJSON(bouncerOutput string, computeStatus bool) ([]models.Bounc
 			bouncer.Version = version
 		}
 
+		// CrowdSec >= v1.7.x replaced "valid: true" with "revoked: false".
+		// Read the revoked field; if present, derive Valid from it.
+		if revoked, err := jsonparser.GetBoolean(value, "revoked"); err == nil {
+			bouncer.Revoked = revoked
+			bouncer.Valid = !revoked
+		}
+		// If neither "valid" nor "revoked" was found (edge case),
+		// treat the bouncer as valid — it exists in the list, so it was not deleted.
+		if !bouncer.Valid {
+			if _, validErr := jsonparser.GetBoolean(value, "valid"); validErr != nil {
+				if _, revokedErr := jsonparser.GetBoolean(value, "revoked"); revokedErr != nil {
+					bouncer.Valid = true
+				}
+			}
+		}
+
 		if computeStatus {
 			if !bouncer.Valid {
 				bouncer.Status = "disconnected"
