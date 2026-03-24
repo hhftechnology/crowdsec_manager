@@ -61,13 +61,7 @@ func parseBouncersJSON(bouncerOutput string, computeStatus bool) ([]models.Bounc
 		bouncer.Valid = true
 
 		if computeStatus {
-			// Determine last activity: prefer last_pull, fall back to updated_at
-			// if the bouncer has been active since registration (updated_at > created_at + 5s).
-			lastActivity := bouncer.LastPull
-			if lastActivity.IsZero() &&
-				bouncer.UpdatedAt.After(bouncer.CreatedAt.Add(5*time.Second)) {
-				lastActivity = bouncer.UpdatedAt
-			}
+			lastActivity := bouncer.LastActivity()
 
 			if !lastActivity.IsZero() && time.Since(lastActivity) <= 5*time.Minute {
 				bouncer.Status = "connected"
@@ -118,11 +112,7 @@ func checkBouncersHealth(dockerClient *docker.Client, containerName string) mode
 
 	activeBouncers := 0
 	for _, b := range bouncers {
-		lastActivity := b.LastPull
-		if lastActivity.IsZero() &&
-			b.UpdatedAt.After(b.CreatedAt.Add(5*time.Second)) {
-			lastActivity = b.UpdatedAt
-		}
+		lastActivity := b.LastActivity()
 		if !lastActivity.IsZero() && time.Since(lastActivity) <= 60*time.Minute {
 			activeBouncers++
 		}

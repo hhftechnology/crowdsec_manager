@@ -158,6 +158,20 @@ type Bouncer struct {
 	Status    string    `json:"status"`
 }
 
+// LastActivity returns the best-known last activity time for this bouncer.
+// It prefers LastPull; falls back to UpdatedAt only when LastPull is zero
+// and UpdatedAt meaningfully exceeds CreatedAt (both must be non-zero).
+func (b Bouncer) LastActivity() time.Time {
+	if !b.LastPull.IsZero() {
+		return b.LastPull
+	}
+	if !b.CreatedAt.IsZero() && !b.UpdatedAt.IsZero() &&
+		b.UpdatedAt.After(b.CreatedAt.Add(5*time.Second)) {
+		return b.UpdatedAt
+	}
+	return time.Time{}
+}
+
 // IPInfo represents IP address information
 type IPInfo struct {
 	IP            string `json:"ip"`
