@@ -51,8 +51,14 @@ function BouncerStatusMonitor({ bouncers, className }: BouncerStatusMonitorProps
               <TableCell>{bouncer.type || '-'}</TableCell>
               <TableCell>{bouncer.version || '-'}</TableCell>
               <TableCell>
-                <Badge variant={bouncer.valid ? 'success' : 'destructive'}>
-                  {bouncer.valid ? 'Valid' : 'Invalid'}
+                <Badge variant={
+                  bouncer.status === 'connected' ? 'success' :
+                  bouncer.status === 'stale' ? 'warning' :
+                  bouncer.status === 'registered' ? 'outline' :
+                  bouncer.status === 'disconnected' ? 'destructive' :
+                  bouncer.valid ? 'success' : 'destructive'
+                }>
+                  {bouncer.status || (bouncer.valid ? 'Valid' : 'Invalid')}
                 </Badge>
               </TableCell>
               <TableCell className="text-sm text-muted-foreground">
