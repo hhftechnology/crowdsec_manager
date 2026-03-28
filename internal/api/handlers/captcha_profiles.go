@@ -7,6 +7,7 @@ import (
 	"crowdsec-manager/internal/config"
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
+	"crowdsec-manager/internal/traefikconfig"
 
 	"gopkg.in/yaml.v3"
 )
@@ -192,13 +193,12 @@ func verifyCaptchaSetup(dockerClient *docker.Client, cfg *config.Config) bool {
 	logger.Info("Captcha HTML file verified", "path", cfg.TraefikCaptchaHTMLPath)
 
 	// Check 2: Dynamic config contains captcha settings
-	configContent, err := dockerClient.ExecCommand(cfg.TraefikContainerName, []string{
-		"cat", cfg.TraefikDynamicConfig,
-	})
+	readResult, err := traefikconfig.ReadContainer(dockerClient, cfg.TraefikContainerName, cfg.TraefikDynamicConfig)
 	if err != nil {
 		logger.Warn("Failed to read dynamic config for verification", "error", err)
 		return false
 	}
+	configContent := readResult.Content
 
 	if !strings.Contains(strings.ToLower(configContent), "captcha") {
 		logger.Warn("Captcha not found in dynamic config")

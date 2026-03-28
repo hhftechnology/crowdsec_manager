@@ -11,9 +11,10 @@ The **Settings** page (labeled Configuration in the UI) allows you to manage cri
 
 ## Traefik Configuration Path
 
-The most important setting is the **Traefik Dynamic Configuration Path**. This tells CrowdSec Manager where to find the `dynamic_config.yml` file inside the Traefik container.
+The most important setting is the **Traefik Dynamic Configuration Path**. This tells CrowdSec Manager where to find the Traefik dynamic config inside the Traefik container.
 
 - **Default Path**: `/etc/traefik/dynamic_config.yml`
+- **Common Directory Path**: `/etc/traefik/rules`
 
 ### Why is this important?
 
@@ -24,5 +25,5 @@ CrowdSec Manager uses this path to:
 - Check middleware configurations.
 
 <Callout type="important">
-  If your Traefik setup uses a different path or filename for its dynamic configuration, you **must** update it here. Otherwise, features like Captcha and Whitelists will not function correctly.
+  If your Traefik setup uses a different path, filename, or a directory of YAML fragments for its dynamic configuration, you **must** update it here. Otherwise, features like Captcha and Whitelists will not function correctly. In directory mode, CrowdSec Manager writes to `crowdsec-manager.yml` and does not modify shared files such as `base.yml`.
 </Callout>

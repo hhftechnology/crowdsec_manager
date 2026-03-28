@@ -36,7 +36,7 @@ The dashboard provides real-time feedback on your captcha configuration:
   Enter the **Site Key** (public) and **Secret Key** (private) obtained from your provider's dashboard.
 
   ### Apply Configuration
-  Click **Configure Captcha**. This will update the `dynamic_config.yml` file and ensure the `captcha.html` template is present.
+  Click **Configure Captcha**. This will update the configured Traefik dynamic config path and ensure the `captcha.html` template is present. If the path is a directory, CrowdSec Manager writes to `crowdsec-manager.yml`.
 </Steps>
 
 <Callout type="info">

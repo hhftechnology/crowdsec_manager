@@ -147,7 +147,7 @@ services:
       # Core Configuration
       - PORT=8080
       - ENVIRONMENT=production
-      - TRAEFIK_DYNAMIC_CONFIG=/etc/traefik/dynamic_config.yml
+      - TRAEFIK_DYNAMIC_CONFIG=/etc/traefik/rules
       - TRAEFIK_CONTAINER_NAME=traefik
       - TRAEFIK_STATIC_CONFIG=/etc/traefik/traefik_config.yml
       - CROWDSEC_METRICS_URL=http://crowdsec:6060/metrics
@@ -165,6 +165,8 @@ networks:
 volumes:
   tailscale-data:
 ```
+
+`TRAEFIK_DYNAMIC_CONFIG` can point to either a single YAML file such as `/etc/traefik/dynamic_config.yml` or a directory of fragments such as `/etc/traefik/rules`. When a directory is used, CrowdSec Manager writes its own overlay to `crowdsec-manager.yml` and leaves shared files like `base.yml` untouched.
 
 ## Run
 

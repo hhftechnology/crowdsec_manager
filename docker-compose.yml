@@ -21,7 +21,7 @@ services:
       - CONFIG_DIR=/app/config
       - DATABASE_PATH=/app/data/settings.db
       # Traefik Configuration Paths
-      - TRAEFIK_DYNAMIC_CONFIG=/etc/traefik/dynamic_config.yml
+      - TRAEFIK_DYNAMIC_CONFIG=/etc/traefik/rules
       - TRAEFIK_STATIC_CONFIG=/etc/traefik/traefik_config.yml
       - TRAEFIK_ACCESS_LOG=/var/log/traefik/access.log
       - TRAEFIK_ERROR_LOG=/var/log/traefik/traefik.log

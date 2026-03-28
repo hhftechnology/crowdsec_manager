@@ -9,6 +9,7 @@ import (
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
 	"crowdsec-manager/internal/models"
+	"crowdsec-manager/internal/traefikconfig"
 
 	"github.com/gin-gonic/gin"
 )
@@ -67,11 +68,9 @@ func ViewWhitelist(dockerClient *docker.Client, cfg *config.Config) gin.HandlerF
 		}
 
 		// Get Traefik whitelist
-		traefikWL, err := dockerClient.ExecCommand(cfg.TraefikContainerName, []string{
-			"cat", cfg.TraefikDynamicConfig,
-		})
+		readResult, err := traefikconfig.ReadContainer(dockerClient, cfg.TraefikContainerName, cfg.TraefikDynamicConfig)
 		if err == nil {
-			whitelist["traefik"] = parseTraefikWhitelist(traefikWL)
+			whitelist["traefik"] = parseTraefikWhitelist(readResult.Content)
 		}
 
 		c.JSON(http.StatusOK, models.Response{
@@ -178,14 +177,24 @@ whitelist:
 		}
 
 		if req.AddToTraefik {
-			// Update Traefik dynamic config
-			err := dockerClient.AppendLineToFileInContainer(cfg.TraefikContainerName, cfg.TraefikDynamicConfig, "sourceRange:", "- "+req.IP)
+			managedContent, _, err := traefikconfig.ReadManagedContainer(dockerClient, cfg.TraefikContainerName, cfg.TraefikDynamicConfig)
 			if err != nil {
-				errMsg := fmt.Sprintf("Failed to add IP to Traefik whitelist: %v", err)
+				errMsg := fmt.Sprintf("Failed to read Traefik whitelist config: %v", err)
 				logger.Error(errMsg, "error", err)
 				errors = append(errors, errMsg)
 			} else {
-				successMessages = append(successMessages, "Added to Traefik whitelist")
+				updatedContent, updateErr := traefikconfig.UpsertWhitelistEntry(managedContent, req.IP)
+				if updateErr != nil {
+					errMsg := fmt.Sprintf("Failed to update Traefik whitelist config: %v", updateErr)
+					logger.Error(errMsg, "error", updateErr)
+					errors = append(errors, errMsg)
+				} else if _, writeErr := traefikconfig.WriteManagedContainer(dockerClient, cfg.TraefikContainerName, cfg.TraefikDynamicConfig, []byte(updatedContent)); writeErr != nil {
+					errMsg := fmt.Sprintf("Failed to add IP to Traefik whitelist: %v", writeErr)
+					logger.Error(errMsg, "error", writeErr)
+					errors = append(errors, errMsg)
+				} else {
+					successMessages = append(successMessages, "Added to Traefik whitelist")
+				}
 			}
 		}
 
@@ -254,11 +263,22 @@ whitelist:
 		}
 
 		if req.AddToTraefik {
-			err := dockerClient.AppendLineToFileInContainer(cfg.TraefikContainerName, cfg.TraefikDynamicConfig, "sourceRange:", "- "+req.CIDR)
+			managedContent, _, err := traefikconfig.ReadManagedContainer(dockerClient, cfg.TraefikContainerName, cfg.TraefikDynamicConfig)
 			if err != nil {
-				errMsg := fmt.Sprintf("Failed to add CIDR to Traefik whitelist: %v", err)
+				errMsg := fmt.Sprintf("Failed to read Traefik whitelist config: %v", err)
 				logger.Error(errMsg, "error", err)
 				errors = append(errors, errMsg)
+			} else {
+				updatedContent, updateErr := traefikconfig.UpsertWhitelistEntry(managedContent, req.CIDR)
+				if updateErr != nil {
+					errMsg := fmt.Sprintf("Failed to update Traefik whitelist config: %v", updateErr)
+					logger.Error(errMsg, "error", updateErr)
+					errors = append(errors, errMsg)
+				} else if _, writeErr := traefikconfig.WriteManagedContainer(dockerClient, cfg.TraefikContainerName, cfg.TraefikDynamicConfig, []byte(updatedContent)); writeErr != nil {
+					errMsg := fmt.Sprintf("Failed to add CIDR to Traefik whitelist: %v", writeErr)
+					logger.Error(errMsg, "error", writeErr)
+					errors = append(errors, errMsg)
+				}
 			}
 		}
 
