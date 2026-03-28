@@ -38,6 +38,19 @@ import { toast } from 'sonner'
 import { EmptyState, PageHeader, QueryError, ResultsSummary } from '@/components/common'
 import { useUrlFilters } from '@/hooks'
 
+function normalizeBouncers(raw: unknown): Bouncer[] {
+  if (Array.isArray(raw)) return raw as Bouncer[]
+
+  if (raw && typeof raw === 'object') {
+    const obj = raw as Record<string, unknown>
+    for (const value of Object.values(obj)) {
+      if (Array.isArray(value)) return value as Bouncer[]
+    }
+  }
+
+  return []
+}
+
 export default function Bouncers() {
   const queryClient = useQueryClient()
   const [urlFilters, setUrlFilter] = useUrlFilters(['q'], { q: '' })
@@ -50,18 +63,11 @@ export default function Bouncers() {
     queryKey: ['bouncers'],
     queryFn: async () => {
       const response = await api.crowdsec.getBouncers()
-      const raw = response.data.data
-      // Adapt to whatever shape the backend returns
-      if (Array.isArray(raw)) return raw as Bouncer[]
-      if (raw && typeof raw === 'object') {
-        // Backend wraps as { bouncers: [...], count: N }
-        const obj = raw as Record<string, unknown>
-        for (const val of Object.values(obj)) {
-          if (Array.isArray(val)) return val as Bouncer[]
-        }
-      }
-      return [] as Bouncer[]
+      return response.data.data
     },
+    // The dashboard populates this cache key with the raw { bouncers, count }
+    // payload shape, so normalize it per observer on the Bouncers page.
+    select: normalizeBouncers,
   })
 
   const addBouncerMutation = useMutation({
