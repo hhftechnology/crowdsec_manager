@@ -51,7 +51,13 @@ function isBouncer(obj: unknown): obj is Bouncer {
     'ip_address' in obj &&
     typeof (obj as { ip_address: unknown }).ip_address === 'string' &&
     'valid' in obj &&
-    typeof (obj as { valid: unknown }).valid === 'boolean'
+    typeof (obj as { valid: unknown }).valid === 'boolean' &&
+    'last_pull' in obj &&
+    typeof (obj as { last_pull: unknown }).last_pull === 'string' &&
+    'type' in obj &&
+    typeof (obj as { type: unknown }).type === 'string' &&
+    'version' in obj &&
+    typeof (obj as { version: unknown }).version === 'string'
   )
 }
 
