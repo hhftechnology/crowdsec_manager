@@ -55,6 +55,15 @@ function isBouncer(obj: unknown): obj is Bouncer {
   )
 }
 
+/**
+ * Extracts an array of valid `Bouncer` objects from API payloads.
+ *
+ * Accepts either a raw array of items or an object containing a `bouncers` array and returns
+ * only entries that conform to the expected `Bouncer` shape.
+ *
+ * @param raw - The API response payload to normalize; may be an array or an object with a `bouncers` property
+ * @returns An array of `Bouncer` objects extracted from `raw`, or an empty array if none were found
+ */
 function normalizeBouncers(raw: unknown): Bouncer[] {
   if (Array.isArray(raw)) {
     return raw.filter(isBouncer)
@@ -67,6 +76,13 @@ function normalizeBouncers(raw: unknown): Bouncer[] {
   return []
 }
 
+/**
+ * Page component that renders the Bouncers management UI for listing, searching, adding, and deleting CrowdSec bouncers.
+ *
+ * Renders a searchable table of registered bouncers, provides a dialog to create new bouncers (showing the API key once), and exposes delete actions with confirmation. Fetches and normalizes bouncer data from the Local API and performs add/delete mutations with user-facing success/error toasts.
+ *
+ * @returns The page's React element rendering the bouncers management interface.
+ */
 export default function Bouncers() {
   const queryClient = useQueryClient()
   const [urlFilters, setUrlFilter] = useUrlFilters(['q'], { q: '' })
