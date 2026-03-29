@@ -41,11 +41,8 @@ import { useUrlFilters } from '@/hooks'
 function normalizeBouncers(raw: unknown): Bouncer[] {
   if (Array.isArray(raw)) return raw as Bouncer[]
 
-  if (raw && typeof raw === 'object') {
-    const obj = raw as Record<string, unknown>
-    for (const value of Object.values(obj)) {
-      if (Array.isArray(value)) return value as Bouncer[]
-    }
+  if (raw && typeof raw === 'object' && 'bouncers' in raw && Array.isArray((raw as { bouncers: unknown }).bouncers)) {
+    return (raw as { bouncers: Bouncer[] }).bouncers
   }
 
   return []
