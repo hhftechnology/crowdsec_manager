@@ -57,7 +57,8 @@ function isBouncer(obj: unknown): obj is Bouncer {
     'type' in obj &&
     typeof (obj as { type: unknown }).type === 'string' &&
     'version' in obj &&
-    typeof (obj as { version: unknown }).version === 'string'
+     typeof (obj as { version: unknown }).version === 'string' &&
+     (!('status' in obj) || typeof (obj as { status: unknown }).status === 'string')
   )
 }
 
