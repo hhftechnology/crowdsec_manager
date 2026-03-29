@@ -38,6 +38,58 @@ import { toast } from 'sonner'
 import { EmptyState, PageHeader, QueryError, ResultsSummary } from '@/components/common'
 import { useUrlFilters } from '@/hooks'
 
+/**
+ * Type guard to check if an object is a valid Bouncer.
+ * This provides runtime validation of the data received from the API.
+ */
+function isBouncer(obj: unknown): obj is Bouncer {
+  return (
+    obj !== null &&
+    typeof obj === 'object' &&
+    'name' in obj &&
+    typeof (obj as { name: unknown }).name === 'string' &&
+    'ip_address' in obj &&
+    typeof (obj as { ip_address: unknown }).ip_address === 'string' &&
+    'valid' in obj &&
+    typeof (obj as { valid: unknown }).valid === 'boolean' &&
+    'last_pull' in obj &&
+    typeof (obj as { last_pull: unknown }).last_pull === 'string' &&
+    'type' in obj &&
+    typeof (obj as { type: unknown }).type === 'string' &&
+    'version' in obj &&
+     typeof (obj as { version: unknown }).version === 'string' &&
+     (!('status' in obj) || typeof (obj as { status: unknown }).status === 'string')
+  )
+}
+
+/**
+ * Extracts an array of valid `Bouncer` objects from API payloads.
+ *
+ * Accepts either a raw array of items or an object containing a `bouncers` array and returns
+ * only entries that conform to the expected `Bouncer` shape.
+ *
+ * @param raw - The API response payload to normalize; may be an array or an object with a `bouncers` property
+ * @returns An array of `Bouncer` objects extracted from `raw`, or an empty array if none were found
+ */
+function normalizeBouncers(raw: unknown): Bouncer[] {
+  if (Array.isArray(raw)) {
+    return raw.filter(isBouncer)
+  }
+
+  if (raw && typeof raw === 'object' && 'bouncers' in raw && Array.isArray((raw as { bouncers: unknown }).bouncers)) {
+    return (raw as { bouncers: unknown[] }).bouncers.filter(isBouncer)
+  }
+
+  return []
+}
+
+/**
+ * Page component that renders the Bouncers management UI for listing, searching, adding, and deleting CrowdSec bouncers.
+ *
+ * Renders a searchable table of registered bouncers, provides a dialog to create new bouncers (showing the API key once), and exposes delete actions with confirmation. Fetches and normalizes bouncer data from the Local API and performs add/delete mutations with user-facing success/error toasts.
+ *
+ * @returns The page's React element rendering the bouncers management interface.
+ */
 export default function Bouncers() {
   const queryClient = useQueryClient()
   const [urlFilters, setUrlFilter] = useUrlFilters(['q'], { q: '' })
@@ -50,18 +102,11 @@ export default function Bouncers() {
     queryKey: ['bouncers'],
     queryFn: async () => {
       const response = await api.crowdsec.getBouncers()
-      const raw = response.data.data
-      // Adapt to whatever shape the backend returns
-      if (Array.isArray(raw)) return raw as Bouncer[]
-      if (raw && typeof raw === 'object') {
-        // Backend wraps as { bouncers: [...], count: N }
-        const obj = raw as Record<string, unknown>
-        for (const val of Object.values(obj)) {
-          if (Array.isArray(val)) return val as Bouncer[]
-        }
-      }
-      return [] as Bouncer[]
+      return response.data.data
     },
+    // The dashboard populates this cache key with the raw { bouncers, count }
+    // payload shape, so normalize it per observer on the Bouncers page.
+    select: normalizeBouncers,
   })
 
   const addBouncerMutation = useMutation({
