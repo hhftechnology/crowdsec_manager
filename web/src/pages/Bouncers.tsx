@@ -38,11 +38,30 @@ import { toast } from 'sonner'
 import { EmptyState, PageHeader, QueryError, ResultsSummary } from '@/components/common'
 import { useUrlFilters } from '@/hooks'
 
+/**
+ * Type guard to check if an object is a valid Bouncer.
+ * This provides runtime validation of the data received from the API.
+ */
+function isBouncer(obj: unknown): obj is Bouncer {
+  return (
+    obj !== null &&
+    typeof obj === 'object' &&
+    'name' in obj &&
+    typeof (obj as { name: unknown }).name === 'string' &&
+    'ip_address' in obj &&
+    typeof (obj as { ip_address: unknown }).ip_address === 'string' &&
+    'valid' in obj &&
+    typeof (obj as { valid: unknown }).valid === 'boolean'
+  )
+}
+
 function normalizeBouncers(raw: unknown): Bouncer[] {
-  if (Array.isArray(raw)) return raw as Bouncer[]
+  if (Array.isArray(raw)) {
+    return raw.filter(isBouncer)
+  }
 
   if (raw && typeof raw === 'object' && 'bouncers' in raw && Array.isArray((raw as { bouncers: unknown }).bouncers)) {
-    return (raw as { bouncers: Bouncer[] }).bouncers
+    return (raw as { bouncers: unknown[] }).bouncers.filter(isBouncer)
   }
 
   return []
