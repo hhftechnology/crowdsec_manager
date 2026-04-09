@@ -14,27 +14,14 @@ CrowdSec Manager is a web-based management interface for CrowdSec operations, Tr
 
 ## Stable release
 
-- Current baseline: `2.0.0`
+- Current baseline: `2.3.0`
 - Multi-proxy support: not available in this release
 
 ### Crowdsec-Manager mobile app.
 
-### Download
-Click below to download the app to your mobile device, tablet:
-
-### Current Release
-
-[<img src="https://play.google.com/intl/en_us/badges/images/generic/en_badge_web_generic.png" 
-alt="Download from Google Play" 
-height="80">](https://play.google.com/store/apps/details?id=com.crowdsec.manager.mobile)
-
-[<img src="https://f-droid.org/badge/get-it-on.png"
-alt="Get it on F-Droid"
-height="80">](https://f-droid.org/packages/com.crowdsec.manager.mobile/)
-
-[<img src="https://developer.apple.com/assets/elements/badges/download-on-the-app-store.svg"
-alt="We are not on iOS :)"
-height="80">](https://itunes.apple.com/us/app/hhftechnology/0)
+<div align="center">
+<a href="https://apps.apple.com/us/app/#"><img width="135" height="39" alt="appstore" src="https://github.com/user-attachments/assets/45e31a11-cf6b-40a2-a083-6dc8d1f01291" /></a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://play.google.com/store/apps/details?id=com.crowdsec.manager.mobile"><img width="135" height="39" alt="googleplay" src="https://github.com/user-attachments/assets/acbba639-858f-4c74-85c7-92a4096efbf5" /></a>
+</div>
 
 
 
