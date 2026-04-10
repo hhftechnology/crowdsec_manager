@@ -3,7 +3,6 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
-	"path/filepath"
 	"strconv"
 
 	"crowdsec-manager/internal/config"
@@ -120,8 +119,6 @@ func ApplyCaptchaConfig(dockerClient *docker.Client, db *database.Database, cfg 
 		}
 
 		// Define the pipeline of steps.
-		traefikConfigDir := filepath.Join(cfg.ConfigDir, "traefik")
-
 		pipeline := []captchaApplyStep{
 			{
 				Num:  1,
@@ -134,7 +131,7 @@ func ApplyCaptchaConfig(dockerClient *docker.Client, db *database.Database, cfg 
 				Num:  2,
 				Name: "Update Traefik dynamic config",
 				Run: func(r models.CaptchaSetupRequest) error {
-					return updateTraefikCaptchaConfig(dockerClient, cfg, r, traefikConfigDir)
+					return updateTraefikCaptchaConfig(cfg, r)
 				},
 			},
 			{

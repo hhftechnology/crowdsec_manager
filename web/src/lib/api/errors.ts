@@ -77,7 +77,7 @@ const ERROR_RULES: ErrorRule[] = [
       ErrorContexts.CaptchaSetup,
     ],
     patterns: [/no such file or directory/i, /stat .* no such file or directory/i],
-    message: 'Traefik dynamic config file not found. Verify the config path in Settings.',
+    message: 'Traefik dynamic config path not found. Verify the config path in Settings.',
   },
   {
     contexts: 'any',

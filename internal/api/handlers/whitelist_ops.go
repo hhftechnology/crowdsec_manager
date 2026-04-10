@@ -12,6 +12,7 @@ import (
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
 	"crowdsec-manager/internal/models"
+	"crowdsec-manager/internal/traefikconfig"
 
 	"github.com/gin-gonic/gin"
 )
@@ -116,8 +117,25 @@ func AddToTraefikWhitelist(dockerClient *docker.Client, cfg *config.Config) gin.
 
 		logger.Info("Adding to Traefik whitelist", "ip", req.IP)
 
-		err := dockerClient.AppendLineToFileInContainer(cfg.TraefikContainerName, cfg.TraefikDynamicConfig, "sourceRange:", "- "+req.IP)
+		managedContent, _, err := traefikconfig.ReadManagedContainer(dockerClient, cfg.TraefikContainerName, cfg.TraefikDynamicConfig)
 		if err != nil {
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to read whitelist config: %v", err),
+			})
+			return
+		}
+
+		updatedContent, err := traefikconfig.UpsertWhitelistEntry(managedContent, req.IP)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to update whitelist: %v", err),
+			})
+			return
+		}
+
+		if _, err := traefikconfig.WriteManagedContainer(dockerClient, cfg.TraefikContainerName, cfg.TraefikDynamicConfig, []byte(updatedContent)); err != nil {
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
 				Error:   fmt.Sprintf("Failed to update whitelist: %v", err),
@@ -180,22 +198,14 @@ func RemoveFromWhitelist(dockerClient *docker.Client, cfg *config.Config) gin.Ha
 
 		if req.RemoveFromTraefik {
 			// Read current Traefik config, remove the IP, write back
-			currentConfig, err := dockerClient.ExecCommand(cfg.TraefikContainerName, []string{
-				"cat", cfg.TraefikDynamicConfig,
-			})
+			currentConfig, _, err := traefikconfig.ReadManagedContainer(dockerClient, cfg.TraefikContainerName, cfg.TraefikDynamicConfig)
 			if err != nil {
 				errors = append(errors, fmt.Sprintf("Failed to read Traefik config: %v", err))
 			} else {
-				lines := strings.Split(currentConfig, "\n")
-				var newLines []string
-				ipPattern := regexp.MustCompile(`^\s*-\s+` + regexp.QuoteMeta(req.IP) + `\s*$`)
-				for _, line := range lines {
-					if !ipPattern.MatchString(line) {
-						newLines = append(newLines, line)
-					}
-				}
-				newContent := strings.Join(newLines, "\n")
-				if err := dockerClient.WriteFileToContainer(cfg.TraefikContainerName, cfg.TraefikDynamicConfig, []byte(newContent)); err != nil {
+				newContent, _, removeErr := traefikconfig.RemoveWhitelistEntry(currentConfig, req.IP)
+				if removeErr != nil {
+					errors = append(errors, fmt.Sprintf("Failed to update Traefik config: %v", removeErr))
+				} else if _, err := traefikconfig.WriteManagedContainer(dockerClient, cfg.TraefikContainerName, cfg.TraefikDynamicConfig, []byte(newContent)); err != nil {
 					errors = append(errors, fmt.Sprintf("Failed to update Traefik config: %v", err))
 				} else {
 					successMessages = append(successMessages, "Removed from Traefik whitelist")
@@ -272,8 +282,12 @@ whitelist:
 		}
 
 		// Add to Traefik
-		if err := dockerClient.AppendLineToFileInContainer(cfg.TraefikContainerName, cfg.TraefikDynamicConfig, "sourceRange:", "- "+ip); err == nil {
-			results["traefik"] = true
+		if managedContent, _, err := traefikconfig.ReadManagedContainer(dockerClient, cfg.TraefikContainerName, cfg.TraefikDynamicConfig); err == nil {
+			if updatedContent, updateErr := traefikconfig.UpsertWhitelistEntry(managedContent, ip); updateErr == nil {
+				if _, writeErr := traefikconfig.WriteManagedContainer(dockerClient, cfg.TraefikContainerName, cfg.TraefikDynamicConfig, []byte(updatedContent)); writeErr == nil {
+					results["traefik"] = true
+				}
+			}
 		}
 
 		autoSnapshot("whitelist")

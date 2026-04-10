@@ -36,7 +36,7 @@ const quickInstall = `services:
     environment:
       - PORT=8080
       - ENVIRONMENT=production
-      - TRAEFIK_DYNAMIC_CONFIG=/etc/traefik/dynamic_config.yml
+      - TRAEFIK_DYNAMIC_CONFIG=/etc/traefik/rules
       - TRAEFIK_CONTAINER_NAME=traefik
       - TRAEFIK_STATIC_CONFIG=/etc/traefik/traefik_config.yml
     volumes:

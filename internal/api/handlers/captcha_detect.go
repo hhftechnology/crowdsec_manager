@@ -13,6 +13,7 @@ import (
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
 	"crowdsec-manager/internal/models"
+	"crowdsec-manager/internal/traefikconfig"
 
 	"github.com/gin-gonic/gin"
 )
@@ -31,7 +32,7 @@ func DetectCaptchaConfig(dockerClient *docker.Client, db *database.Database, cfg
 			"html_file":              false,
 		}
 
-		// 1. Scan Traefik dynamic_config.yml for captcha keys.
+		// 1. Scan the configured Traefik dynamic config path for captcha keys.
 		traefikValues := detectCaptchaInTraefikConfig(dockerClient, cfg)
 		if len(traefikValues) > 0 {
 			sources["traefik_dynamic_config"] = true
@@ -106,21 +107,21 @@ func DetectCaptchaConfig(dockerClient *docker.Client, db *database.Database, cfg
 	}
 }
 
-// detectCaptchaInTraefikConfig reads Traefik dynamic config and extracts captcha-related values.
-// It first attempts to read from the running container; on failure it falls back to the local file.
+// detectCaptchaInTraefikConfig reads the configured Traefik dynamic config path and extracts captcha-related values.
+// It first attempts to read from the running container; on failure it falls back to the local filesystem.
 func detectCaptchaInTraefikConfig(dockerClient *docker.Client, cfg *config.Config) map[string]interface{} {
 	result := map[string]interface{}{}
 
-	output, err := dockerClient.ExecCommand(cfg.TraefikContainerName, []string{"cat", cfg.TraefikDynamicConfig})
+	readResult, err := traefikconfig.ReadContainer(dockerClient, cfg.TraefikContainerName, cfg.TraefikDynamicConfig)
 	if err != nil {
-		localPath := filepath.Join(cfg.ConfigDir, "traefik", "dynamic_config.yml")
-		data, readErr := os.ReadFile(localPath)
+		hostResult, readErr := traefikconfig.ReadHost(cfg, cfg.TraefikDynamicConfig)
 		if readErr != nil {
 			logger.Debug("Could not read Traefik dynamic config", "containerErr", err, "localErr", readErr)
 			return result
 		}
-		output = string(data)
+		readResult = hostResult
 	}
+	output := readResult.Content
 
 	lower := strings.ToLower(output)
 	if !strings.Contains(lower, "captchaprovider") && !strings.Contains(lower, "captchasitekey") {

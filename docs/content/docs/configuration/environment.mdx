@@ -13,7 +13,7 @@ The minimum deployment needs only a small environment set. Add more variables on
 | :--- | :--- | :--- |
 | `PORT` | `8080` | HTTP port inside the container. |
 | `ENVIRONMENT` | `production` | Runtime mode. |
-| `TRAEFIK_DYNAMIC_CONFIG` | `/etc/traefik/dynamic_config.yml` | Traefik dynamic config path used by manager actions. |
+| `TRAEFIK_DYNAMIC_CONFIG` | `/etc/traefik/dynamic_config.yml` | Traefik dynamic config file or directory path used by manager actions. |
 | `TRAEFIK_CONTAINER_NAME` | `traefik` | Traefik container name in your stack. |
 | `TRAEFIK_STATIC_CONFIG` | `/etc/traefik/traefik_config.yml` | Traefik static config path. |
 
@@ -29,5 +29,6 @@ The minimum deployment needs only a small environment set. Add more variables on
 ## Notes
 
 - Keep environment values as in-container paths.
+- `TRAEFIK_DYNAMIC_CONFIG` can point to a directory such as `/etc/traefik/rules`; CrowdSec Manager will then manage `crowdsec-manager.yml` inside that directory.
 - Use Docker volume mappings to map host paths to those container paths.
 - Multi-proxy support is not available in this release.

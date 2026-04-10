@@ -8,9 +8,9 @@ import (
 	"strings"
 
 	"crowdsec-manager/internal/config"
-	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
 	"crowdsec-manager/internal/models"
+	"crowdsec-manager/internal/traefikconfig"
 
 	"gopkg.in/yaml.v3"
 )
@@ -78,7 +78,7 @@ const captchaHTMLTemplate = `<!DOCTYPE html>
 </body>
 </html>`
 
-// detectCaptchaInConfig checks if captcha is configured in dynamic_config.yml and profiles.yaml
+// detectCaptchaInConfig checks if captcha is configured in the Traefik dynamic config and profiles.yaml
 func detectCaptchaInConfig(configContent string) (enabled bool, provider string, hasHTMLPath bool) {
 	configLower := strings.ToLower(configContent)
 
@@ -103,28 +103,31 @@ func detectCaptchaInConfig(configContent string) (enabled bool, provider string,
 	return
 }
 
-// extractCaptchaKeys extracts site key and secret key from dynamic_config.yml content
+// extractCaptchaKeys extracts site key and secret key from one or more YAML documents.
 func extractCaptchaKeys(configContent string) (siteKey string, secretKey string) {
-	var config map[string]interface{}
-	if err := yaml.Unmarshal([]byte(configContent), &config); err != nil {
-		return "", ""
-	}
+	decoder := yaml.NewDecoder(strings.NewReader(configContent))
+	for {
+		var config map[string]interface{}
+		if err := decoder.Decode(&config); err != nil {
+			break
+		}
 
-	if http, ok := config["http"].(map[string]interface{}); ok {
-		if middlewares, ok := http["middlewares"].(map[string]interface{}); ok {
-			for _, mw := range middlewares {
-				if mwMap, ok := mw.(map[string]interface{}); ok {
-					if plugin, ok := mwMap["plugin"].(map[string]interface{}); ok {
-						for k, v := range plugin {
-							if strings.Contains(strings.ToLower(k), "crowdsec") {
-								if crowdsec, ok := v.(map[string]interface{}); ok {
-									if key, ok := crowdsec["captchaSiteKey"].(string); ok {
-										siteKey = key
+		if http, ok := config["http"].(map[string]interface{}); ok {
+			if middlewares, ok := http["middlewares"].(map[string]interface{}); ok {
+				for _, mw := range middlewares {
+					if mwMap, ok := mw.(map[string]interface{}); ok {
+						if plugin, ok := mwMap["plugin"].(map[string]interface{}); ok {
+							for k, v := range plugin {
+								if strings.Contains(strings.ToLower(k), "crowdsec") {
+									if crowdsec, ok := v.(map[string]interface{}); ok {
+										if key, ok := crowdsec["captchaSiteKey"].(string); ok {
+											siteKey = key
+										}
+										if key, ok := crowdsec["captchaSecretKey"].(string); ok {
+											secretKey = key
+										}
+										return siteKey, secretKey
 									}
-									if key, ok := crowdsec["captchaSecretKey"].(string); ok {
-										secretKey = key
-									}
-									return siteKey, secretKey
 								}
 							}
 						}
@@ -137,18 +140,27 @@ func extractCaptchaKeys(configContent string) (siteKey string, secretKey string)
 	return siteKey, secretKey
 }
 
-// updateTraefikCaptchaConfig updates Traefik's dynamic_config.yml with captcha configuration
-func updateTraefikCaptchaConfig(dockerClient *docker.Client, cfg *config.Config, req models.CaptchaSetupRequest, traefikConfigDir string) error {
-	dynamicConfigPath := filepath.Join(traefikConfigDir, "dynamic_config.yml")
+// updateTraefikCaptchaConfig updates the CrowdSec-managed Traefik dynamic config path with captcha configuration.
+func updateTraefikCaptchaConfig(cfg *config.Config, req models.CaptchaSetupRequest) error {
+	dynamicConfigPath, err := traefikconfig.ManagedHostFilePath(cfg, cfg.TraefikDynamicConfig)
+	if err != nil {
+		return fmt.Errorf("failed to resolve Traefik dynamic config path: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(dynamicConfigPath), 0755); err != nil {
+		return fmt.Errorf("failed to prepare Traefik dynamic config path: %v", err)
+	}
 
 	configBytes, err := os.ReadFile(dynamicConfigPath)
 	if err != nil {
-		return fmt.Errorf("failed to read dynamic_config.yml from local path: %v", err)
+		if !os.IsNotExist(err) {
+			return fmt.Errorf("failed to read Traefik dynamic config from local path: %v", err)
+		}
+		configBytes = []byte{}
 	}
 
 	var node yaml.Node
 	if err := yaml.Unmarshal(configBytes, &node); err != nil {
-		return fmt.Errorf("failed to parse dynamic_config.yml: %v", err)
+		return fmt.Errorf("failed to parse Traefik dynamic config: %v", err)
 	}
 
 	if len(node.Content) == 0 {
@@ -157,7 +169,7 @@ func updateTraefikCaptchaConfig(dockerClient *docker.Client, cfg *config.Config,
 			{Kind: yaml.MappingNode},
 		}
 	} else if node.Content[0].Kind != yaml.MappingNode {
-		return fmt.Errorf("dynamic_config.yml root is not a mapping")
+		return fmt.Errorf("Traefik dynamic config root is not a mapping")
 	}
 	rootMap := node.Content[0]
 
@@ -285,21 +297,21 @@ func updateTraefikCaptchaConfig(dockerClient *docker.Client, cfg *config.Config,
 	// Create backup before modifying
 	backupPath := dynamicConfigPath + ".bak"
 	if err := os.WriteFile(backupPath, configBytes, 0644); err != nil {
-		logger.Warn("Failed to create backup of dynamic_config.yml", "error", err)
+		logger.Warn("Failed to create backup of Traefik dynamic config", "error", err)
 	}
 
 	newConfigBytes, err := yaml.Marshal(&node)
 	if err != nil {
-		return fmt.Errorf("failed to marshal dynamic_config.yml: %v", err)
+		return fmt.Errorf("failed to marshal Traefik dynamic config: %v", err)
 	}
 
 	if err := os.WriteFile(dynamicConfigPath, newConfigBytes, 0644); err != nil {
 		if backupBytes, err2 := os.ReadFile(backupPath); err2 == nil {
 			os.WriteFile(dynamicConfigPath, backupBytes, 0644)
 		}
-		return fmt.Errorf("failed to write dynamic_config.yml to local path: %v", err)
+		return fmt.Errorf("failed to write Traefik dynamic config to local path: %v", err)
 	}
 
-	logger.Info("Traefik dynamic config updated successfully on local filesystem")
+	logger.Info("Traefik dynamic config updated successfully on local filesystem", "path", dynamicConfigPath)
 	return nil
 }

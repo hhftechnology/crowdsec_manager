@@ -113,6 +113,8 @@ func Load() (*Config, error) {
 		TraefikCaptchaHTMLPath:   getEnv("TRAEFIK_CAPTCHA_HTML_PATH", "/etc/traefik/conf/captcha.html"),
 		TraefikCaptchaEnvPath:    getEnv("TRAEFIK_CAPTCHA_ENV_PATH", "/etc/traefik/captcha.env"),
 		TraefikDynamicConfigSearch: []string{
+			"/etc/traefik/rules",
+			"/rules",
 			"/etc/traefik/config/dynamic_config.yml",
 			"/etc/traefik/dynamic_config.yaml",
 			"/etc/traefik/config/dynamic_config.yaml",

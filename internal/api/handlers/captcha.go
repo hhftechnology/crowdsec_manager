@@ -13,6 +13,7 @@ import (
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
 	"crowdsec-manager/internal/models"
+	"crowdsec-manager/internal/traefikconfig"
 
 	"github.com/gin-gonic/gin"
 )
@@ -96,10 +97,9 @@ func SetupCaptcha(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFu
 		}
 		captchaHTMLPath := filepath.Join(cfg.ConfigDir, "traefik", "conf", "captcha.html")
 
-		// STEP 2: Update Traefik dynamic_config.yml
+		// STEP 2: Update the CrowdSec-managed Traefik dynamic config path.
 		logger.Info("Updating Traefik dynamic configuration")
-		traefikConfigDir := filepath.Join(cfg.ConfigDir, "traefik")
-		if err := updateTraefikCaptchaConfig(dockerClient, cfg, req, traefikConfigDir); err != nil {
+		if err := updateTraefikCaptchaConfig(cfg, req); err != nil {
 			logger.Error("Failed to update Traefik config", "error", err)
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
@@ -192,7 +192,7 @@ func GetCaptchaStatus(dockerClient *docker.Client, db *database.Database, cfg *c
 			}
 		}
 
-		// Supplementary: check dynamic_config.yml in Traefik container for live state
+		// Supplementary: check the Traefik dynamic config path in the container for live state.
 		dynamicConfigPath := cfg.TraefikDynamicConfig
 		if db != nil {
 			if path, err := db.GetTraefikDynamicConfigPath(); err == nil {
@@ -200,9 +200,8 @@ func GetCaptchaStatus(dockerClient *docker.Client, db *database.Database, cfg *c
 			}
 		}
 
-		configContent, err := dockerClient.ExecCommand(cfg.TraefikContainerName, []string{
-			"cat", dynamicConfigPath,
-		})
+		readResult, err := traefikconfig.ReadContainer(dockerClient, cfg.TraefikContainerName, dynamicConfigPath)
+		configContent := readResult.Content
 
 		detectedProvider := ""
 		hasHTMLPath := false

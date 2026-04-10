@@ -1,11 +1,8 @@
 package configvalidator
 
 import (
-	"archive/tar"
-	"bytes"
 	"crypto/sha256"
 	"fmt"
-	"strings"
 	"time"
 
 	"crowdsec-manager/internal/config"
@@ -14,6 +11,7 @@ import (
 	"crowdsec-manager/internal/logger"
 	"crowdsec-manager/internal/messaging"
 	"crowdsec-manager/internal/models"
+	"crowdsec-manager/internal/traefikconfig"
 )
 
 // configEntry defines a tracked config file
@@ -43,18 +41,23 @@ func NewValidator(db *database.Database, dockerClient *docker.Client, hub *messa
 
 // trackedConfigs returns the list of config files to track
 func (v *Validator) trackedConfigs() []configEntry {
+	dynamicConfigPath := v.cfg.TraefikDynamicConfig
+	if resolvedPath, err := traefikconfig.ManagedFilePath(v.cfg.TraefikDynamicConfig); err == nil {
+		dynamicConfigPath = resolvedPath
+	}
+
 	return []configEntry{
 		{ConfigType: "acquis", FilePath: v.cfg.CrowdSecAcquisFile, ContainerName: v.cfg.CrowdsecContainerName},
 		{ConfigType: "profiles", FilePath: v.cfg.CrowdSecProfilesPath, ContainerName: v.cfg.CrowdsecContainerName},
 		{ConfigType: "whitelist", FilePath: v.cfg.CrowdSecWhitelistPath, ContainerName: v.cfg.CrowdsecContainerName},
-		{ConfigType: "dynamic_config", FilePath: v.cfg.TraefikDynamicConfig, ContainerName: v.cfg.TraefikContainerName},
+		{ConfigType: "dynamic_config", FilePath: dynamicConfigPath, ContainerName: v.cfg.TraefikContainerName},
 		{ConfigType: "static_config", FilePath: v.cfg.TraefikStaticConfig, ContainerName: v.cfg.TraefikContainerName},
 	}
 }
 
 // readFileFromContainer reads a file's contents from inside a container
 func (v *Validator) readFileFromContainer(containerName, filePath string) (string, error) {
-	output, err := v.docker.ExecCommand(containerName, []string{"cat", filePath})
+	output, err := v.docker.ReadFileFromContainer(containerName, filePath)
 	if err != nil {
 		return "", fmt.Errorf("failed to read %s from %s: %w", filePath, containerName, err)
 	}
@@ -63,36 +66,7 @@ func (v *Validator) readFileFromContainer(containerName, filePath string) (strin
 
 // writeFileToContainer writes content to a file inside a container using tar copy
 func (v *Validator) writeFileToContainer(containerName, filePath, content string) error {
-	// Create a tar archive with the file
-	var buf bytes.Buffer
-	tw := tar.NewWriter(&buf)
-
-	// Extract filename from path
-	parts := strings.Split(filePath, "/")
-	fileName := parts[len(parts)-1]
-
-	hdr := &tar.Header{
-		Name: fileName,
-		Mode: 0644,
-		Size: int64(len(content)),
-	}
-	if err := tw.WriteHeader(hdr); err != nil {
-		return fmt.Errorf("failed to write tar header: %w", err)
-	}
-	if _, err := tw.Write([]byte(content)); err != nil {
-		return fmt.Errorf("failed to write tar content: %w", err)
-	}
-	if err := tw.Close(); err != nil {
-		return fmt.Errorf("failed to close tar writer: %w", err)
-	}
-
-	// Extract directory path
-	dirPath := filePath[:strings.LastIndex(filePath, "/")]
-	if dirPath == "" {
-		dirPath = "/"
-	}
-
-	return v.docker.CopyToContainer(containerName, dirPath, &buf)
+	return v.docker.WriteFileToContainer(containerName, filePath, []byte(content))
 }
 
 // hashContent returns SHA-256 hex digest of content

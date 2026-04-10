@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"net/http"
 
+	"crowdsec-manager/internal/config"
 	"crowdsec-manager/internal/database"
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
 	"crowdsec-manager/internal/models"
+	"crowdsec-manager/internal/traefikconfig"
 
 	"github.com/gin-gonic/gin"
 )
@@ -32,7 +34,7 @@ func GetTraefikConfig() gin.HandlerFunc {
 		// In a real implementation, read from config file
 		config := gin.H{
 			"static":  "traefik_config.yml content",
-			"dynamic": "dynamic_config.yml content",
+			"dynamic": "dynamic config path content",
 		}
 
 		c.JSON(http.StatusOK, models.Response{
@@ -82,6 +84,14 @@ func SetTraefikConfigPath(db *database.Database) gin.HandlerFunc {
 		}
 
 		logger.Info("Setting Traefik config path", "path", req.DynamicConfigPath)
+
+		if _, err := config.ResolveTraefikDynamicConfigTarget(req.DynamicConfigPath); err != nil {
+			c.JSON(http.StatusBadRequest, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Invalid config path: %v", err),
+			})
+			return
+		}
 
 		// Update database
 		err := db.SetTraefikDynamicConfigPath(req.DynamicConfigPath)
@@ -163,20 +173,41 @@ func GetFileContent(dockerClient *docker.Client, db *database.Database) gin.Hand
 			return
 		}
 
-		content, err := dockerClient.ExecCommand(container, []string{"cat", filePath})
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, models.Response{
-				Success: false,
-				Error:   fmt.Sprintf("Failed to read file: %v", err),
-			})
-			return
+		content := ""
+		sourcePaths := []string{filePath}
+		managedPath := ""
+
+		if fileType == "dynamic_config" {
+			result, err := traefikconfig.ReadContainer(dockerClient, container, filePath)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, models.Response{
+					Success: false,
+					Error:   fmt.Sprintf("Failed to read file: %v", err),
+				})
+				return
+			}
+			content = result.Content
+			sourcePaths = result.SourcePaths
+			managedPath = result.Target.ManagedFilePath
+		} else {
+			var err error
+			content, err = dockerClient.ReadFileFromContainer(container, filePath)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, models.Response{
+					Success: false,
+					Error:   fmt.Sprintf("Failed to read file: %v", err),
+				})
+				return
+			}
 		}
 
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
 			Data: gin.H{
-				"path":    filePath,
-				"content": content,
+				"path":         filePath,
+				"managed_path": managedPath,
+				"source_paths": sourcePaths,
+				"content":      content,
 			},
 		})
 	}

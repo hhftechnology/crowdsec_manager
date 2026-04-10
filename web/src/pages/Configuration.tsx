@@ -43,12 +43,12 @@ function EditableConfigForm({ initialPath, currentPath }: { initialPath: string;
         <Input
           id="config-path"
           type="text"
-          placeholder="/etc/traefik/dynamic_config.yml"
+          placeholder="/etc/traefik/rules"
           value={configPath}
           onChange={(e) => setConfigPath(e.target.value)}
         />
         <p className="text-xs text-muted-foreground">
-          The absolute path to the dynamic_config.yml file in the Traefik container
+          The absolute path to the Traefik dynamic config file or directory inside the Traefik container
         </p>
       </div>
 
@@ -92,7 +92,7 @@ export default function Configuration() {
             Traefik Dynamic Configuration Path
           </CardTitle>
           <CardDescription>
-            Configure the path to the Traefik dynamic_config.yml file
+            Configure the path to the Traefik dynamic config file or fragment directory
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -130,12 +130,15 @@ export default function Configuration() {
             <li>Updating captcha settings</li>
           </ul>
           <div className="pt-2">
-            <p className="text-sm font-semibold text-foreground">Default Path:</p>
+            <p className="text-sm font-semibold text-foreground">Examples:</p>
             <code className="text-sm font-mono">/etc/traefik/dynamic_config.yml</code>
+          </div>
+          <div>
+            <code className="text-sm font-mono">/etc/traefik/rules</code>
           </div>
           <div className="pt-2">
             <p className="text-xs text-muted-foreground">
-              If your Traefik configuration uses a different path or filename, update it here to ensure proper integration with CrowdSec Manager.
+              If your Traefik configuration uses a different file or a directory of YAML fragments, update it here to ensure proper integration with CrowdSec Manager.
             </p>
           </div>
         </CardContent>

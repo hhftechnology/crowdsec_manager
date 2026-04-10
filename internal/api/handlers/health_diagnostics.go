@@ -10,6 +10,7 @@ import (
 	"crowdsec-manager/internal/database"
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/models"
+	"crowdsec-manager/internal/traefikconfig"
 
 	"github.com/buger/jsonparser"
 )
@@ -200,32 +201,27 @@ func checkTraefikIntegrationDiagnostic(dockerClient *docker.Client, db *database
 		AppsecEnabled:        false,
 	}
 
-	configPaths := []string{
-		cfg.TraefikDynamicConfig,
-		cfg.TraefikStaticConfig,
-	}
-
+	dynamicConfigPath := cfg.TraefikDynamicConfig
 	if db != nil {
 		if path, err := db.GetTraefikDynamicConfigPath(); err == nil {
-			configPaths = append([]string{path}, configPaths...)
+			dynamicConfigPath = path
 		}
 	}
 
 	var configContent string
-	var foundConfigPath string
+	var foundConfigPaths []string
 
-	for _, path := range configPaths {
-		output, err := dockerClient.ExecCommand(cfg.TraefikContainerName, []string{"cat", path})
-		if err == nil && output != "" {
-			configContent = output
-			foundConfigPath = path
-			break
-		}
+	if result, err := traefikconfig.ReadContainer(dockerClient, cfg.TraefikContainerName, dynamicConfigPath); err == nil && result.Content != "" {
+		configContent = result.Content
+		foundConfigPaths = append(foundConfigPaths, result.SourcePaths...)
+	} else if output, err := dockerClient.ReadFileFromContainer(cfg.TraefikContainerName, cfg.TraefikStaticConfig); err == nil && output != "" {
+		configContent = output
+		foundConfigPaths = append(foundConfigPaths, cfg.TraefikStaticConfig)
 	}
 
 	if configContent != "" {
 		traefikIntegration.MiddlewareConfigured = true
-		traefikIntegration.ConfigFiles = append(traefikIntegration.ConfigFiles, foundConfigPath)
+		traefikIntegration.ConfigFiles = append(traefikIntegration.ConfigFiles, foundConfigPaths...)
 
 		configLower := strings.ToLower(configContent)
 

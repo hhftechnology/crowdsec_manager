@@ -12,6 +12,7 @@ import (
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
 	"crowdsec-manager/internal/models"
+	"crowdsec-manager/internal/traefikconfig"
 
 	"github.com/buger/jsonparser"
 	"github.com/gin-gonic/gin"
@@ -232,18 +233,15 @@ func CheckIPSecurity(dockerClient *docker.Client, cfg *config.Config) gin.Handle
 			}
 		}
 
-		// 4. Check Traefik dynamic_config.yml for ipWhiteList
-		// Read Traefik dynamic configuration
+		// 4. Check the configured Traefik dynamic config path for ipAllowList/sourceRange.
 		dynamicConfigPaths := append([]string{cfg.TraefikDynamicConfig}, cfg.TraefikDynamicConfigSearch...)
 
 		for _, configPath := range dynamicConfigPaths {
-			traefikData, err := dockerClient.ExecCommand(cfg.TraefikContainerName, []string{
-				"cat", configPath,
-			})
+			readResult, err := traefikconfig.ReadContainer(dockerClient, cfg.TraefikContainerName, configPath)
+			traefikData := readResult.Content
 			if err == nil && traefikData != "" {
-				// Check if IP is in the sourceRange list
-				// Parse YAML to check ipWhiteList.sourceRange
-				if strings.Contains(traefikData, "ipWhiteList") && (strings.Contains(traefikData, ip) || checkIPInCIDRList(ip, traefikData)) {
+				if (strings.Contains(traefikData, "ipWhiteList") || strings.Contains(traefikData, "ipAllowList") || strings.Contains(traefikData, "sourceRange")) &&
+					(strings.Contains(traefikData, ip) || checkIPInCIDRList(ip, traefikData)) {
 					result.InTraefik = true
 					result.IsWhitelisted = true
 					break
