@@ -37,6 +37,9 @@ export default function Sidebar({ isCollapsed, onNavigate }: SidebarProps) {
               <Badge variant="secondary" className="text-[10px] px-1 py-0 h-5 mt-1 w-fit whitespace-nowrap">
               v{import.meta.env.VITE_APP_VERSION}
               </Badge>
+              <Badge variant="secondary" className="text-[10px] px-1 py-0 h-5 mt-1 w-fit whitespace-nowrap">
+              v-Independent
+              </Badge>
             </div>
           </div>
         )}

@@ -1,7 +1,7 @@
 {
-  "name": "crowdsec-manager-mobile",
+  "name": "crowdsec-manager-mobile-independent",
   "private": true,
-  "description": "Mobile companion app for Crowdsec",
+  "description": "Mobile companion app for Crowdsec Independent",
   "version": "2.3.1",
   "type": "module",
   "scripts": {

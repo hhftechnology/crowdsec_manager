@@ -51,6 +51,7 @@ export default function AboutPage() {
           <h2 className="text-xl font-bold">CrowdSec Manager</h2>
           <p className="text-sm text-muted-foreground mt-1">Version {appInfo.version} (Build {appInfo.build})</p>
           <p className="text-xs text-muted-foreground mt-0.5">Capacitor 7 &middot; React 18</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Independent &middot; General Proxy</p>
         </section>
 
         {/* About HHF Technology */}

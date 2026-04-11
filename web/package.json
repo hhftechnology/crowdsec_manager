@@ -1,5 +1,5 @@
 {
-  "name": "crowdsec-manager-ui",
+  "name": "crowdsec-manager-ui-independent",
   "version": "2.3.1",
   "type": "module",
   "scripts": {
