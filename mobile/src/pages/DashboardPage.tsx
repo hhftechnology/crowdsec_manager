@@ -1,6 +1,6 @@
 import { useCallback, useState, type ComponentType } from 'react';
 import { useMountEffect } from '@/hooks/useMountEffect';
-import { RefreshCw, Activity, ShieldCheck, Globe, Server } from 'lucide-react';
+import { RefreshCw, Activity, ShieldCheck, Server } from 'lucide-react';
 import { useApi } from '@/contexts/ApiContext';
 import { PageHeader } from '@/components/PageHeader';
 import { PullToRefresh } from '@/components/PullToRefresh';
@@ -24,7 +24,6 @@ export default function DashboardPage() {
   const [stack, setStack] = useState<StackHealth | null>(null);
   const [crowdsec, setCrowdsec] = useState<CrowdsecHealth | null>(null);
   const [complete, setComplete] = useState<DiagnosticResult | null>(null);
-  const [publicIP, setPublicIP] = useState('');
   const [decisionsTotal, setDecisionsTotal] = useState(0);
   const [alertsCount, setAlertsCount] = useState(0);
   const [topScenarios, setTopScenarios] = useState<Record<string, number>>({});
@@ -36,11 +35,10 @@ export default function DashboardPage() {
     setLoading(true);
     setError(null);
 
-    const [stackRes, crowdsecRes, completeRes, publicRes, alertsRes] = await Promise.allSettled([
+    const [stackRes, crowdsecRes, completeRes, alertsRes] = await Promise.allSettled([
         api.health.getStack(),
         api.health.getCrowdsec(),
         api.health.getComplete(),
-        api.ip.getPublicIP(),
         api.crowdsec.alertsAnalysis({ since: '7d' }).catch(() => null),
       ]);
 
@@ -60,10 +58,6 @@ export default function DashboardPage() {
     if (completeRes.status === 'fulfilled') {
       setComplete(completeRes.value);
       setDecisionsTotal(completeRes.value?.decisions?.length ?? 0);
-    }
-
-    if (publicRes.status === 'fulfilled') {
-      setPublicIP(publicRes.value?.ip || '');
     }
 
     if (alertsRes.status === 'fulfilled' && alertsRes.value && 'alerts' in alertsRes.value) {
@@ -93,9 +87,6 @@ export default function DashboardPage() {
         setAlertsCount(0);
         setRecentAlerts([]);
         setTopScenarios({});
-      }
-      if (publicRes.status !== 'fulfilled') {
-        setPublicIP('');
       }
     }
     setLoading(false);
@@ -130,7 +121,6 @@ export default function DashboardPage() {
           >
             {/* Top stat cards */}
             <div className="grid grid-cols-2 gap-3">
-              <StatCard icon={Globe} title="Public IP" value={publicIP || '—'} />
               <StatCard
                 icon={ShieldCheck}
                 title="CrowdSec"
@@ -297,13 +287,6 @@ function DiagnosticsSummaryPanel({ diagnostics }: { diagnostics: DiagnosticResul
       )}
 
       {/* Traefik integration status */}
-      {diagnostics.traefik_integration && (
-        <>
-          <Separator />
-          <StatusRow label="Traefik Integration" value="Configured" status="success" />
-        </>
-      )}
-
       <Separator />
       <StatusRow label="Timestamp" value={new Date(diagnostics.timestamp).toLocaleString()} />
     </div>

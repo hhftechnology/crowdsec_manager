@@ -53,7 +53,7 @@ COPY --from=backend-builder /app/crowdsec-manager .
 COPY --from=frontend-builder /app/web/dist ./web/dist
 
 # Create necessary directories
-RUN mkdir -p /app/backups /app/logs /app/config /app/data
+RUN mkdir -p /app/logs /app/config /app/data
 
 # Expose port
 EXPOSE 8080

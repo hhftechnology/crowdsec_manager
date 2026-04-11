@@ -26,7 +26,7 @@ type logPattern struct {
 	regex *regexp.Regexp
 }
 
-// NewLogParser creates a parser with patterns for CrowdSec and Traefik logs
+// NewLogParser creates a parser with patterns for CrowdSec and generic logs.
 func NewLogParser() *LogParser {
 	return &LogParser{
 		patterns: []logPattern{
@@ -39,11 +39,6 @@ func NewLogParser() *LogParser {
 				name: "crowdsec_json",
 				// CrowdSec JSON-like: {"level":"info","msg":"something","time":"..."}
 				regex: regexp.MustCompile(`^\{".*"level":"(\w+)".*"msg":"([^"]*)".*"time":"([^"]*)".*\}$`),
-			},
-			{
-				name: "traefik_common",
-				// Traefik Common Log Format: 192.168.1.1 - - [15/Jan/2024:10:30:00 +0000] "GET /path HTTP/1.1" 200 1234
-				regex: regexp.MustCompile(`^(\S+)\s+\S+\s+\S+\s+\[([^\]]+)\]\s+"(\S+\s+\S+\s+\S+)"\s+(\d+)\s+(\d+)`),
 			},
 			{
 				name: "generic_timestamp",
@@ -102,15 +97,6 @@ func (p *LogParser) parseLine(line, source string) StructuredLogEntry {
 			entry.Timestamp = parseTimestamp(matches[3])
 			return entry
 
-		case "traefik_common":
-			entry.Fields["client_ip"] = matches[1]
-			entry.Timestamp = parseTraefikTimestamp(matches[2])
-			entry.Message = matches[3]
-			entry.Fields["status"] = matches[4]
-			entry.Fields["size"] = matches[5]
-			entry.Level = statusToLevel(matches[4])
-			return entry
-
 		case "generic_timestamp":
 			entry.Timestamp = parseTimestamp(matches[1])
 			entry.Level = strings.ToLower(matches[2])
@@ -154,15 +140,6 @@ func parseTimestamp(s string) time.Time {
 	return time.Now()
 }
 
-// parseTraefikTimestamp parses Traefik's CLF timestamp format
-func parseTraefikTimestamp(s string) time.Time {
-	t, err := time.Parse("02/Jan/2006:15:04:05 -0700", s)
-	if err != nil {
-		return time.Now()
-	}
-	return t
-}
-
 // parseKeyValues parses "key=value key2=value2" into a map
 func parseKeyValues(s string, fields map[string]string) {
 	kvRegex := regexp.MustCompile(`(\w+)=(?:"([^"]*)"|(\S+))`)
@@ -174,20 +151,5 @@ func parseKeyValues(s string, fields map[string]string) {
 			value = m[3]
 		}
 		fields[key] = value
-	}
-}
-
-// statusToLevel converts HTTP status code to log level
-func statusToLevel(status string) string {
-	if len(status) == 0 {
-		return "info"
-	}
-	switch status[0] {
-	case '5':
-		return "error"
-	case '4':
-		return "warn"
-	default:
-		return "info"
 	}
 }

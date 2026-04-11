@@ -3,7 +3,6 @@ import { createAllowlistApi } from './allowlist';
 import { createCrowdsecApi } from './crowdsec';
 import { createHealthApi } from './health';
 import { createHubApi } from './hub';
-import { createIPApi } from './ip';
 import { createLogsApi } from './logs';
 import { createScenariosApi } from './scenarios';
 import { createServicesApi } from './services';
@@ -15,7 +14,6 @@ export function createApi(baseUrl: string) {
   return {
     client,
     health: createHealthApi(client),
-    ip: createIPApi(client),
     allowlist: createAllowlistApi(client),
     scenarios: createScenariosApi(client),
     logs: createLogsApi(client),

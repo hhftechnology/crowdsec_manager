@@ -3,11 +3,8 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"strings"
-	"time"
 
-	"crowdsec-manager/internal/constants"
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
 	"crowdsec-manager/internal/models"
@@ -50,78 +47,6 @@ func parseCLIJSONToBytes(output string) ([]byte, error) {
 	return data, nil
 }
 
-// Helper functions for safe type conversion from map[string]interface{}
-func getString(m map[string]interface{}, key string) string {
-	if v, ok := m[key]; ok {
-		if s, ok := v.(string); ok {
-			return s
-		}
-	}
-	return ""
-}
-
-func getInt(m map[string]interface{}, key string) int {
-	if v, ok := m[key]; ok {
-		switch val := v.(type) {
-		case float64:
-			return int(val)
-		case int:
-			return val
-		case int64:
-			return int(val)
-		}
-	}
-	return 0
-}
-
-// calculateUntil calculates the expiration time from created_at and duration
-// Duration format: "3h57m35s", "1h", "30m", etc.
-func calculateUntil(createdAtStr, durationStr string) *time.Time {
-	if createdAtStr == "" || durationStr == "" {
-		return nil
-	}
-
-	// Parse created_at timestamp - try multiple formats
-	var createdAt time.Time
-
-	formats := []string{
-		time.RFC3339,
-		"2006-01-02T15:04:05Z",
-		"2006-01-02 15:04:05 +0000 UTC",
-		time.RFC3339Nano,
-	}
-
-	for _, format := range formats {
-		if t, err := time.Parse(format, createdAtStr); err == nil {
-			createdAt = t
-			break
-		}
-	}
-
-	if createdAt.IsZero() {
-		return nil
-	}
-
-	// Parse duration (e.g., "3h57m35s", "1h", "30m")
-	duration, err := time.ParseDuration(durationStr)
-	if err != nil {
-		return nil
-	}
-
-	// Calculate until time
-	until := createdAt.Add(duration)
-	return &until
-}
-
-func activeFilters(c *gin.Context) map[string]string {
-	filters := make(map[string]string)
-	for _, key := range []string{"since", "until", "type", "scope", "origin", "value", "scenario", "ip", "range"} {
-		if val := c.Query(key); val != "" && val != "all" {
-			filters[key] = val
-		}
-	}
-	return filters
-}
 
 // GetConsoleStatusHelper executes the console status command and parses the result
 func GetConsoleStatusHelper(dockerClient interface {
@@ -209,14 +134,6 @@ func GetConsoleStatusHelper(dockerClient interface {
 	}
 
 	return status, nil
-}
-
-// errString safely converts an error to a string, returning "" for nil.
-func errString(err error) string {
-	if err == nil {
-		return ""
-	}
-	return err.Error()
 }
 
 // parseDecisionNode extracts a models.Decision from a jsonparser byte slice.
@@ -329,26 +246,3 @@ func appendCLIFlags(cmd []string, flags []CLIFlag) ([]string, int) {
 	return cmd, count
 }
 
-// getExternalIP tries each external IP service in order and returns the first
-// successful result. Used by both GetPublicIP and WhitelistCurrentIP.
-func getExternalIP() (string, error) {
-	var lastErr error
-	for _, service := range constants.ExternalIPServices {
-		resp, err := constants.ExternalHTTPClient.Get(service)
-		if err != nil {
-			lastErr = err
-			continue
-		}
-		body, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if err != nil {
-			lastErr = err
-			continue
-		}
-		ip := strings.TrimSpace(string(body))
-		if ip != "" {
-			return ip, nil
-		}
-	}
-	return "", fmt.Errorf("all IP services failed: %w", lastErr)
-}

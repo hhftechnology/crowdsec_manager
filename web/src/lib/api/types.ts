@@ -64,73 +64,11 @@ export interface Bouncer {
   status?: string
 }
 
-export interface IPInfo {
-  ip: string
-  is_blocked: boolean
-  is_whitelisted: boolean
-  in_crowdsec: boolean
-  in_traefik: boolean
-}
-
-export interface WhitelistRequest {
-  ip: string
-  cidr?: string
-  add_to_crowdsec: boolean
-  add_to_traefik: boolean
-  comprehensive?: boolean
-}
-
-export interface Backup {
-  id: string
-  filename: string
-  path: string
-  size: number
-  created_at: string
-}
-
-export interface BackupRequest {
-  items?: string[]
-  dry_run: boolean
-}
-
-export interface RestoreRequest {
-  backup_id: string
-  confirm: boolean
-}
-
-export interface UpdateRequest {
-  pangolin_tag?: string
-  gerbil_tag?: string
-  traefik_tag?: string
-  crowdsec_tag?: string
-  include_crowdsec: boolean
-}
-
-export interface ImageTags {
-  pangolin: string
-  gerbil: string
-  traefik: string
-  crowdsec?: string
-}
-
 export interface LogEntry {
   timestamp: string
   level: string
   service: string
   message: string
-}
-
-export interface LogStats {
-  total_lines: number
-  top_ips: IPCount[]
-  status_codes: Record<string, number>
-  http_methods: Record<string, number>
-  error_entries: LogEntry[]
-}
-
-export interface IPCount {
-  ip: string
-  count: number
 }
 
 export interface Scenario {
@@ -143,57 +81,17 @@ export interface ScenarioSetupRequest {
   scenarios: Scenario[]
 }
 
-export interface CaptchaSetupRequest {
-  provider: string
-  site_key: string
-  secret_key: string
-}
-
-export interface CaptchaStatus {
-  configured: boolean
-  configSaved: boolean
-  provider?: string
-  detectedProvider?: string
-  savedProvider?: string
-  captchaHTMLExists: boolean
-  hasHTMLPath: boolean
-  implemented: boolean
-  site_key?: string
-  secret_key?: string
-  manually_configured?: boolean
-}
-
-export interface CronJobRequest {
-  schedule: string
-  task: string
-}
-
 export interface Metric {
   name: string
   value: number
   labels?: Record<string, string>
 }
 
-export interface TraefikIntegration {
-  middleware_configured: boolean
-  config_files: string[]
-  lapi_key_found: boolean
-  appsec_enabled: boolean
-  captcha_enabled: boolean
-  captcha_provider?: string
-  captcha_html_exists: boolean
-}
-
 export interface DiagnosticResult {
   health: HealthStatus
   bouncers: Bouncer[]
   decisions: Decision[]
-  traefik_integration: TraefikIntegration
   timestamp: string
-}
-
-export interface UnbanRequest {
-  ip: string
 }
 
 export interface ServiceActionRequest {
@@ -230,16 +128,6 @@ export interface ScenarioItem {
   utf8_status?: string
   status?: string
   version?: string
-}
-
-export interface CronJob {
-  id: string
-  schedule: string
-  task: string
-  status?: string
-  enabled?: boolean
-  last_run?: string
-  next_run?: string
 }
 
 export interface ServiceInfo {
@@ -294,14 +182,6 @@ export interface AxiosErrorResponse {
   }
 }
 
-export interface ConfigPathRequest {
-  dynamic_config_path: string
-}
-
-export interface ConfigPathResponse {
-  dynamic_config_path: string
-}
-
 export interface Allowlist {
   name: string
   description: string
@@ -346,13 +226,6 @@ export interface AllowlistImportResult {
   skipped_invalid: number
   skipped_private: number
   skipped_duplicates: number
-}
-
-export interface ServiceUpdateStatus {
-  current_tag: string
-  latest_warning: boolean
-  update_available: boolean
-  error?: string
 }
 
 export interface DecisionFilters {
@@ -451,32 +324,6 @@ export interface StructuredLogEntry {
   message: string
   fields?: Record<string, string>
   raw: string
-}
-
-export interface FeatureConfig {
-  id: number
-  feature: string
-  config_json: string
-  source: string
-  applied: boolean
-  applied_at?: string
-  created_at: string
-  updated_at: string
-}
-
-export interface FeatureDetectionResult {
-  detected_values: Record<string, unknown>
-  sources: Record<string, boolean>
-  db_config: FeatureConfig | null
-  status: 'not_configured' | 'partially_configured' | 'configured' | 'applied'
-}
-
-export interface StepResult {
-  step: number
-  name: string
-  success: boolean
-  error?: string
-  skipped?: boolean
 }
 
 // History re-insertion types
