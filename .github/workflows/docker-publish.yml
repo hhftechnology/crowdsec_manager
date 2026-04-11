@@ -3,14 +3,14 @@ name: Docker Build and Push
 on:
   push:
     branches:
-      - main
-      - dev
+      - independent
+      - independent-dev
       - pangolin
     tags:
       - 'v*'
   pull_request:
     branches:
-      - main
+      - independent
 
 env:
   IMAGE_NAME: crowdsec-manager
