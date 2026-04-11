@@ -1,9 +1,15 @@
 package handlers
 
 import (
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"crowdsec-manager/internal/config"
+	"crowdsec-manager/internal/docker"
+
+	"github.com/gin-gonic/gin"
 )
 
 // ---- resolveCrowdsecLogService tests ----
@@ -77,5 +83,47 @@ func TestResolveCrowdsecLogService_CustomContainerName(t *testing.T) {
 	_, ok = resolveCrowdsecLogService("crowdsec-other", cfg)
 	if ok {
 		t.Error("non-matching name should not resolve")
+	}
+}
+
+func TestStreamLogs_InvalidServiceWebSocketUpgradeReturnsPlainText(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := newTestConfig("crowdsec")
+	router := gin.New()
+	router.GET("/logs/stream/:service", StreamLogs(&docker.Client{}, cfg))
+
+	req := httptest.NewRequest(http.MethodGet, "/logs/stream/not-crowdsec", nil)
+	req.Header.Set("Upgrade", "websocket")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status: got %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+	if !strings.Contains(rec.Body.String(), "Only crowdsec logs are supported") {
+		t.Fatalf("expected plain-text error body, got %q", rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), "\"success\"") {
+		t.Fatalf("expected non-JSON response for websocket upgrade, got %q", rec.Body.String())
+	}
+}
+
+func TestStreamLogs_InvalidServiceWithoutUpgradeReturnsJSON(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := newTestConfig("crowdsec")
+	router := gin.New()
+	router.GET("/logs/stream/:service", StreamLogs(&docker.Client{}, cfg))
+
+	req := httptest.NewRequest(http.MethodGet, "/logs/stream/not-crowdsec", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status: got %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+	if !strings.Contains(rec.Body.String(), "\"success\":false") {
+		t.Fatalf("expected JSON error body, got %q", rec.Body.String())
 	}
 }

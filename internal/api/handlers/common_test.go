@@ -182,7 +182,6 @@ func TestParseDecisionsFromOutput(t *testing.T) {
 		input     string
 		wantCount int
 		wantErr   bool
-		checkFunc func(t *testing.T, decisions []interface{ GetValue() string })
 	}{
 		{
 			name:      "no json input",
@@ -205,20 +204,20 @@ func TestParseDecisionsFromOutput(t *testing.T) {
 			wantErr:   false,
 		},
 		{
-			name: "flat decision array (cscli decisions add format)",
-			input: `[{"id":1,"type":"ban","value":"1.2.3.4","scope":"Ip","origin":"cscli","duration":"4h","scenario":"manual"}]`,
+			name:      "flat decision array (cscli decisions add format)",
+			input:     `[{"id":1,"type":"ban","value":"1.2.3.4","scope":"Ip","origin":"cscli","duration":"4h","scenario":"manual"}]`,
 			wantCount: 1,
 			wantErr:   false,
 		},
 		{
-			name: "nested decisions in alerts",
-			input: `[{"id":10,"created_at":"2024-01-01T00:00:00Z","decisions":[{"id":1,"type":"ban","value":"1.2.3.4","scope":"Ip"},{"id":2,"type":"ban","value":"5.6.7.8","scope":"Ip"}]}]`,
+			name:      "nested decisions in alerts",
+			input:     `[{"id":10,"created_at":"2024-01-01T00:00:00Z","decisions":[{"id":1,"type":"ban","value":"1.2.3.4","scope":"Ip"},{"id":2,"type":"ban","value":"5.6.7.8","scope":"Ip"}]}]`,
 			wantCount: 2,
 			wantErr:   false,
 		},
 		{
-			name: "multiple alerts with decisions",
-			input: `[{"id":1,"decisions":[{"id":10,"type":"ban","value":"1.1.1.1"}]},{"id":2,"decisions":[{"id":11,"type":"captcha","value":"2.2.2.2"}]}]`,
+			name:      "multiple alerts with decisions",
+			input:     `[{"id":1,"decisions":[{"id":10,"type":"ban","value":"1.1.1.1"}]},{"id":2,"decisions":[{"id":11,"type":"captcha","value":"2.2.2.2"}]}]`,
 			wantCount: 2,
 			wantErr:   false,
 		},

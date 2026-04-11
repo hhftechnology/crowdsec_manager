@@ -3,6 +3,7 @@ package handlers
 import (
 	"fmt"
 	"net/http"
+	"strings"
 
 	"crowdsec-manager/internal/config"
 	"crowdsec-manager/internal/docker"
@@ -11,6 +12,18 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+func pastTenseServiceAction(action string) string {
+	pastTenseMap := map[string]string{
+		"stop":    "stopped",
+		"start":   "started",
+		"restart": "restarted",
+	}
+	if pastTense, ok := pastTenseMap[action]; ok {
+		return pastTense
+	}
+	return action + "ed"
+}
 
 // VerifyServices verifies all services are running
 func VerifyServices(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
@@ -50,11 +63,22 @@ func GracefulShutdown(dockerClient *docker.Client, cfg *config.Config) gin.Handl
 			services[i], services[j] = services[j], services[i]
 		}
 
+		failedServices := make([]string, 0)
 		for _, service := range services {
 			logger.Info("Stopping service", "service", service)
 			if err := dockerClient.StopContainerWithTimeout(service, 30); err != nil {
 				logger.Error("Failed to stop service", "service", service, "error", err)
+				failedServices = append(failedServices, service)
 			}
+		}
+
+		if len(failedServices) > 0 {
+			c.JSON(http.StatusMultiStatus, models.Response{
+				Success: false,
+				Message: fmt.Sprintf("Failed to stop %d service(s): %s", len(failedServices), strings.Join(failedServices, ", ")),
+				Data:    gin.H{"failedServices": failedServices},
+			})
+			return
 		}
 
 		c.JSON(http.StatusOK, models.Response{Success: true, Message: "Services shutdown successfully"})
@@ -105,7 +129,7 @@ func ServiceAction(dockerClient *docker.Client, cfg *config.Config) gin.HandlerF
 
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
-			Message: fmt.Sprintf("Service %s %sed successfully", containerName, req.Action),
+			Message: fmt.Sprintf("Service %s %s successfully", containerName, pastTenseServiceAction(req.Action)),
 		})
 	}
 }

@@ -62,7 +62,7 @@ func GetServiceLogs(dockerClient *docker.Client, cfg *config.Config) gin.Handler
 
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
-			Data:    gin.H{"logs": logs, "service": "crowdsec"},
+			Data:    gin.H{"logs": logs, "service": service},
 		})
 	}
 }
@@ -82,6 +82,12 @@ func StreamLogs(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc
 		serviceParam := c.Param("service")
 		service, ok := resolveCrowdsecLogService(serviceParam, cfg)
 		if !ok {
+			upgradeHeader := c.GetHeader("Upgrade")
+			if strings.EqualFold(upgradeHeader, "websocket") || strings.EqualFold(c.Request.Header.Get("Upgrade"), "websocket") {
+				c.Header("Connection", "close")
+				c.String(http.StatusBadRequest, "Only crowdsec logs are supported")
+				return
+			}
 			c.JSON(http.StatusBadRequest, models.Response{Success: false, Error: "Only crowdsec logs are supported"})
 			return
 		}
@@ -217,7 +223,7 @@ func GetStructuredLogs(dockerClient *docker.Client, cfg *config.Config) gin.Hand
 			Data: gin.H{
 				"entries": entries,
 				"count":   len(entries),
-				"service": "crowdsec",
+				"service": service,
 			},
 		})
 	}

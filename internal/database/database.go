@@ -4,6 +4,7 @@ import (
 	"crowdsec-manager/internal/models"
 	"database/sql"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -85,12 +86,114 @@ func (d *Database) initSchema() error {
 	// Migration for older schemas that predate enroll_disable_context.
 	d.db.Exec("ALTER TABLE settings ADD COLUMN enroll_disable_context INTEGER NOT NULL DEFAULT 0") //nolint:errcheck
 
+	if err := d.migrateSettingsSchema(); err != nil {
+		log.Printf("database settings migration failed: %v", err)
+		return fmt.Errorf("failed settings migration: %w", err)
+	}
+
 	insertDefaults := `
 	INSERT OR IGNORE INTO settings (id, enroll_disable_context)
 	VALUES (1, 0);
 	`
 	_, err := d.db.Exec(insertDefaults)
 	return err
+}
+
+func (d *Database) migrateSettingsSchema() error {
+	rows, err := d.db.Query("PRAGMA table_info(settings)")
+	if err != nil {
+		return fmt.Errorf("failed to inspect settings schema: %w", err)
+	}
+	defer rows.Close()
+
+	desiredColumns := map[string]struct{}{
+		"id":                     {},
+		"enroll_disable_context": {},
+	}
+
+	legacyColumns := make([]string, 0)
+	hasEnrollDisableContext := false
+
+	for rows.Next() {
+		var (
+			cid      int
+			name     string
+			colType  string
+			notNull  int
+			defaultV sql.NullString
+			pk       int
+		)
+		if err := rows.Scan(&cid, &name, &colType, &notNull, &defaultV, &pk); err != nil {
+			return fmt.Errorf("failed to scan settings schema row: %w", err)
+		}
+		if name == "enroll_disable_context" {
+			hasEnrollDisableContext = true
+		}
+		if _, ok := desiredColumns[name]; !ok {
+			legacyColumns = append(legacyColumns, name)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("failed reading settings schema rows: %w", err)
+	}
+
+	if len(legacyColumns) == 0 {
+		return nil
+	}
+
+	log.Printf("migrating settings table; removing legacy columns: %s", strings.Join(legacyColumns, ", "))
+
+	tx, err := d.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to start settings migration transaction: %w", err)
+	}
+	rollback := func(cause error) error {
+		if rbErr := tx.Rollback(); rbErr != nil {
+			return fmt.Errorf("%v (rollback failed: %w)", cause, rbErr)
+		}
+		return cause
+	}
+
+	if _, err := tx.Exec(`
+		CREATE TABLE settings_new (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			enroll_disable_context INTEGER NOT NULL DEFAULT 0
+		);
+	`); err != nil {
+		return rollback(fmt.Errorf("failed to create settings_new table: %w", err))
+	}
+
+	copyQuery := `
+		INSERT INTO settings_new (id, enroll_disable_context)
+		SELECT id, enroll_disable_context
+		FROM settings;
+	`
+	if !hasEnrollDisableContext {
+		copyQuery = `
+			INSERT INTO settings_new (id, enroll_disable_context)
+			SELECT id, 0
+			FROM settings;
+		`
+	}
+
+	if _, err := tx.Exec(copyQuery); err != nil {
+		return rollback(fmt.Errorf("failed to copy settings rows: %w", err))
+	}
+
+	if _, err := tx.Exec("DROP TABLE settings;"); err != nil {
+		return rollback(fmt.Errorf("failed to drop legacy settings table: %w", err))
+	}
+
+	if _, err := tx.Exec("ALTER TABLE settings_new RENAME TO settings;"); err != nil {
+		return rollback(fmt.Errorf("failed to rename settings_new table: %w", err))
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit settings migration: %w", err)
+	}
+
+	log.Printf("settings table migration completed; removed columns: %s", strings.Join(legacyColumns, ", "))
+	return nil
 }
 
 // GetSettings retrieves the current application settings from database.

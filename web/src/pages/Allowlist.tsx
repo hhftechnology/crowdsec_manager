@@ -149,7 +149,7 @@ export default function Allowlist() {
         <AlertTitle>About CrowdSec Allowlists</AlertTitle>
         <AlertDescription>
           <strong>Allowlists</strong> are CrowdSec's centralized IP-based filtering at the LAPI level, affecting all security decisions.
-          They only support IPs and CIDR ranges. For more granular filtering based on URLs or other log elements, use parser or profile rules.
+          They only support IPs and CIDR ranges. For more granular filtering based on URLs or other log elements, use parsers or profile rules.
         </AlertDescription>
       </Alert>
 

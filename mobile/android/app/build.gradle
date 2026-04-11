@@ -25,7 +25,7 @@ android {
     namespace "com.crowdsec.manager.mobile"
     compileSdk rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.crowdsec.manager.mobile"
+        applicationId "com.crowdsec.manager.independent"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode generatedVersionCode

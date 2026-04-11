@@ -58,6 +58,9 @@ func main() {
 	defer multiHost.Close()
 
 	dockerClient := multiHost.DefaultClient()
+	if err := checkPrerequisites(dockerClient, cfg); err != nil {
+		logger.Fatal("Prerequisite check failed", "error", err)
+	}
 
 	hub := messaging.NewHub()
 	go hub.Run()
@@ -185,8 +188,7 @@ func bridgeNATSToHub(cfg *config.Config, hub *messaging.Hub) {
 	logger.Info("NATS-to-WebSocket bridge started")
 }
 
-// checkPrerequisites verifies that Docker daemon is running and required containers exist
-// This function is defined but not currently called in main - consider adding prerequisite checks if needed
+// checkPrerequisites verifies that Docker daemon is running and required containers exist.
 func checkPrerequisites(client *docker.Client, cfg *config.Config) error {
 	logger.Info("Checking prerequisites...")
 
@@ -199,13 +201,12 @@ func checkPrerequisites(client *docker.Client, cfg *config.Config) error {
 	for _, name := range containers {
 		exists, err := client.ContainerExists(name)
 		if err != nil {
-			logger.Warn("Failed to check container", "name", name, "error", err)
-			continue
+			return fmt.Errorf("failed to check container %s: %w", name, err)
 		}
 		if exists {
 			logger.Info("  Container exists", "name", name)
 		} else {
-			logger.Warn("  Container not found", "name", name)
+			return fmt.Errorf("required container not found: %s", name)
 		}
 	}
 
