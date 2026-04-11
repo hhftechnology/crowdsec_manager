@@ -1,10 +1,6 @@
-version: '3.8'
-
 services:
   crowdsec-manager:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: hhftechnology/crowdsec-manager:independent
     container_name: crowdsec-manager
     restart: unless-stopped
     ports:

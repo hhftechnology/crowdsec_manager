@@ -14,13 +14,14 @@ CrowdSec Manager is a web-based management interface for CrowdSec operations, Tr
 
 ## Stable release
 
-- Current baseline: `2.3.0`
-- Multi-proxy support: not available in this release
+- Current baseline: `2.3.1`
+- Multi-proxy support: hhftechnology/crowdsec-manager:independent
+- Docker image size (linux/amd64): <!-- IMAGE_SIZE_START -->{{IMAGE_SIZE}}<!-- IMAGE_SIZE_END -->
 
 ### Crowdsec-Manager mobile app.
 
 <div align="center">
-<a href="https://apps.apple.com/us/app/#"><img width="135" height="39" alt="appstore" src="https://github.com/user-attachments/assets/45e31a11-cf6b-40a2-a083-6dc8d1f01291" /></a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://play.google.com/store/apps/details?id=com.crowdsec.manager.mobile"><img width="135" height="39" alt="googleplay" src="https://github.com/user-attachments/assets/acbba639-858f-4c74-85c7-92a4096efbf5" /></a>
+<a href="https://apps.apple.com/us/app/#"><img width="135" height="39" alt="appstore" src="https://github.com/user-attachments/assets/45e31a11-cf6b-40a2-a083-6dc8d1f01291" /></a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://play.google.com/store/apps/details?id=com.crowdsec.manager.independent"><img width="135" height="39" alt="googleplay" src="https://github.com/user-attachments/assets/acbba639-858f-4c74-85c7-92a4096efbf5" /></a>
 </div>
 
 ## Images
@@ -121,26 +122,26 @@ services:
     restart: unless-stopped
 
   crowdsec-manager:
-    image: hhftechnology/crowdsec-manager:latest
-    container_name: crowdsec-manager
+    image: hhftechnology/crowdsec-manager:independent
+    container_name: crowdsec-manager-independent
     network_mode: service:tailscale # This is the magic: it merges networking with the Tailscale container
     depends_on:
       - tailscale
     restart: unless-stopped
     # 'expose' and 'networks' are removed here because Tailscale manages the network connection now
     environment:
-      # Core Configuration
       - PORT=8080
       - ENVIRONMENT=production
-      - TRAEFIK_DYNAMIC_CONFIG=/etc/traefik/dynamic_config.yml
-      - TRAEFIK_CONTAINER_NAME=traefik
-      - TRAEFIK_STATIC_CONFIG=/etc/traefik/traefik_config.yml
-      - CROWDSEC_METRICS_URL=http://crowdsec:6060/metrics
+      - LOG_LEVEL=info
+      - LOG_FILE=/app/logs/crowdsec-manager.log
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - CONFIG_DIR=/app/config
+      - DATABASE_PATH=/app/data/settings.db
+      - INCLUDE_CROWDSEC=true
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - /root/config:/app/config
-      - /root/docker-compose.yml:/app/docker-compose.yml
-      - ./backups:/app/config/backups
+      - ./config:/app/config
+      - ./logs/app:/app/logs
       - ./data:/app/data
 
 networks:
