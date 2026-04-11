@@ -41,26 +41,7 @@ export interface DiagnosticResult {
   health: StackHealth | null;
   bouncers: Bouncer[];
   decisions: Decision[];
-  traefik_integration?: Record<string, unknown>;
   timestamp: string;
-}
-
-export interface PublicIP {
-  ip: string;
-}
-
-export interface IPBlockedStatus {
-  ip: string;
-  blocked: boolean;
-  reason?: string;
-}
-
-export interface IPSecurity {
-  ip: string;
-  is_blocked: boolean;
-  is_whitelisted: boolean;
-  in_crowdsec: boolean;
-  in_traefik: boolean;
 }
 
 export interface Decision {
@@ -203,14 +184,6 @@ export interface StructuredLogEntry {
   level: string;
   service: string;
   message: string;
-}
-
-export interface LogStats {
-  total_lines: number;
-  top_ips: Array<{ ip: string; count: number }>;
-  status_codes: Record<string, number>;
-  http_methods: Record<string, number>;
-  error_entries: StructuredLogEntry[];
 }
 
 export interface StructuredLogsResponse {

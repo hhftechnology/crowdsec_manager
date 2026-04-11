@@ -15,9 +15,6 @@ function createBaseApi() {
       getCrowdsec: vi.fn(),
       getComplete: vi.fn(),
     },
-    ip: {
-      getPublicIP: vi.fn(),
-    },
     crowdsec: {
       alertsAnalysis: vi.fn(),
     },
@@ -31,7 +28,6 @@ describe('DashboardPage', () => {
     api.health.getStack.mockReturnValue(new Promise(() => {}));
     api.health.getCrowdsec.mockReturnValue(new Promise(() => {}));
     api.health.getComplete.mockReturnValue(new Promise(() => {}));
-    api.ip.getPublicIP.mockReturnValue(new Promise(() => {}));
     api.crowdsec.alertsAnalysis.mockReturnValue(new Promise(() => {}));
     mockUseApi.mockReturnValue({ api });
 
@@ -54,12 +50,10 @@ describe('DashboardPage', () => {
       timestamp: '2026-03-20T12:00:00Z',
     });
     api.health.getComplete.mockResolvedValue({
-      bouncers: [{ name: 'traefik', valid: true, ip_address: '10.0.0.1' }],
+      bouncers: [{ name: 'crowdsec', valid: true, ip_address: '10.0.0.1' }],
       decisions: [{ id: '1' }],
-      traefik_integration: true,
       timestamp: '2026-03-20T12:00:00Z',
     });
-    api.ip.getPublicIP.mockRejectedValue(new TypeError('Failed to fetch'));
     api.crowdsec.alertsAnalysis.mockResolvedValue(null);
     mockUseApi.mockReturnValue({ api });
 
@@ -79,7 +73,6 @@ describe('DashboardPage', () => {
     api.health.getStack.mockRejectedValue(new TypeError('Failed to fetch'));
     api.health.getCrowdsec.mockRejectedValue(new TypeError('Failed to fetch'));
     api.health.getComplete.mockRejectedValue(new TypeError('Failed to fetch'));
-    api.ip.getPublicIP.mockResolvedValue({ ip: '1.2.3.4' });
     api.crowdsec.alertsAnalysis.mockResolvedValue(null);
     mockUseApi.mockReturnValue({ api });
 

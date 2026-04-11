@@ -172,90 +172,12 @@ func (b Bouncer) LastActivity() time.Time {
 	return time.Time{}
 }
 
-// IPInfo represents IP address information
-type IPInfo struct {
-	IP            string `json:"ip"`
-	IsBlocked     bool   `json:"is_blocked"`
-	IsWhitelisted bool   `json:"is_whitelisted"`
-	InCrowdSec    bool   `json:"in_crowdsec"`
-	InTraefik     bool   `json:"in_traefik"`
-}
-
-// WhitelistRequest represents a whitelist request
-type WhitelistRequest struct {
-	IP            string `json:"ip"`
-	CIDR          string `json:"cidr,omitempty"`
-	AddToCrowdSec bool   `json:"add_to_crowdsec"`
-	AddToTraefik  bool   `json:"add_to_traefik"`
-	Comprehensive bool   `json:"comprehensive,omitempty"`
-}
-
-// WhitelistDeleteRequest represents a request to remove an IP from whitelists
-type WhitelistDeleteRequest struct {
-	IP                 string `json:"ip" binding:"required"`
-	RemoveFromCrowdSec bool   `json:"remove_from_crowdsec"`
-	RemoveFromTraefik  bool   `json:"remove_from_traefik"`
-}
-
-// Backup represents a backup
-type Backup struct {
-	ID        string    `json:"id"`
-	Filename  string    `json:"filename"`
-	Path      string    `json:"path"`
-	Size      int64     `json:"size"`
-	CreatedAt time.Time `json:"created_at"`
-}
-
-// BackupRequest represents a backup request
-type BackupRequest struct {
-	Items  []string `json:"items,omitempty"`
-	DryRun bool     `json:"dry_run"`
-}
-
-// RestoreRequest represents a restore request
-type RestoreRequest struct {
-	BackupID string `json:"backup_id"`
-	Confirm  bool   `json:"confirm"`
-}
-
-// UpdateRequest represents an update request
-type UpdateRequest struct {
-	PangolinTag     string `json:"pangolin_tag,omitempty"`
-	GerbilTag       string `json:"gerbil_tag,omitempty"`
-	TraefikTag      string `json:"traefik_tag,omitempty"`
-	CrowdSecTag     string `json:"crowdsec_tag,omitempty"`
-	IncludeCrowdSec bool   `json:"include_crowdsec"`
-}
-
-// ImageTags represents current Docker image tags
-type ImageTags struct {
-	Pangolin string `json:"pangolin"`
-	Gerbil   string `json:"gerbil"`
-	Traefik  string `json:"traefik"`
-	CrowdSec string `json:"crowdsec,omitempty"`
-}
-
 // LogEntry represents a log entry
 type LogEntry struct {
 	Timestamp time.Time `json:"timestamp"`
 	Level     string    `json:"level"`
 	Service   string    `json:"service"`
 	Message   string    `json:"message"`
-}
-
-// LogStats represents log statistics
-type LogStats struct {
-	TotalLines   int            `json:"total_lines"`
-	TopIPs       []IPCount      `json:"top_ips"`
-	StatusCodes  map[string]int `json:"status_codes"`
-	HTTPMethods  map[string]int `json:"http_methods"`
-	ErrorEntries []LogEntry     `json:"error_entries"`
-}
-
-// IPCount represents IP address count
-type IPCount struct {
-	IP    string `json:"ip"`
-	Count int    `json:"count"`
 }
 
 // ScenarioSetupRequest represents custom scenario setup request
@@ -270,19 +192,6 @@ type Scenario struct {
 	Content     string `json:"content"`
 }
 
-// CaptchaSetupRequest represents captcha setup request
-type CaptchaSetupRequest struct {
-	Provider  string `json:"provider"`
-	SiteKey   string `json:"site_key"`
-	SecretKey string `json:"secret_key"`
-}
-
-// CronJobRequest represents a cron job setup request
-type CronJobRequest struct {
-	Schedule string `json:"schedule"`
-	Task     string `json:"task"`
-}
-
 // Metric represents a Prometheus metric
 type Metric struct {
 	Name   string            `json:"name"`
@@ -290,40 +199,18 @@ type Metric struct {
 	Labels map[string]string `json:"labels,omitempty"`
 }
 
-// TraefikIntegration represents Traefik-CrowdSec integration status
-type TraefikIntegration struct {
-	MiddlewareConfigured bool     `json:"middleware_configured"`
-	ConfigFiles          []string `json:"config_files"`
-	LapiKeyFound         bool     `json:"lapi_key_found"`
-	AppsecEnabled        bool     `json:"appsec_enabled"`
-	CaptchaEnabled       bool     `json:"captcha_enabled"`
-	CaptchaProvider      string   `json:"captcha_provider,omitempty"`
-	CaptchaHTMLExists    bool     `json:"captcha_html_exists"`
-}
-
 // DiagnosticResult represents complete diagnostic results
 type DiagnosticResult struct {
-	Health             *HealthStatus       `json:"health"`
-	Bouncers           []Bouncer           `json:"bouncers"`
-	Decisions          []Decision          `json:"decisions"`
-	TraefikIntegration *TraefikIntegration `json:"traefik_integration"`
-	Timestamp          time.Time           `json:"timestamp"`
-}
-
-// UnbanRequest represents an unban request
-type UnbanRequest struct {
-	IP string `json:"ip" binding:"required"`
+	Health    *HealthStatus `json:"health"`
+	Bouncers  []Bouncer     `json:"bouncers"`
+	Decisions []Decision    `json:"decisions"`
+	Timestamp time.Time     `json:"timestamp"`
 }
 
 // ServiceAction represents a service action (start/stop/restart)
 type ServiceAction struct {
 	Service string `json:"service" binding:"required"`
 	Action  string `json:"action" binding:"required"` // start, stop, restart
-}
-
-// ConfigPathRequest represents a configuration path update request
-type ConfigPathRequest struct {
-	DynamicConfigPath string `json:"dynamic_config_path" binding:"required"`
 }
 
 // Allowlist represents a CrowdSec allowlist
@@ -375,19 +262,6 @@ type AllowlistInspectResponse struct {
 	Count       int              `json:"count,omitempty"` // Number of items
 }
 
-// DiscordConfig represents the configuration for Discord notifications
-type DiscordConfig struct {
-	Enabled            bool   `json:"enabled"`
-	WebhookID          string `json:"webhook_id"`
-	WebhookToken       string `json:"webhook_token"`
-	GeoapifyKey        string `json:"geoapify_key"`
-	CrowdSecCTIKey     string `json:"crowdsec_cti_api_key"`
-	CrowdSecRestarted  bool   `json:"crowdsec_restarted,omitempty"`  // Status flag
-	ManuallyConfigured bool   `json:"manually_configured,omitempty"` // Indicates if config was manually added by user
-	ConfigSource       string `json:"config_source,omitempty"`       // Where config was found: "database", "container", "both"
-	RawYAML            string `json:"raw_yaml,omitempty"`            // Raw YAML for advanced editing mode
-}
-
 // ConsoleStatus represents the CrowdSec Console enrollment status
 type ConsoleStatus struct {
 	Enrolled          bool   `json:"enrolled"`
@@ -400,48 +274,6 @@ type ConsoleStatus struct {
 	Context           bool   `json:"context"`
 	Custom            bool   `json:"custom"`
 	Tainted           bool   `json:"tainted"`
-}
-
-// ConfigSnapshot represents a stored configuration file snapshot
-type ConfigSnapshot struct {
-	ID          int    `json:"id"`
-	ConfigType  string `json:"config_type"`
-	FilePath    string `json:"file_path"`
-	Content     string `json:"content"`
-	ContentHash string `json:"content_hash"`
-	Source      string `json:"source"`
-	CreatedAt   string `json:"created_at"`
-	UpdatedAt   string `json:"updated_at"`
-}
-
-// ConfigValidationResult represents the validation status of a single config file
-type ConfigValidationResult struct {
-	ConfigType string `json:"config_type"`
-	FilePath   string `json:"file_path"`
-	Status     string `json:"status"`
-	Message    string `json:"message"`
-	DBHash     string `json:"db_hash,omitempty"`
-	LiveHash   string `json:"live_hash,omitempty"`
-}
-
-// ConfigValidationReport represents a full validation report across all configs
-type ConfigValidationReport struct {
-	Timestamp string                   `json:"timestamp"`
-	Overall   string                   `json:"overall"`
-	Results   []ConfigValidationResult `json:"results"`
-}
-
-// ProfileRequest represents the request to update profiles.yaml
-type ProfileRequest struct {
-	Content string `json:"content"`
-	Restart bool   `json:"restart"`
-}
-
-// ProfileHistory represents a historical version of profiles.yaml
-type ProfileHistory struct {
-	ID        int       `json:"id"`
-	Content   string    `json:"content"`
-	CreatedAt time.Time `json:"created_at"`
 }
 
 // HubItem represents a CrowdSec hub item (scenario, parser, collection, or postoverflow)
@@ -511,27 +343,6 @@ type HubOperationFilter struct {
 type SimulationRequest struct {
 	Scenario string `json:"scenario" binding:"required"`
 	Enabled  bool   `json:"enabled"`
-}
-
-// FeatureConfig stores configuration for features like captcha and notifications.
-// Config is saved to DB before being applied to files, surviving container rebuilds.
-type FeatureConfig struct {
-	ID         int    `json:"id"`
-	Feature    string `json:"feature"`     // "captcha" | "discord_notifications"
-	ConfigJSON string `json:"config_json"` // Full config as JSON
-	Source     string `json:"source"`      // "user" | "detected" | "imported"
-	Applied    bool   `json:"applied"`
-	AppliedAt  string `json:"applied_at,omitempty"`
-	CreatedAt  string `json:"created_at"`
-	UpdatedAt  string `json:"updated_at"`
-}
-
-// FeatureDetectionResult represents what was found when scanning for existing config.
-type FeatureDetectionResult struct {
-	DetectedValues map[string]interface{} `json:"detected_values"`
-	Sources        map[string]bool        `json:"sources"`
-	DBConfig       *FeatureConfig         `json:"db_config"`
-	Status         string                 `json:"status"` // "not_configured" | "partially_configured" | "configured" | "applied"
 }
 
 // HistoryConfig stores retention settings for CrowdSec history data.

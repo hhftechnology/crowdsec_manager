@@ -32,7 +32,3 @@ export { TimeDisplay, formatDuration, expiresIn } from './TimeDisplay'
 
 export { CountryFlag } from './CountryFlag'
 export type { CountryFlagProps } from './CountryFlag'
-
-export { FeatureWizard } from './FeatureWizard'
-export type { WizardStep } from './FeatureWizard'
-export { StepProgress } from './StepProgress'

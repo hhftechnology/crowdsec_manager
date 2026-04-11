@@ -9,24 +9,14 @@ import { SearchProvider } from './contexts/SearchContext'
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const Health = lazy(() => import('./pages/Health'))
 const CrowdSecHealth = lazy(() => import('./pages/CrowdSecHealth'))
-const IPManagement = lazy(() => import('./pages/IPManagement'))
-const Whitelist = lazy(() => import('./pages/Whitelist'))
 const Allowlist = lazy(() => import('./pages/Allowlist'))
 const Scenarios = lazy(() => import('./pages/Scenarios'))
-const Captcha = lazy(() => import('./pages/Captcha'))
 const Logs = lazy(() => import('./pages/Logs'))
-const Backup = lazy(() => import('./pages/Backup'))
-const Update = lazy(() => import('./pages/Update'))
-const Cron = lazy(() => import('./pages/Cron'))
 const Services = lazy(() => import('./pages/Services'))
-const Configuration = lazy(() => import('./pages/Configuration'))
 const DecisionAnalysis = lazy(() => import('./pages/DecisionAnalysis'))
 const AlertAnalysis = lazy(() => import('./pages/AlertAnalysis'))
-const Notifications = lazy(() => import('./pages/Notifications'))
-const Profiles = lazy(() => import('./pages/Profiles'))
 const Bouncers = lazy(() => import('./pages/Bouncers'))
 const Terminal = lazy(() => import('./pages/Terminal'))
-const ConfigValidation = lazy(() => import('./pages/ConfigValidation'))
 const Hub = lazy(() => import('./pages/Hub'))
 const HubBrowser = lazy(() => import('./pages/HubBrowser'))
 const HubCategory = lazy(() => import('./pages/HubCategory'))
@@ -44,24 +34,14 @@ function App() {
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/health" element={<Health />} />
                 <Route path="/crowdsec-health" element={<CrowdSecHealth />} />
-                <Route path="/ip-management" element={<IPManagement />} />
-                <Route path="/whitelist" element={<Whitelist />} />
                 <Route path="/allowlist" element={<Allowlist />} />
                 <Route path="/scenarios" element={<Scenarios />} />
-                <Route path="/captcha" element={<Captcha />} />
                 <Route path="/decisions" element={<DecisionAnalysis />} />
                 <Route path="/alerts" element={<AlertAnalysis />} />
                 <Route path="/logs" element={<Logs />} />
-                <Route path="/backup" element={<Backup />} />
-                <Route path="/update" element={<Update />} />
-                <Route path="/cron" element={<Cron />} />
                 <Route path="/services" element={<Services />} />
-                <Route path="/configuration" element={<Configuration />} />
-                <Route path="/notifications" element={<Notifications />} />
-                <Route path="/profiles" element={<Profiles />} />
                 <Route path="/bouncers" element={<Bouncers />} />
                 <Route path="/terminal" element={<Terminal />} />
-                <Route path="/config-validation" element={<ConfigValidation />} />
                 <Route path="/hub" element={<Hub />} />
                 <Route path="/hub/browser" element={<HubBrowser />} />
                 <Route path="/hub/:category" element={<HubCategory />} />

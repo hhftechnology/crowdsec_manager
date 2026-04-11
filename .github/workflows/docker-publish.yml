@@ -3,23 +3,24 @@ name: Docker Build and Push
 on:
   push:
     branches:
-      - main
-      - dev
+      - independent
+      - independent-dev
       - pangolin
     tags:
       - 'v*'
   pull_request:
     branches:
-      - main
+      - independent
 
 env:
   IMAGE_NAME: crowdsec-manager
 
 jobs:
   build-and-push:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       packages: write
 
     steps:
@@ -76,3 +77,47 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64,linux/arm64
+
+      - name: Build image for size calculation (linux/amd64)
+        if: github.event_name != 'pull_request' && startsWith(github.ref, 'refs/heads/')
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          load: true
+          tags: local/${{ env.IMAGE_NAME }}:size-${{ github.sha }}
+          cache-from: type=gha
+          platforms: linux/amd64
+
+      - name: Calculate image size
+        if: github.event_name != 'pull_request' && startsWith(github.ref, 'refs/heads/')
+        id: image_size
+        shell: bash
+        run: |
+          IMAGE_REF="local/${{ env.IMAGE_NAME }}:size-${{ github.sha }}"
+          SIZE_BYTES="$(docker image inspect "${IMAGE_REF}" --format='{{.Size}}')"
+          SIZE_HUMAN="$(numfmt --to=iec --suffix=B "${SIZE_BYTES}")"
+          echo "Computed image size: ${SIZE_HUMAN}"
+          echo "size_human=${SIZE_HUMAN}" >> "${GITHUB_OUTPUT}"
+
+      - name: Update README image size
+        if: github.event_name != 'pull_request' && startsWith(github.ref, 'refs/heads/')
+        shell: bash
+        run: |
+          SIZE="${{ steps.image_size.outputs.size_human }}"
+          sed -i -E "s|(<!-- IMAGE_SIZE_START -->)[^<]*(<!-- IMAGE_SIZE_END -->)|\1${SIZE}\2|" README.md
+
+      - name: Commit README image size update
+        if: github.event_name != 'pull_request' && startsWith(github.ref, 'refs/heads/')
+        shell: bash
+        run: |
+          if git diff --quiet -- README.md; then
+            echo "README image size is already up to date"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          git commit -m "chore(readme): update image size [skip ci]"
+          git push

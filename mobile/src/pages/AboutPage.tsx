@@ -16,7 +16,8 @@ const links = [
 
 const socialLinks = [
   { label: 'X / Twitter', href: 'https://x.com/hhftechnology' },
-  { label: 'Reddit', href: 'https://reddit.com/u/hhftechtips' },
+  { label: 'Reddit', href: 'https://reddit.com/u/hhftechnology' },
+  { label: 'Instagram', href: 'https://instagram.com/hhftechnology' },
 ];
 
 export default function AboutPage() {
@@ -50,6 +51,7 @@ export default function AboutPage() {
           <h2 className="text-xl font-bold">CrowdSec Manager</h2>
           <p className="text-sm text-muted-foreground mt-1">Version {appInfo.version} (Build {appInfo.build})</p>
           <p className="text-xs text-muted-foreground mt-0.5">Capacitor 7 &middot; React 18</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Independent &middot; General Proxy</p>
         </section>
 
         {/* About HHF Technology */}
@@ -60,7 +62,7 @@ export default function AboutPage() {
             managing virtual infrastructure, securing networks, and automating solutions.
           </p>
           <div className="flex flex-wrap gap-1.5">
-            {['Kubernetes', 'Proxmox', 'OPNsense', 'TrueNAS', 'Docker', 'Traefik'].map((tag) => (
+            {['Kubernetes', 'Proxmox', 'OPNsense', 'TrueNAS', 'Docker'].map((tag) => (
               <span
                 key={tag}
                 className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground"

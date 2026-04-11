@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { useMountEffect } from '@/hooks/useMountEffect';
-import { Search, Upload, ShieldBan, FileSearch, Shield, ShieldAlert, ShieldCheck, ShieldX, History, RotateCcw } from 'lucide-react';
+import { Upload, FileSearch, History, RotateCcw } from 'lucide-react';
 import { relativeTime } from '@/lib/utils';
 import { PageHeader } from '@/components/PageHeader';
 import { useApi } from '@/contexts/ApiContext';
@@ -12,7 +12,6 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { QueryStateView } from '@/components/QueryStateView';
 import { ConfirmActionDialog } from '@/components/ConfirmActionDialog';
-import { StatusDot } from '@/components/StatusDot';
 import { StatusRow } from '@/components/StatusRow';
 import { MetricCard } from '@/components/MetricCard';
 import { AddDecisionForm } from '@/components/security/AddDecisionForm';
@@ -20,7 +19,7 @@ import { DeleteDecisionForm } from '@/components/security/DeleteDecisionForm';
 import { DecisionFilters } from '@/components/security/DecisionFilters';
 import { AlertsListPanel } from '@/components/security/AlertsListPanel';
 import { showActionError, showActionSuccess } from '@/lib/actionToast';
-import type { AddDecisionRequest, CrowdsecAlert, Decision, DecisionHistoryRecord, IPSecurity, IPBlockedStatus, MetricsResponse } from '@/lib/api';
+import type { AddDecisionRequest, CrowdsecAlert, Decision, DecisionHistoryRecord, MetricsResponse } from '@/lib/api';
 
 /* ────────────────────── Local Types ────────────────────── */
 
@@ -55,13 +54,7 @@ export default function SecurityPage() {
   const [loading, setLoading] = useState(true);
   const [initialLoaded, setInitialLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState('ip');
-
-  const [ipInput, setIpInput] = useState('');
-  const [ipBlockedResult, setIPBlockedResult] = useState<IPBlockedStatus | null>(null);
-  const [ipSecurityResult, setIPSecurityResult] = useState<IPSecurity | null>(null);
-  const [unbanInput, setUnbanInput] = useState('');
-  const [unbanTarget, setUnbanTarget] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState('decisions');
   const [actionLoading, setActionLoading] = useState(false);
 
   const [decisions, setDecisions] = useState<Decision[]>([]);
@@ -193,24 +186,6 @@ export default function SecurityPage() {
   const decisionPageCount = Math.max(1, Math.ceil(Math.max(decisionsTotal, 1) / PAGE_SIZE));
   const decisionHistoryPageCount = Math.max(1, Math.ceil(Math.max(decisionHistoryTotal, 1) / PAGE_SIZE));
 
-  const checkIP = async () => {
-    if (!api || !ipInput.trim()) return;
-    setActionLoading(true);
-    try {
-      const [blocked, security] = await Promise.all([
-        api.ip.checkBlocked(ipInput.trim()),
-        api.ip.checkSecurity(ipInput.trim()),
-      ]);
-      setIPBlockedResult(blocked);
-      setIPSecurityResult(security);
-      showActionSuccess('IP check complete', ipInput.trim());
-    } catch (err) {
-      showActionError('Failed to check IP', err);
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
   const addDecision = async (form: AddDecisionRequest) => {
     if (!api) return;
     setActionLoading(true);
@@ -289,23 +264,6 @@ export default function SecurityPage() {
     }
   };
 
-  const confirmUnban = async () => {
-    if (!api || !unbanTarget) return;
-
-    setActionLoading(true);
-    try {
-      const res = await api.ip.unban(unbanTarget);
-      showActionSuccess('IP unbanned', res.message || unbanTarget);
-      setUnbanInput('');
-      setUnbanTarget(null);
-      await fetchAll();
-    } catch (err) {
-      showActionError('Failed to unban IP', err);
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
   const confirmReapplyDecision = async () => {
     if (!api || !reapplyTarget) return;
 
@@ -353,54 +311,12 @@ export default function SecurityPage() {
             emptyDescription="Refresh to load CrowdSec decisions, alerts, and metrics."
           >
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="w-full grid grid-cols-5">
-                <TabsTrigger value="ip">IP</TabsTrigger>
+              <TabsList className="w-full grid grid-cols-4">
                 <TabsTrigger value="decisions">Decisions</TabsTrigger>
                 <TabsTrigger value="history">History</TabsTrigger>
                 <TabsTrigger value="alerts">Alerts</TabsTrigger>
                 <TabsTrigger value="metrics">Metrics</TabsTrigger>
               </TabsList>
-
-              {/* ──── IP Tab ──── */}
-              <TabsContent value="ip" className="space-y-3">
-                <section className="rounded-xl border border-border bg-card p-4 space-y-2">
-                  <h3 className="text-sm font-semibold">IP Security Check</h3>
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="IP address"
-                      value={ipInput}
-                      onChange={(e) => setIpInput(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && checkIP()}
-                    />
-                    <Button onClick={checkIP} disabled={actionLoading}>
-                      <Search className="h-4 w-4 mr-1" />
-                      Check
-                    </Button>
-                  </div>
-                </section>
-
-                <IPBlockedResultCard result={ipBlockedResult} />
-                <IPSecurityResultCard result={ipSecurityResult} />
-
-                <section className="rounded-xl border border-border bg-card p-4 space-y-2">
-                  <h3 className="text-sm font-semibold">Unban IP</h3>
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="IP to unban"
-                      value={unbanInput}
-                      onChange={(e) => setUnbanInput(e.target.value)}
-                    />
-                    <Button
-                      variant="destructive"
-                      disabled={!unbanInput.trim() || actionLoading}
-                      onClick={() => setUnbanTarget(unbanInput.trim())}
-                    >
-                      <ShieldBan className="h-4 w-4 mr-1" />
-                      Unban
-                    </Button>
-                  </div>
-                </section>
-              </TabsContent>
 
               {/* ──── Decisions Tab ──── */}
               <TabsContent value="decisions" className="space-y-3">
@@ -505,7 +421,6 @@ export default function SecurityPage() {
         </div>
       </div>
 
-      <ConfirmActionDialog open={Boolean(unbanTarget)} onOpenChange={(open) => { if (!open) setUnbanTarget(null); }} title="Unban IP?" description={`This will remove active CrowdSec decision(s) for ${unbanTarget || 'this IP'}.`} confirmLabel="Unban" destructive loading={actionLoading} onConfirm={confirmUnban} />
       <ConfirmActionDialog open={alertDeleteId !== null} onOpenChange={(open) => { if (!open) setAlertDeleteId(null); }} title="Delete alert?" description={`Alert #${alertDeleteId || ''} will be removed from CrowdSec.`} confirmLabel="Delete" destructive loading={actionLoading} onConfirm={deleteAlert} />
       <ConfirmActionDialog
         open={Boolean(reapplyTarget)}
@@ -517,53 +432,6 @@ export default function SecurityPage() {
         onConfirm={confirmReapplyDecision}
       />
     </PullToRefresh>
-  );
-}
-
-/* ────────────────────── IP Blocked Result Card ────────────────────── */
-
-function IPBlockedResultCard({ result }: { result: IPBlockedStatus | null }) {
-  if (!result) return null;
-  return (
-    <div className="rounded-xl border border-border bg-card p-4 space-y-2">
-      <div className="flex items-center gap-2">
-        {result.blocked ? <ShieldX className="h-4 w-4 text-red-500" /> : <ShieldCheck className="h-4 w-4 text-emerald-500" />}
-        <span className="text-sm font-semibold font-mono">{result.ip}</span>
-      </div>
-      <div className="flex items-center gap-2">
-        <StatusDot color={result.blocked ? 'error' : 'success'} />
-        <Badge variant={result.blocked ? 'destructive' : 'success'}>{result.blocked ? 'Blocked' : 'Not Blocked'}</Badge>
-      </div>
-      {result.reason && <p className="text-xs text-muted-foreground">Reason: {result.reason}</p>}
-    </div>
-  );
-}
-
-/* ────────────────────── IP Security Result Card ────────────────────── */
-
-function IPSecurityResultCard({ result }: { result: IPSecurity | null }) {
-  if (!result) return null;
-  const fields: Array<{ label: string; value: boolean; icon: typeof Shield }> = [
-    { label: 'Blocked', value: result.is_blocked, icon: ShieldX },
-    { label: 'Whitelisted', value: result.is_whitelisted, icon: ShieldCheck },
-    { label: 'In CrowdSec', value: result.in_crowdsec, icon: ShieldAlert },
-    { label: 'In Traefik', value: result.in_traefik, icon: Shield },
-  ];
-  return (
-    <div className="rounded-xl border border-border bg-card p-4 space-y-2">
-      <h3 className="text-sm font-semibold">Security Status: <span className="font-mono">{result.ip}</span></h3>
-      <div className="grid grid-cols-2 gap-2">
-        {fields.map((field) => (
-          <div key={field.label} className="flex items-center gap-2 py-1">
-            <StatusDot color={field.value ? (field.label === 'Blocked' ? 'error' : 'success') : 'default'} />
-            <span className="text-xs">{field.label}</span>
-            <Badge variant={field.value ? (field.label === 'Blocked' ? 'destructive' : 'success') : 'outline'} className="text-[10px] ml-auto">
-              {field.value ? 'Yes' : 'No'}
-            </Badge>
-          </div>
-        ))}
-      </div>
-    </div>
   );
 }
 

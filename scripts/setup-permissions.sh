@@ -11,7 +11,6 @@ TARGET_GID=${2:-1000}
 DIRS=(
     "./data"
     "./logs"
-    "./backups"
     "./config"
 )
 

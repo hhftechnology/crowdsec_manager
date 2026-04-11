@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"crowdsec-manager/internal/config"
-	"crowdsec-manager/internal/database"
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
 	"crowdsec-manager/internal/models"
@@ -25,7 +24,6 @@ func CheckCrowdSecHealth(dockerClient *docker.Client, cfg *config.Config) gin.Ha
 			Checks: make(map[string]models.HealthCheckItem),
 		}
 
-		// 1. Check if CrowdSec container is running
 		isRunning, err := dockerClient.IsContainerRunning(cfg.CrowdsecContainerName)
 		if err != nil || !isRunning {
 			healthCheck.Status = "unhealthy"
@@ -46,10 +44,7 @@ func CheckCrowdSecHealth(dockerClient *docker.Client, cfg *config.Config) gin.Ha
 			Message: "CrowdSec container is running",
 		}
 
-		// 2. Check LAPI status
-		lapiOutput, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{
-			"cscli", "lapi", "status",
-		})
+		lapiOutput, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{"cscli", "lapi", "status"})
 		if err != nil {
 			healthCheck.Status = "degraded"
 			healthCheck.Checks["lapi"] = models.HealthCheckItem{
@@ -76,18 +71,15 @@ func CheckCrowdSecHealth(dockerClient *docker.Client, cfg *config.Config) gin.Ha
 			}
 		}
 
-		// 3. Check metrics availability
 		metricsItem := checkMetricsHealth(dockerClient, cfg.CrowdsecContainerName, cfg.CrowdSecMetricsURL)
 		if metricsItem.Status == "unhealthy" {
 			healthCheck.Status = "degraded"
 		}
 		healthCheck.Checks["metrics"] = metricsItem
 
-		// 4. Check active bouncers
 		bouncersItem := checkBouncersHealth(dockerClient, cfg.CrowdsecContainerName)
 		healthCheck.Checks["bouncers"] = bouncersItem
 
-		// 5. Check console enrollment status
 		consoleStatus, err := GetConsoleStatusHelper(dockerClient, cfg.CrowdsecContainerName)
 		if err == nil {
 			if consoleStatus.Enrolled && consoleStatus.Validated {
@@ -108,7 +100,6 @@ func CheckCrowdSecHealth(dockerClient *docker.Client, cfg *config.Config) gin.Ha
 			}
 		}
 
-		// Determine overall status code
 		statusCode := http.StatusOK
 		if healthCheck.Status == "unhealthy" {
 			statusCode = http.StatusServiceUnavailable
@@ -145,12 +136,11 @@ func CheckStackHealth(dockerClient *docker.Client, cfg *config.Config) gin.Handl
 }
 
 // RunCompleteDiagnostics runs a complete system diagnostic
-func RunCompleteDiagnostics(dockerClient *docker.Client, db *database.Database, cfg *config.Config) gin.HandlerFunc {
+func RunCompleteDiagnostics(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		dockerClient = resolveDockerClient(c, dockerClient)
 		logger.Info("Running complete diagnostics")
 
-		// Get health status
 		containers, allRunning := collectContainerHealth(dockerClient, cfg)
 		healthStatus := &models.HealthStatus{
 			Containers: containers,
@@ -158,7 +148,6 @@ func RunCompleteDiagnostics(dockerClient *docker.Client, db *database.Database, 
 			Timestamp:  time.Now(),
 		}
 
-		// Get bouncers
 		var bouncers []models.Bouncer
 		bouncerOutput, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{"cscli", "bouncers", "list", "-o", "json"})
 		if err == nil && bouncerOutput != "null" && bouncerOutput != "" && bouncerOutput != "[]" {
@@ -176,7 +165,6 @@ func RunCompleteDiagnostics(dockerClient *docker.Client, db *database.Database, 
 			logger.Warn("Failed to execute bouncers command", "error", err)
 		}
 
-		// Get decisions
 		var decisions []models.Decision
 		decisionOutput, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{"cscli", "decisions", "list", "-o", "json"})
 		if err == nil {
@@ -193,15 +181,11 @@ func RunCompleteDiagnostics(dockerClient *docker.Client, db *database.Database, 
 			logger.Warn("Failed to execute decisions command", "error", err)
 		}
 
-		// Check Traefik integration
-		traefikIntegration := checkTraefikIntegrationDiagnostic(dockerClient, db, cfg)
-
 		result := models.DiagnosticResult{
-			Health:             healthStatus,
-			Bouncers:           bouncers,
-			Decisions:          decisions,
-			TraefikIntegration: traefikIntegration,
-			Timestamp:          time.Now(),
+			Health:    healthStatus,
+			Bouncers:  bouncers,
+			Decisions: decisions,
+			Timestamp: time.Now(),
 		}
 
 		c.JSON(http.StatusOK, models.Response{

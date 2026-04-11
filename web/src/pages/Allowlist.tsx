@@ -25,7 +25,6 @@ export default function Allowlist() {
   const [selectedAllowlist, setSelectedAllowlist] = useState<string>('')
   const [inspectDialogOpen, setInspectDialogOpen] = useState(false)
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
-  const [showNoAllowlistOption, setShowNoAllowlistOption] = useState(true)
 
   const { data: allowlistsData, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['allowlists'],
@@ -147,35 +146,12 @@ export default function Allowlist() {
 
       <Alert>
         <Info className="h-4 w-4" />
-        <AlertTitle>About Allowlists vs Whitelists</AlertTitle>
+        <AlertTitle>About CrowdSec Allowlists</AlertTitle>
         <AlertDescription>
           <strong>Allowlists</strong> are CrowdSec's centralized IP-based filtering at the LAPI level, affecting all security decisions.
-          They only support IPs and CIDR ranges. For more granular filtering based on URLs or other log elements, use Parser Whitelists or Profile Rules.
-          <br /><br />
-          The <strong>Whitelist</strong> feature manages both CrowdSec and Traefik whitelists together, offering a simpler approach if you don't need centralized LAPI-level allowlists.
+          They only support IPs and CIDR ranges. For more granular filtering based on URLs or other log elements, use parsers or profile rules.
         </AlertDescription>
       </Alert>
-
-      {showNoAllowlistOption && allowlistsData?.length === 0 && (
-        <Card className="border-primary/50">
-          <CardHeader>
-            <CardTitle>Don't Need Allowlists?</CardTitle>
-            <CardDescription>
-              If you prefer simpler whitelist management without LAPI-level allowlists, you can use the Whitelist feature instead.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Allowlists provide centralized control at the CrowdSec LAPI level, but if you just want to whitelist IPs for CrowdSec and Traefik,
-              the Whitelist page offers a simpler interface.
-            </p>
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={() => window.location.href = '/whitelist'}>Go to Whitelist Page</Button>
-              <Button variant="ghost" onClick={() => setShowNoAllowlistOption(false)}>Continue with Allowlists</Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       <Card>
         <CardHeader>

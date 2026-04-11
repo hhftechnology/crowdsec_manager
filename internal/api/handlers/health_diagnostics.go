@@ -3,11 +3,9 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	"crowdsec-manager/internal/config"
-	"crowdsec-manager/internal/database"
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/models"
 
@@ -31,7 +29,7 @@ func parseBouncersJSON(bouncerOutput string, computeStatus bool) ([]models.Bounc
 		if ipAddr, err := jsonparser.GetString(value, "ip_address"); err == nil {
 			bouncer.IPAddress = ipAddr
 		}
-		// Parse timestamps with multiple format support
+
 		parseTime := func(key string) time.Time {
 			if s, err := jsonparser.GetString(value, key); err == nil {
 				for _, layout := range []string{time.RFC3339Nano, time.RFC3339} {
@@ -54,10 +52,6 @@ func parseBouncersJSON(bouncerOutput string, computeStatus bool) ([]models.Bounc
 			bouncer.Version = version
 		}
 
-		// A bouncer that exists in the list is valid by definition.
-		// CrowdSec deletes revoked bouncers rather than marking them,
-		// so the "revoked" and legacy "valid" fields are not reliable
-		// indicators of actual connectivity (confirmed by CrowdSec team, see #47).
 		bouncer.Valid = true
 
 		if computeStatus {
@@ -66,7 +60,7 @@ func parseBouncersJSON(bouncerOutput string, computeStatus bool) ([]models.Bounc
 			if !lastActivity.IsZero() && time.Since(lastActivity) <= 5*time.Minute {
 				bouncer.Status = "connected"
 			} else if lastActivity.IsZero() {
-				bouncer.Status = "registered" // enrolled but never pulled
+				bouncer.Status = "registered"
 			} else if time.Since(lastActivity) <= 60*time.Minute {
 				bouncer.Status = "connected"
 			} else {
@@ -156,7 +150,7 @@ func checkMetricsHealth(dockerClient *docker.Client, containerName string, metri
 
 // collectContainerHealth collects health status for all stack containers
 func collectContainerHealth(dockerClient *docker.Client, cfg *config.Config) ([]models.Container, bool) {
-	containerNames := []string{cfg.CrowdsecContainerName, cfg.TraefikContainerName, cfg.PangolinContainerName, cfg.GerbilContainerName}
+	containerNames := []string{cfg.CrowdsecContainerName}
 	var containers []models.Container
 	allRunning := true
 
@@ -189,56 +183,4 @@ func collectContainerHealth(dockerClient *docker.Client, cfg *config.Config) ([]
 	}
 
 	return containers, allRunning
-}
-
-// checkTraefikIntegrationDiagnostic checks Traefik integration for diagnostics
-func checkTraefikIntegrationDiagnostic(dockerClient *docker.Client, db *database.Database, cfg *config.Config) *models.TraefikIntegration {
-	traefikIntegration := &models.TraefikIntegration{
-		MiddlewareConfigured: false,
-		ConfigFiles:          []string{},
-		LapiKeyFound:         false,
-		AppsecEnabled:        false,
-	}
-
-	configPaths := []string{
-		cfg.TraefikDynamicConfig,
-		cfg.TraefikStaticConfig,
-	}
-
-	if db != nil {
-		if path, err := db.GetTraefikDynamicConfigPath(); err == nil {
-			configPaths = append([]string{path}, configPaths...)
-		}
-	}
-
-	var configContent string
-	var foundConfigPath string
-
-	for _, path := range configPaths {
-		output, err := dockerClient.ExecCommand(cfg.TraefikContainerName, []string{"cat", path})
-		if err == nil && output != "" {
-			configContent = output
-			foundConfigPath = path
-			break
-		}
-	}
-
-	if configContent != "" {
-		traefikIntegration.MiddlewareConfigured = true
-		traefikIntegration.ConfigFiles = append(traefikIntegration.ConfigFiles, foundConfigPath)
-
-		configLower := strings.ToLower(configContent)
-
-		if strings.Contains(configLower, "crowdsec-bouncer-traefik-plugin") ||
-			strings.Contains(configLower, "crowdseclapikey") ||
-			strings.Contains(configLower, "crowdsec") {
-			traefikIntegration.LapiKeyFound = true
-		}
-
-		if strings.Contains(configLower, "appsec") {
-			traefikIntegration.AppsecEnabled = true
-		}
-	}
-
-	return traefikIntegration
 }

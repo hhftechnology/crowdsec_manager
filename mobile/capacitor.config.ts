@@ -1,8 +1,8 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.crowdsec.manager.mobile',
-  appName: 'CrowdSec Manager',
+  appId: 'com.crowdsec.manager.independent',
+  appName: 'CrowdSec Manager Independent',
   webDir: 'dist',
   server: {
     cleartext: true,

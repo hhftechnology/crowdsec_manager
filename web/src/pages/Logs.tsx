@@ -12,11 +12,10 @@ import { FileText, RefreshCw, Activity, Download } from 'lucide-react'
 import { PageHeader, QueryError } from '@/components/common'
 import { LogFilterPanel, type LogFilters } from '@/components/logs/LogFilterPanel'
 import { LogViewer } from '@/components/logs/LogViewer'
-import { TraefikAnalytics } from '@/components/logs/TraefikAnalytics'
 import { useMountEffect } from '@/hooks/useMountEffect'
 
 export default function Logs() {
-  const [selectedService, setSelectedService] = useState<'crowdsec' | 'traefik'>('crowdsec')
+  const selectedService = 'crowdsec'
   const [tailLines, setTailLines] = useState('100')
   const [isStreaming, setIsStreaming] = useState(false)
   const [streamLogs, setStreamLogs] = useState<string[]>([])
@@ -29,33 +28,21 @@ export default function Logs() {
   const wsRef = useRef<WebSocket | null>(null)
   const prevStreamLengthRef = useRef<number>(0)
 
-  const { data: crowdsecLogs, isLoading: crowdsecLoading, isError: isCrowdsecError, error: crowdsecError, refetch: refetchCrowdSec } = useQuery({
+  const {
+    data: crowdsecLogs,
+    isLoading,
+    isError: isCrowdsecError,
+    error: crowdsecError,
+    refetch: refetchCrowdSec,
+  } = useQuery({
     queryKey: ['logs-crowdsec', tailLines],
     queryFn: async () => {
       const response = await api.logs.getCrowdSec(tailLines)
       return response.data.data ?? null
     },
-    enabled: selectedService === 'crowdsec' && !isStreaming,
+    enabled: !isStreaming,
   })
 
-  const { data: traefikLogs, isLoading: traefikLoading, refetch: refetchTraefik } = useQuery({
-    queryKey: ['logs-traefik', tailLines],
-    queryFn: async () => {
-      const response = await api.logs.getTraefik(tailLines)
-      return response.data.data ?? null
-    },
-    enabled: selectedService === 'traefik' && !isStreaming,
-  })
-
-  const { data: traefikStats, isLoading: statsLoading, refetch: refetchStats } = useQuery({
-    queryKey: ['logs-traefik-stats'],
-    queryFn: async () => {
-      const response = await api.logs.analyzeTraefikAdvanced('1000')
-      return response.data.data
-    },
-  })
-
-  // Close WebSocket on unmount
   useMountEffect(() => {
     return () => {
       if (wsRef.current) {
@@ -65,12 +52,16 @@ export default function Logs() {
     }
   })
 
-  const startWebSocket = useCallback((service: 'crowdsec' | 'traefik') => {
-    const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}${api.logs.getStreamUrl(service)}`
+  const startWebSocket = useCallback(() => {
+    const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}${api.logs.getStreamUrl(selectedService)}`
     try {
       const ws = new WebSocket(wsUrl)
       wsRef.current = ws
-      ws.onopen = () => { toast.success('Log stream connected'); setStreamLogs([]); prevStreamLengthRef.current = 0 }
+      ws.onopen = () => {
+        toast.success('Log stream connected')
+        setStreamLogs([])
+        prevStreamLengthRef.current = 0
+      }
       ws.onmessage = (event: MessageEvent) => {
         const message = (event.data as string)?.trim()
         if (!message) return
@@ -83,8 +74,14 @@ export default function Logs() {
           return [...prev, ...lines]
         })
       }
-      ws.onerror = (event) => { toast.error(getErrorMessage(event, 'WebSocket error occurred', ErrorContexts.LogsStreamWebsocketError)); setIsStreaming(false) }
-      ws.onclose = () => { toast.info('Log stream disconnected'); setIsStreaming(false) }
+      ws.onerror = (event) => {
+        toast.error(getErrorMessage(event, 'WebSocket error occurred', ErrorContexts.LogsStreamWebsocketError))
+        setIsStreaming(false)
+      }
+      ws.onclose = () => {
+        toast.info('Log stream disconnected')
+        setIsStreaming(false)
+      }
     } catch (error) {
       toast.error(getErrorMessage(error, 'Failed to connect to log stream', ErrorContexts.LogsStreamConnect))
       setIsStreaming(false)
@@ -93,37 +90,29 @@ export default function Logs() {
 
   const handleToggleStream = useCallback(() => {
     if (isStreaming) {
-      if (wsRef.current) { wsRef.current.close(); wsRef.current = null }
+      if (wsRef.current) {
+        wsRef.current.close()
+        wsRef.current = null
+      }
       setStreamLogs([])
       prevStreamLengthRef.current = 0
       setIsStreaming(false)
     } else {
-      startWebSocket(selectedService)
+      startWebSocket()
       setIsStreaming(true)
     }
-  }, [isStreaming, selectedService, startWebSocket])
+  }, [isStreaming, startWebSocket])
 
   const handleFilterChange = useCallback((next: LogFilters) => {
-    setFilters(next)
+    setFilters({ ...next, service: 'crowdsec' })
     if (next.search !== query) setQuery(next.search)
-    const newService = next.service !== 'all' ? next.service as 'crowdsec' | 'traefik' : selectedService
-    if (newService !== selectedService) {
-      setSelectedService(newService)
-      if (isStreaming) {
-        if (wsRef.current) { wsRef.current.close(); wsRef.current = null }
-        startWebSocket(newService)
-      }
-    }
-  }, [query, setQuery, selectedService, isStreaming, startWebSocket])
+  }, [query, setQuery])
 
   const rawLogs = isStreaming
     ? streamLogs.filter(line => line.trim().length > 0).join('\n')
-    : selectedService === 'crowdsec'
-      ? crowdsecLogs?.logs || ''
-      : traefikLogs?.logs || ''
+    : crowdsecLogs?.logs || ''
 
-  // query (SearchContext) is source of truth for search; derive displayFilters for LogFilterPanel
-  const displayFilters = useMemo(() => ({ ...filters, search: query }), [filters, query])
+  const displayFilters = useMemo(() => ({ ...filters, search: query, service: 'crowdsec' }), [filters, query])
 
   const filteredLines = useMemo(() => {
     if (!rawLogs) return []
@@ -154,21 +143,19 @@ export default function Logs() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `${selectedService}-logs-${new Date().toISOString().slice(0, 19)}.txt`
+    a.download = `crowdsec-logs-${new Date().toISOString().slice(0, 19)}.txt`
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
     toast.success('Logs exported')
-  }, [filteredLines, selectedService])
-
-  const isLoading = selectedService === 'crowdsec' ? crowdsecLoading : traefikLoading
+  }, [filteredLines])
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Logs Viewer"
-        description="View and analyze service logs in real-time"
+        description="View and analyze CrowdSec logs in real-time"
         breadcrumbs="System / Logs"
       />
 
@@ -179,7 +166,7 @@ export default function Logs() {
           <CardTitle className="flex items-center gap-2">
             <FileText className="h-5 w-5" />Service Logs
           </CardTitle>
-          <CardDescription>Select a service to view its logs</CardDescription>
+          <CardDescription>View CrowdSec logs</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
@@ -211,25 +198,32 @@ export default function Logs() {
                 {isStreaming ? 'Pause Stream' : 'Start Stream'}
               </Button>
             </div>
-            <Button onClick={() => { selectedService === 'crowdsec' ? refetchCrowdSec() : refetchTraefik(); toast.success('Logs refreshed') }} disabled={isLoading || isStreaming} size="sm" variant="outline">
+            <Button
+              onClick={() => {
+                refetchCrowdSec()
+                toast.success('Logs refreshed')
+              }}
+              disabled={isLoading || isStreaming}
+              size="sm"
+              variant="outline"
+            >
               <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />Refresh
             </Button>
           </div>
           {isStreaming && (
             <div className="flex items-center gap-2 p-2 bg-emerald-500/10 border border-emerald-500/20 rounded">
               <Activity className="h-4 w-4 text-emerald-600 dark:text-emerald-400 animate-pulse" />
-              <span className="text-sm text-emerald-600 dark:text-emerald-400">Live streaming {selectedService} logs...</span>
+              <span className="text-sm text-emerald-600 dark:text-emerald-400">Live streaming crowdsec logs...</span>
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Search, Filter & Export Controls */}
       <Card>
         <CardContent className="pt-6">
           <div className="flex flex-col gap-3">
             <LogFilterPanel
-              services={['crowdsec', 'traefik']}
+              services={['crowdsec']}
               filters={displayFilters}
               includeAllServices={false}
               onFilterChange={handleFilterChange}
@@ -250,7 +244,7 @@ export default function Logs() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>Log Output</CardTitle>
-            <Badge variant="secondary">{selectedService === 'crowdsec' ? 'CrowdSec' : 'Traefik'}</Badge>
+            <Badge variant="secondary">CrowdSec</Badge>
           </div>
         </CardHeader>
         <CardContent>
@@ -261,10 +255,6 @@ export default function Logs() {
           )}
         </CardContent>
       </Card>
-
-      {selectedService === 'traefik' && (
-        <TraefikAnalytics stats={traefikStats || undefined} isLoading={statsLoading} onRefresh={() => refetchStats()} />
-      )}
     </div>
   )
 }

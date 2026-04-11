@@ -6,44 +6,17 @@ type APIErrorResponse = {
 }
 
 export const ErrorContexts = {
-  WhitelistCurrentAdd: 'whitelist.current.add',
-  WhitelistManualAdd: 'whitelist.manual.add',
-  WhitelistCIDRAdd: 'whitelist.cidr.add',
-  WhitelistComprehensiveSetup: 'whitelist.comprehensive.setup',
-  WhitelistRemove: 'whitelist.remove',
-  UpdateWithCrowdSec: 'update.with_crowdsec',
-  UpdateWithoutCrowdSec: 'update.without_crowdsec',
   ServicesActionStart: 'services.action.start',
   ServicesActionStop: 'services.action.stop',
   ServicesActionRestart: 'services.action.restart',
   ServicesShutdown: 'services.shutdown',
-  CronCreate: 'cron.create',
-  CronDelete: 'cron.delete',
   ScenariosSetup: 'scenarios.setup',
   ScenariosSimulationModeUpdate: 'scenarios.simulation_mode.update',
-  ConfigSnapshotAll: 'config.snapshot_all',
-  ConfigRestore: 'config.restore',
-  ConfigAccept: 'config.accept',
-  ConfigSnapshotDelete: 'config.snapshot.delete',
-  ProfilesLoadDefault: 'profiles.load_default',
-  ProfilesSave: 'profiles.save',
-  BackupCreate: 'backup.create',
-  BackupRestore: 'backup.restore',
-  BackupDelete: 'backup.delete',
-  BackupCleanup: 'backup.cleanup',
-  NotificationsLoad: 'notifications.load',
-  NotificationsPreview: 'notifications.preview',
-  NotificationsSave: 'notifications.save',
-  TraefikConfigPathUpdate: 'traefik.config_path.update',
-  CaptchaSetup: 'captcha.setup',
   LogsStreamConnect: 'logs.stream.connect',
   LogsStreamWebsocketError: 'logs.stream.websocket_error',
   HubInstall: 'hub.install',
   HubRemove: 'hub.remove',
   HubUpgradeAll: 'hub.upgrade_all',
-  IPCheckBlocked: 'ip.check_blocked',
-  IPCheckSecurity: 'ip.check_security',
-  IPUnban: 'ip.unban',
   EnrollSubmitKey: 'enroll.submit_key',
 } as const
 
@@ -56,29 +29,6 @@ type ErrorRule = {
 }
 
 const ERROR_RULES: ErrorRule[] = [
-  {
-    contexts: [
-      ErrorContexts.WhitelistManualAdd,
-      ErrorContexts.WhitelistCIDRAdd,
-      ErrorContexts.WhitelistComprehensiveSetup,
-      ErrorContexts.WhitelistRemove,
-      ErrorContexts.CaptchaSetup,
-      ErrorContexts.TraefikConfigPathUpdate,
-    ],
-    patterns: [/mounted volume is marked read-only/i, /read-only file system/i],
-    message: 'The Traefik config volume is read-only. Make it writable and retry.',
-  },
-  {
-    contexts: [
-      ErrorContexts.WhitelistManualAdd,
-      ErrorContexts.WhitelistCIDRAdd,
-      ErrorContexts.WhitelistComprehensiveSetup,
-      ErrorContexts.WhitelistRemove,
-      ErrorContexts.CaptchaSetup,
-    ],
-    patterns: [/no such file or directory/i, /stat .* no such file or directory/i],
-    message: 'Traefik dynamic config file not found. Verify the config path in Settings.',
-  },
   {
     contexts: 'any',
     patterns: [/no such container/i, /container .* is not running/i],
