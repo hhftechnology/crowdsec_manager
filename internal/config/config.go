@@ -1,7 +1,6 @@
 package config
 
 import (
-	"crowdsec-manager/internal/compose"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,7 +8,7 @@ import (
 	"time"
 )
 
-// Config holds all application configuration loaded from environment variables with sensible defaults
+// Config holds all application configuration loaded from environment variables.
 type Config struct {
 	// Server configuration
 	Port        int
@@ -20,53 +19,24 @@ type Config struct {
 	// Docker configuration
 	DockerHost  string
 	DockerHosts string // Multi-host format: "id:endpoint,id:endpoint"
-	ComposeFile string
-	PangolinDir string
 	ConfigDir   string
 
 	// Database
 	DatabasePath        string
 	HistoryDatabasePath string
 
-	// File paths (from environment or database)
-	TraefikDynamicConfig string
-	TraefikStaticConfig  string
-	TraefikAccessLog     string
-	TraefikErrorLog      string
-	CrowdSecAcquisFile   string
-
 	// CrowdSec container-internal paths and URLs
-	CrowdSecWhitelistPath    string
-	CrowdSecProfilesPath     string
-	CrowdSecNotificationsDir string
-	CrowdSecScenariosDir     string
-	CrowdSecMetricsURL       string
-	CrowdSecConsoleURL       string
-	CrowdSecCTIURLPattern    string
+	CrowdSecScenariosDir string
+	CrowdSecMetricsURL   string
+	CrowdSecConsoleURL   string
 
-	// Traefik container-internal paths
-	TraefikCaptchaHTMLPath     string
-	TraefikCaptchaEnvPath      string
-	TraefikDynamicConfigSearch []string // fallback paths to search for dynamic config
-	CaptchaGracePeriod         int
-
-	// Backup configuration
-	BackupDir     string
-	RetentionDays int
-	BackupItems   []string
-
-	// Container Names
+	// Container names
 	CrowdsecContainerName string
-	PangolinContainerName string
-	GerbilContainerName   string
-	TraefikContainerName  string
 
 	// Services
 	Services             []string
 	ServicesWithCrowdsec []string
 	IncludeCrowdsec      bool
-	IncludePangolin      bool
-	IncludeGerbil        bool
 
 	// CrowdSec list limits (0 = unlimited)
 	DecisionListLimit int
@@ -83,51 +53,23 @@ type Config struct {
 	WriteTimeout    time.Duration
 }
 
-// Load loads and validates application configuration from environment variables
-// It also creates required directories and dynamically builds service lists from compose file
+// Load loads and validates application configuration from environment variables.
 func Load() (*Config, error) {
 	cfg := &Config{
-		Port:                     getEnvAsInt("PORT", 8080),
-		Environment:              getEnv("ENVIRONMENT", "development"),
-		LogLevel:                 getEnv("LOG_LEVEL", "info"),
-		LogFile:                  getEnv("LOG_FILE", "./logs/crowdsec-manager.log"),
-		DockerHost:               getEnv("DOCKER_HOST", ""),
-		DockerHosts:              getEnv("DOCKER_HOSTS", ""),
-		ComposeFile:              getEnv("COMPOSE_FILE", "./docker-compose.yml"),
-		PangolinDir:              getEnv("PANGOLIN_DIR", "."),
-		ConfigDir:                getEnv("CONFIG_DIR", "./config"),
-		DatabasePath:             getEnv("DATABASE_PATH", "./data/settings.db"),
-		HistoryDatabasePath:      getEnv("HISTORY_DATABASE_PATH", "./data/history.db"),
-		TraefikDynamicConfig:     getEnv("TRAEFIK_DYNAMIC_CONFIG", "/etc/traefik/dynamic_config.yml"),
-		TraefikStaticConfig:      getEnv("TRAEFIK_STATIC_CONFIG", "/etc/traefik/traefik_config.yml"),
-		TraefikAccessLog:         getEnv("TRAEFIK_ACCESS_LOG", "/var/log/traefik/access.log"),
-		TraefikErrorLog:          getEnv("TRAEFIK_ERROR_LOG", "/var/log/traefik/traefik.log"),
-		CrowdSecAcquisFile:       getEnv("CROWDSEC_ACQUIS_FILE", "/etc/crowdsec/acquis.yaml"),
-		CrowdSecWhitelistPath:    getEnv("CROWDSEC_WHITELIST_PATH", "/etc/crowdsec/parsers/s02-enrich/mywhitelists.yaml"),
-		CrowdSecProfilesPath:     getEnv("CROWDSEC_PROFILES_PATH", "/etc/crowdsec/profiles.yaml"),
-		CrowdSecNotificationsDir: getEnv("CROWDSEC_NOTIFICATIONS_DIR", "/etc/crowdsec/notifications"),
-		CrowdSecScenariosDir:     getEnv("CROWDSEC_SCENARIOS_DIR", "/etc/crowdsec/scenarios"),
-		CrowdSecMetricsURL:       getEnv("CROWDSEC_METRICS_URL", "http://localhost:6060/metrics"),
-		CrowdSecConsoleURL:       getEnv("CROWDSEC_CONSOLE_URL", "https://app.crowdsec.net/"),
-		CrowdSecCTIURLPattern:    getEnv("CROWDSEC_CTI_URL_PATTERN", "https://app.crowdsec.net/cti/{{.Value}}"),
-		TraefikCaptchaHTMLPath:   getEnv("TRAEFIK_CAPTCHA_HTML_PATH", "/etc/traefik/conf/captcha.html"),
-		TraefikCaptchaEnvPath:    getEnv("TRAEFIK_CAPTCHA_ENV_PATH", "/etc/traefik/captcha.env"),
-		TraefikDynamicConfigSearch: []string{
-			"/etc/traefik/config/dynamic_config.yml",
-			"/etc/traefik/dynamic_config.yaml",
-			"/etc/traefik/config/dynamic_config.yaml",
-		},
-		CaptchaGracePeriod:    getEnvAsInt("CAPTCHA_GRACE_PERIOD", 1800),
-		BackupDir:             getEnv("BACKUP_DIR", "./backups"),
-		RetentionDays:         getEnvAsInt("RETENTION_DAYS", 60),
-		BackupItems:           []string{"docker-compose.yml", "config"},
+		Port:                  getEnvAsInt("PORT", 8080),
+		Environment:           getEnv("ENVIRONMENT", "development"),
+		LogLevel:              getEnv("LOG_LEVEL", "info"),
+		LogFile:               getEnv("LOG_FILE", "./logs/crowdsec-manager.log"),
+		DockerHost:            getEnv("DOCKER_HOST", ""),
+		DockerHosts:           getEnv("DOCKER_HOSTS", ""),
+		ConfigDir:             getEnv("CONFIG_DIR", "./config"),
+		DatabasePath:          getEnv("DATABASE_PATH", "./data/settings.db"),
+		HistoryDatabasePath:   getEnv("HISTORY_DATABASE_PATH", "./data/history.db"),
+		CrowdSecScenariosDir:  getEnv("CROWDSEC_SCENARIOS_DIR", "/etc/crowdsec/scenarios"),
+		CrowdSecMetricsURL:    getEnv("CROWDSEC_METRICS_URL", "http://localhost:6060/metrics"),
+		CrowdSecConsoleURL:    getEnv("CROWDSEC_CONSOLE_URL", "https://app.crowdsec.net/"),
 		CrowdsecContainerName: getEnv("CROWDSEC_CONTAINER_NAME", "crowdsec"),
-		PangolinContainerName: getEnv("PANGOLIN_CONTAINER_NAME", "pangolin"),
-		GerbilContainerName:   getEnv("GERBIL_CONTAINER_NAME", "gerbil"),
-		TraefikContainerName:  getEnv("TRAEFIK_CONTAINER_NAME", "traefik"),
 		IncludeCrowdsec:       getEnvAsBool("INCLUDE_CROWDSEC", true),
-		IncludePangolin:       getEnvAsBool("INCLUDE_PANGOLIN", true),
-		IncludeGerbil:         getEnvAsBool("INCLUDE_GERBIL", true),
 		DecisionListLimit:     getEnvAsInt("DECISION_LIST_LIMIT", 200),
 		AlertListLimit:        getEnvAsInt("ALERT_LIST_LIMIT", 200),
 		NatsURL:               getEnv("NATS_URL", ""),
@@ -138,55 +80,10 @@ func Load() (*Config, error) {
 		WriteTimeout:          time.Duration(getEnvAsInt("WRITE_TIMEOUT", 15)) * time.Second,
 	}
 
-	// Build services list dynamically from compose file for accurate service discovery
-	if project, err := compose.LoadComposeFile(cfg.ComposeFile); err == nil {
-		allServices := project.GetServiceNames()
+	// CrowdSec-only service discovery.
+	cfg.Services = []string{}
+	cfg.ServicesWithCrowdsec = []string{cfg.CrowdsecContainerName}
 
-		// Filter to known/managed services only to avoid unintended service management
-		knownServices := map[string]bool{
-			cfg.TraefikContainerName:  true,
-			cfg.CrowdsecContainerName: true,
-			cfg.PangolinContainerName: true,
-			cfg.GerbilContainerName:   true,
-		}
-
-		cfg.Services = []string{}
-		cfg.ServicesWithCrowdsec = []string{}
-
-		for _, svc := range allServices {
-			if knownServices[svc] {
-				// Respect feature flags for optional services
-				if svc == cfg.PangolinContainerName && !cfg.IncludePangolin {
-					continue
-				}
-				if svc == cfg.GerbilContainerName && !cfg.IncludeGerbil {
-					continue
-				}
-
-				// Separate services list (without CrowdSec) from full services list (with CrowdSec)
-				if svc != cfg.CrowdsecContainerName {
-					cfg.Services = append(cfg.Services, svc)
-				}
-				cfg.ServicesWithCrowdsec = append(cfg.ServicesWithCrowdsec, svc)
-			}
-		}
-	} else {
-		// Fallback to manual service list construction if compose file is unavailable or invalid
-		cfg.Services = []string{cfg.TraefikContainerName}
-		if cfg.IncludePangolin {
-			cfg.Services = append(cfg.Services, cfg.PangolinContainerName)
-		}
-		if cfg.IncludeGerbil {
-			cfg.Services = append(cfg.Services, cfg.GerbilContainerName)
-		}
-
-		// Pre-allocate slice for better performance
-		cfg.ServicesWithCrowdsec = make([]string, len(cfg.Services))
-		copy(cfg.ServicesWithCrowdsec, cfg.Services)
-		cfg.ServicesWithCrowdsec = append(cfg.ServicesWithCrowdsec, cfg.CrowdsecContainerName)
-	}
-
-	// Ensure required directories exist
 	if err := cfg.createDirectories(); err != nil {
 		return nil, fmt.Errorf("failed to create directories: %w", err)
 	}
@@ -194,11 +91,10 @@ func Load() (*Config, error) {
 	return cfg, nil
 }
 
-// createDirectories ensures all required application directories exist with proper permissions
+// createDirectories ensures required application directories exist with proper permissions.
 func (c *Config) createDirectories() error {
 	dirs := []string{
 		filepath.Dir(c.LogFile),
-		c.BackupDir,
 		c.ConfigDir,
 	}
 
@@ -211,7 +107,7 @@ func (c *Config) createDirectories() error {
 	return nil
 }
 
-// GetServices returns the appropriate service list based on CrowdSec inclusion preference
+// GetServices returns the appropriate service list based on CrowdSec inclusion preference.
 func (c *Config) GetServices() []string {
 	if c.IncludeCrowdsec {
 		return c.ServicesWithCrowdsec
@@ -220,8 +116,6 @@ func (c *Config) GetServices() []string {
 }
 
 // EffectiveLimit returns the effective list limit, applying the hard safety cap.
-// If the configured limit is 0 (unlimited), it returns maxLimit.
-// If the configured limit exceeds maxLimit, it returns maxLimit.
 func EffectiveLimit(configured, maxLimit int) int {
 	if configured <= 0 || configured > maxLimit {
 		return maxLimit
@@ -229,7 +123,7 @@ func EffectiveLimit(configured, maxLimit int) int {
 	return configured
 }
 
-// getEnv retrieves an environment variable or returns the default value if not set
+// getEnv retrieves an environment variable or returns the default value if not set.
 func getEnv(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
@@ -237,7 +131,7 @@ func getEnv(key, defaultValue string) string {
 	return defaultValue
 }
 
-// getEnvAsInt retrieves an environment variable as integer or returns default if not set or invalid
+// getEnvAsInt retrieves an environment variable as integer or returns default if not set or invalid.
 func getEnvAsInt(key string, defaultValue int) int {
 	if valueStr := os.Getenv(key); valueStr != "" {
 		if value, err := strconv.Atoi(valueStr); err == nil {
@@ -247,8 +141,7 @@ func getEnvAsInt(key string, defaultValue int) int {
 	return defaultValue
 }
 
-// getEnvAsBool retrieves an environment variable as boolean or returns default if not set or invalid
-// Accepts: 1, t, T, TRUE, true, True, 0, f, F, FALSE, false, False
+// getEnvAsBool retrieves an environment variable as boolean or returns default if not set or invalid.
 func getEnvAsBool(key string, defaultValue bool) bool {
 	if valueStr := os.Getenv(key); valueStr != "" {
 		if value, err := strconv.ParseBool(valueStr); err == nil {

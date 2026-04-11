@@ -2,11 +2,8 @@ package api
 
 import (
 	"crowdsec-manager/internal/api/handlers"
-	"crowdsec-manager/internal/backup"
 	"crowdsec-manager/internal/cache"
 	"crowdsec-manager/internal/config"
-	"crowdsec-manager/internal/configvalidator"
-	"crowdsec-manager/internal/cron"
 	"crowdsec-manager/internal/database"
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/messaging"
@@ -15,39 +12,12 @@ import (
 )
 
 // RegisterHealthRoutes configures endpoints for system and CrowdSec health monitoring
-func RegisterHealthRoutes(router *gin.RouterGroup, dockerClient *docker.Client, db *database.Database, cfg *config.Config) {
+func RegisterHealthRoutes(router *gin.RouterGroup, dockerClient *docker.Client, cfg *config.Config) {
 	health := router.Group("/health")
 	{
 		health.GET("/stack", handlers.CheckStackHealth(dockerClient, cfg))
 		health.GET("/crowdsec", handlers.CheckCrowdSecHealth(dockerClient, cfg))
-		health.GET("/complete", handlers.RunCompleteDiagnostics(dockerClient, db, cfg))
-	}
-}
-
-// RegisterIPRoutes configures endpoints for IP banning, unbanning, and public IP retrieval
-func RegisterIPRoutes(router *gin.RouterGroup, dockerClient *docker.Client, cfg *config.Config) {
-	ip := router.Group("/ip")
-	{
-		ip.GET("/public", handlers.GetPublicIP())
-		ip.GET("/blocked/:ip", handlers.IsIPBlocked(dockerClient, cfg))
-		ip.GET("/security/:ip", handlers.CheckIPSecurity(dockerClient, cfg))
-
-		ip.POST("/unban", handlers.UnbanIP(dockerClient, cfg))
-	}
-}
-
-// RegisterWhitelistRoutes configures endpoints for adding IPs to CrowdSec and Traefik whitelists
-func RegisterWhitelistRoutes(router *gin.RouterGroup, dockerClient *docker.Client, cfg *config.Config) {
-	whitelist := router.Group("/whitelist")
-	{
-		whitelist.GET("/view", handlers.ViewWhitelist(dockerClient, cfg))
-		whitelist.POST("/current", handlers.WhitelistCurrentIP(dockerClient, cfg))
-		whitelist.POST("/manual", handlers.WhitelistManualIP(dockerClient, cfg))
-		whitelist.POST("/cidr", handlers.WhitelistCIDR(dockerClient, cfg))
-		whitelist.POST("/crowdsec", handlers.AddToCrowdSecWhitelist(dockerClient, cfg))
-		whitelist.POST("/traefik", handlers.AddToTraefikWhitelist(dockerClient, cfg))
-		whitelist.POST("/comprehensive", handlers.SetupComprehensiveWhitelist(dockerClient, cfg))
-		whitelist.DELETE("/remove", handlers.RemoveFromWhitelist(dockerClient, cfg))
+		health.GET("/complete", handlers.RunCompleteDiagnostics(dockerClient, cfg))
 	}
 }
 
@@ -76,69 +46,31 @@ func RegisterScenarioRoutes(router *gin.RouterGroup, dockerClient *docker.Client
 	}
 }
 
-// RegisterCaptchaRoutes configures endpoints for CrowdSec captcha (AppSec) setup and status
-func RegisterCaptchaRoutes(router *gin.RouterGroup, dockerClient *docker.Client, db *database.Database, cfg *config.Config) {
-	captcha := router.Group("/captcha")
-	{
-		captcha.POST("/setup", handlers.SetupCaptcha(dockerClient, cfg))
-		captcha.GET("/status", handlers.GetCaptchaStatus(dockerClient, db, cfg))
-		captcha.GET("/detect", handlers.DetectCaptchaConfig(dockerClient, db, cfg))
-		captcha.POST("/config", handlers.SaveCaptchaConfig(db))
-		captcha.POST("/apply", handlers.ApplyCaptchaConfig(dockerClient, db, cfg))
-	}
-}
-
-// RegisterLogRoutes configures endpoints for viewing container logs and analyzing Traefik access logs
-func RegisterLogRoutes(router *gin.RouterGroup, dockerClient *docker.Client, db *database.Database, cfg *config.Config) {
+// RegisterLogRoutes configures endpoints for viewing container logs
+func RegisterLogRoutes(router *gin.RouterGroup, dockerClient *docker.Client, cfg *config.Config) {
 	logs := router.Group("/logs")
 	{
 		logs.GET("/crowdsec", handlers.GetCrowdSecLogs(dockerClient, cfg))
-		logs.GET("/traefik", handlers.GetTraefikLogs(dockerClient, db, cfg))
-		logs.GET("/traefik/advanced", handlers.AnalyzeTraefikLogsAdvanced(dockerClient, cfg))
-		logs.GET("/:service", handlers.GetServiceLogs(dockerClient))
-		logs.GET("/stream/:service", handlers.StreamLogs(dockerClient))
+		logs.GET("/:service", handlers.GetServiceLogs(dockerClient, cfg))
+		logs.GET("/stream/:service", handlers.StreamLogs(dockerClient, cfg))
 		logs.GET("/structured/:service", handlers.GetStructuredLogs(dockerClient, cfg))
 	}
 }
 
-// RegisterBackupRoutes configures endpoints for creating, listing, restoring, and managing backups
-func RegisterBackupRoutes(router *gin.RouterGroup, backupMgr *backup.Manager, dockerClient *docker.Client) {
-	backupRoutes := router.Group("/backup")
-	{
-		backupRoutes.GET("/list", handlers.ListBackups(backupMgr))
-		backupRoutes.POST("/create", handlers.CreateBackup(backupMgr))
-		backupRoutes.POST("/restore", handlers.RestoreBackup(backupMgr))
-		backupRoutes.DELETE("/:id", handlers.DeleteBackup(backupMgr))
-		backupRoutes.POST("/cleanup", handlers.CleanupOldBackups(backupMgr))
-		backupRoutes.GET("/latest", handlers.GetLatestBackup(backupMgr))
-	}
-}
-
-// RegisterUpdateRoutes configures endpoints for checking and applying Docker image updates
-func RegisterUpdateRoutes(router *gin.RouterGroup, dockerClient *docker.Client, cfg *config.Config) {
-	update := router.Group("/update")
-	{
-		update.GET("/check", handlers.CheckForUpdates(dockerClient, cfg))
-		update.POST("/with-crowdsec", handlers.UpdateWithCrowdSec(dockerClient, cfg))
-		update.POST("/without-crowdsec", handlers.UpdateWithoutCrowdSec(dockerClient, cfg))
-	}
-}
-
-// RegisterServicesRoutes configures endpoints for Docker service management, CrowdSec operations, and Traefik config
+// RegisterServicesRoutes configures endpoints for Docker service management and CrowdSec operations
 func RegisterServicesRoutes(router *gin.RouterGroup, dockerClient *docker.Client, db *database.Database, cfg *config.Config, ttlCache ...*cache.TTLCache) {
 	var c *cache.TTLCache
 	if len(ttlCache) > 0 {
 		c = ttlCache[0]
 	}
+
 	services := router.Group("/services")
 	{
 		services.GET("/verify", handlers.VerifyServices(dockerClient, cfg))
 		services.POST("/shutdown", handlers.GracefulShutdown(dockerClient, cfg))
 		services.POST("/action", handlers.ServiceAction(dockerClient, cfg))
-
 	}
 
-	// CrowdSec specific
 	crowdsec := router.Group("/crowdsec")
 	{
 		crowdsec.GET("/bouncers", handlers.GetBouncers(dockerClient, cfg))
@@ -167,54 +99,6 @@ func RegisterServicesRoutes(router *gin.RouterGroup, dockerClient *docker.Client
 		crowdsec.PUT("/enroll/preferences", handlers.UpdateCrowdSecEnrollmentPreferences(db))
 		crowdsec.GET("/status", handlers.GetCrowdSecEnrollmentStatus(dockerClient, cfg))
 	}
-
-	// Traefik specific
-	traefik := router.Group("/traefik")
-	{
-		traefik.GET("/config", handlers.GetTraefikConfig())
-		traefik.GET("/config-path", handlers.GetTraefikConfigPath(db))
-		traefik.POST("/config-path", handlers.SetTraefikConfigPath(db))
-	}
-
-	// Configuration/Settings
-	config := router.Group("/config")
-	{
-		config.GET("/settings", handlers.GetSettings(db))
-		config.PUT("/settings", handlers.UpdateSettings(db))
-		config.GET("/files/:container/:fileType", handlers.GetFileContent(dockerClient, db))
-	}
-}
-
-// RegisterNotificationRoutes configures endpoints for Discord webhook notification management
-func RegisterNotificationRoutes(router *gin.RouterGroup, dockerClient *docker.Client, db *database.Database, cfg *config.Config) {
-	notifications := router.Group("/notifications")
-	{
-		notifications.GET("/discord", handlers.GetDiscordConfig(db, cfg, dockerClient))
-		notifications.POST("/discord", handlers.UpdateDiscordConfig(db, cfg, dockerClient))
-		notifications.GET("/discord/preview", handlers.PreviewDiscordConfig(cfg, dockerClient))
-		notifications.GET("/discord/detect", handlers.DetectDiscordConfig(dockerClient, db, cfg))
-		notifications.POST("/discord/config", handlers.SaveDiscordConfig(db))
-		notifications.POST("/discord/apply", handlers.ApplyDiscordConfig(dockerClient, db, cfg))
-	}
-}
-
-// RegisterCronRoutes configures endpoints for creating, listing, and deleting scheduled cron jobs
-func RegisterCronRoutes(router *gin.RouterGroup, scheduler *cron.Scheduler) {
-	cronRoutes := router.Group("/cron")
-	{
-		cronRoutes.POST("/setup", handlers.SetupCronJob(scheduler))
-		cronRoutes.GET("/list", handlers.ListCronJobs(scheduler))
-		cronRoutes.DELETE("/:id", handlers.DeleteCronJob(scheduler))
-	}
-}
-
-// RegisterProfileRoutes configures endpoints for managing profiles.yaml
-func RegisterProfileRoutes(router *gin.RouterGroup, db *database.Database, cfg *config.Config, dockerClient *docker.Client) {
-	profiles := router.Group("/profiles")
-	{
-		profiles.GET("", handlers.GetProfiles(cfg, dockerClient))
-		profiles.POST("", handlers.UpdateProfiles(db, cfg, dockerClient))
-	}
 }
 
 // RegisterHostRoutes configures endpoints for listing and managing Docker hosts
@@ -228,19 +112,6 @@ func RegisterHostRoutes(router *gin.RouterGroup, multiHost *docker.MultiHostClie
 // RegisterTerminalRoutes configures WebSocket endpoint for interactive container terminals
 func RegisterTerminalRoutes(router *gin.RouterGroup, dockerClient *docker.Client) {
 	router.GET("/terminal/:container", handlers.TerminalSession(dockerClient))
-}
-
-// RegisterConfigValidationRoutes configures endpoints for config drift detection and recovery
-func RegisterConfigValidationRoutes(router *gin.RouterGroup, validator *configvalidator.Validator) {
-	cfgValidation := router.Group("/config/validation")
-	{
-		cfgValidation.GET("/validate", handlers.ValidateConfigs(validator))
-		cfgValidation.GET("/snapshots", handlers.GetConfigSnapshots(validator))
-		cfgValidation.POST("/snapshot", handlers.SnapshotAllConfigs(validator))
-		cfgValidation.POST("/restore/:type", handlers.RestoreConfig(validator))
-		cfgValidation.POST("/accept/:type", handlers.AcceptCurrentConfig(validator))
-		cfgValidation.DELETE("/snapshot/:type", handlers.DeleteConfigSnapshot(validator))
-	}
 }
 
 // RegisterHubRoutes configures endpoints for browsing, installing, removing, and upgrading CrowdSec hub items

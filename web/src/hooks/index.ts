@@ -1,7 +1,6 @@
 export { useAsyncOperation } from './useAsyncOperation'
 export { useMountEffect } from './useMountEffect'
 export { useCommandPalette } from './useCommandPalette'
-export { useConfigEvents } from './useConfigEvents'
 export { useKeyboardNavigation } from './useKeyboardNavigation'
 export { useMediaQuery, useIsMobile, useIsTablet, useIsDesktop } from './useMediaQuery'
 export { useRealtimeEvents } from './useRealtimeEvents'

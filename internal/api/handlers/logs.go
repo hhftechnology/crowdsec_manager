@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"crowdsec-manager/internal/config"
-	"crowdsec-manager/internal/database"
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
 	"crowdsec-manager/internal/models"
@@ -17,9 +16,12 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// =============================================================================
-// LOGS
-// =============================================================================
+func resolveCrowdsecLogService(service string, cfg *config.Config) (string, bool) {
+	if service == "crowdsec" || service == cfg.CrowdsecContainerName {
+		return cfg.CrowdsecContainerName, true
+	}
+	return "", false
+}
 
 // GetCrowdSecLogs retrieves CrowdSec logs
 func GetCrowdSecLogs(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
@@ -30,110 +32,43 @@ func GetCrowdSecLogs(dockerClient *docker.Client, cfg *config.Config) gin.Handle
 
 		logs, err := dockerClient.GetContainerLogs(cfg.CrowdsecContainerName, tail)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, models.Response{
-				Success: false,
-				Error:   fmt.Sprintf("Failed to get logs: %v", err),
-			})
+			c.JSON(http.StatusInternalServerError, models.Response{Success: false, Error: fmt.Sprintf("Failed to get logs: %v", err)})
 			return
 		}
 
-		c.JSON(http.StatusOK, models.Response{
-			Success: true,
-			Data:    gin.H{"logs": logs},
-		})
+		c.JSON(http.StatusOK, models.Response{Success: true, Data: gin.H{"logs": logs}})
 	}
 }
 
-// GetTraefikLogs retrieves Traefik logs from the access log file
-func GetTraefikLogs(dockerClient *docker.Client, db *database.Database, cfg *config.Config) gin.HandlerFunc {
+// GetServiceLogs gets logs for crowdsec service only
+func GetServiceLogs(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		dockerClient = resolveDockerClient(c, dockerClient)
-		tail := c.DefaultQuery("tail", "100")
-		logType := c.DefaultQuery("type", "access") // access or error
-		logger.Info("Getting Traefik logs", "tail", tail, "type", logType)
-
-		settings, _ := db.GetSettings()
-		var logPath string
-		if logType == "error" {
-			logPath = settings.TraefikErrorLog
-		} else {
-			logPath = settings.TraefikAccessLog
-		}
-
-		// Read log file from traefik container
-		logs, err := dockerClient.ExecCommand(cfg.TraefikContainerName, []string{"tail", "-n", tail, logPath})
-		if err != nil {
-			// Fallback to container logs if file reading fails
-			logger.Warn("Failed to read log file, falling back to container logs", "error", err)
-			logs, err = dockerClient.GetContainerLogs(cfg.TraefikContainerName, tail)
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, models.Response{
-					Success: false,
-					Error:   fmt.Sprintf("Failed to get logs: %v", err),
-				})
-				return
-			}
-		}
-
-		c.JSON(http.StatusOK, models.Response{
-			Success: true,
-			Data:    gin.H{"logs": logs, "path": logPath},
-		})
-	}
-}
-
-// AnalyzeTraefikLogsAdvanced performs advanced analysis of Traefik logs
-func AnalyzeTraefikLogsAdvanced(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		dockerClient = resolveDockerClient(c, dockerClient)
-		tail := c.DefaultQuery("tail", "1000")
-		logger.Info("Analyzing Traefik logs", "tail", tail)
-
-		logs, err := dockerClient.GetContainerLogs(cfg.TraefikContainerName, tail)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, models.Response{
-				Success: false,
-				Error:   fmt.Sprintf("Failed to get logs: %v", err),
-			})
+		serviceParam := c.Param("service")
+		service, ok := resolveCrowdsecLogService(serviceParam, cfg)
+		if !ok {
+			c.JSON(http.StatusBadRequest, models.Response{Success: false, Error: "Only crowdsec logs are supported"})
 			return
 		}
 
-		// Parse and analyze logs
-		stats := analyzeLogs(logs)
-
-		c.JSON(http.StatusOK, models.Response{
-			Success: true,
-			Data:    stats,
-		})
-	}
-}
-
-// GetServiceLogs gets logs for any service
-func GetServiceLogs(dockerClient *docker.Client) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		dockerClient = resolveDockerClient(c, dockerClient)
-		service := c.Param("service")
 		tail := c.DefaultQuery("tail", "100")
 		logger.Info("Getting service logs", "service", service, "tail", tail)
 
 		logs, err := dockerClient.GetContainerLogs(service, tail)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, models.Response{
-				Success: false,
-				Error:   fmt.Sprintf("Failed to get logs: %v", err),
-			})
+			c.JSON(http.StatusInternalServerError, models.Response{Success: false, Error: fmt.Sprintf("Failed to get logs: %v", err)})
 			return
 		}
 
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
-			Data:    gin.H{"logs": logs, "service": service},
+			Data:    gin.H{"logs": logs, "service": "crowdsec"},
 		})
 	}
 }
 
 // StreamLogs streams logs via WebSocket using Docker's native Follow mode
-func StreamLogs(dockerClient *docker.Client) gin.HandlerFunc {
+func StreamLogs(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	var upgrader = websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool {
 			return true
@@ -144,7 +79,13 @@ func StreamLogs(dockerClient *docker.Client) gin.HandlerFunc {
 
 	return func(c *gin.Context) {
 		dockerClient = resolveDockerClient(c, dockerClient)
-		service := c.Param("service")
+		serviceParam := c.Param("service")
+		service, ok := resolveCrowdsecLogService(serviceParam, cfg)
+		if !ok {
+			c.JSON(http.StatusBadRequest, models.Response{Success: false, Error: "Only crowdsec logs are supported"})
+			return
+		}
+
 		logger.Info("Streaming logs", "service", service)
 
 		ws, err := upgrader.Upgrade(c.Writer, c.Request, nil)
@@ -154,7 +95,6 @@ func StreamLogs(dockerClient *docker.Client) gin.HandlerFunc {
 		}
 		defer ws.Close()
 
-		// Set up ping/pong handlers
 		ws.SetReadDeadline(time.Now().Add(60 * time.Second))
 		ws.SetPongHandler(func(string) error {
 			ws.SetReadDeadline(time.Now().Add(60 * time.Second))
@@ -165,8 +105,6 @@ func StreamLogs(dockerClient *docker.Client) gin.HandlerFunc {
 		defer pingTicker.Stop()
 
 		done := make(chan struct{})
-
-		// Read messages from client (to detect disconnection)
 		go func() {
 			defer close(done)
 			for {
@@ -178,7 +116,6 @@ func StreamLogs(dockerClient *docker.Client) gin.HandlerFunc {
 			}
 		}()
 
-		// Start Docker follow stream
 		since := time.Now().Add(-5 * time.Minute).Format(time.RFC3339)
 		logStream, err := dockerClient.FollowContainerLogs(service, since)
 		if err != nil {
@@ -187,14 +124,11 @@ func StreamLogs(dockerClient *docker.Client) gin.HandlerFunc {
 		}
 		defer logStream.Close()
 
-		// Stream log lines from Docker to WebSocket in a goroutine
 		logLines := make(chan string, 64)
 		logErr := make(chan error, 1)
 
 		go func() {
 			defer close(logLines)
-			// Docker multiplexed stream: 8-byte header + payload per frame.
-			// Header: [type(1)][0][0][0][size(4 big-endian)]
 			header := make([]byte, 8)
 			for {
 				if _, err := io.ReadFull(logStream, header); err != nil {
@@ -228,7 +162,6 @@ func StreamLogs(dockerClient *docker.Client) gin.HandlerFunc {
 				}
 			case line, ok := <-logLines:
 				if !ok {
-					// Stream ended; check for error
 					select {
 					case streamErr := <-logErr:
 						if streamErr != nil && streamErr != io.EOF {
@@ -247,11 +180,17 @@ func StreamLogs(dockerClient *docker.Client) gin.HandlerFunc {
 	}
 }
 
-// GetStructuredLogs returns parsed, structured log entries for a container
+// GetStructuredLogs returns parsed, structured log entries for crowdsec container
 func GetStructuredLogs(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		dockerClient = resolveDockerClient(c, dockerClient)
-		service := c.Param("service")
+		serviceParam := c.Param("service")
+		service, ok := resolveCrowdsecLogService(serviceParam, cfg)
+		if !ok {
+			c.JSON(http.StatusBadRequest, models.Response{Success: false, Error: "Only crowdsec logs are supported"})
+			return
+		}
+
 		tail := c.DefaultQuery("tail", "200")
 		level := c.DefaultQuery("level", "")
 
@@ -259,14 +198,10 @@ func GetStructuredLogs(dockerClient *docker.Client, cfg *config.Config) gin.Hand
 
 		entries, err := dockerClient.GetStructuredLogs(service, tail, service)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, models.Response{
-				Success: false,
-				Error:   fmt.Sprintf("Failed to get structured logs: %v", err),
-			})
+			c.JSON(http.StatusInternalServerError, models.Response{Success: false, Error: fmt.Sprintf("Failed to get structured logs: %v", err)})
 			return
 		}
 
-		// Filter by level if specified
 		if level != "" {
 			filtered := make([]docker.StructuredLogEntry, 0)
 			for _, e := range entries {
@@ -282,7 +217,7 @@ func GetStructuredLogs(dockerClient *docker.Client, cfg *config.Config) gin.Hand
 			Data: gin.H{
 				"entries": entries,
 				"count":   len(entries),
-				"service": service,
+				"service": "crowdsec",
 			},
 		})
 	}

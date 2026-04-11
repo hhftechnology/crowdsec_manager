@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { CheckCircle2, XCircle, Activity, Shield, Globe, Container } from 'lucide-react'
+import { CheckCircle2, XCircle, Activity, Shield, Container } from 'lucide-react'
 
 export default function Health() {
   const { data: diagnostics, isLoading, isError, error, refetch } = useQuery({
@@ -92,7 +92,6 @@ export default function Health() {
         <TabsList>
           <TabsTrigger value="containers">Containers</TabsTrigger>
           <TabsTrigger value="bouncers">Bouncers</TabsTrigger>
-          <TabsTrigger value="traefik">Traefik Integration</TabsTrigger>
         </TabsList>
 
         {/* Containers Tab */}
@@ -209,85 +208,6 @@ export default function Health() {
           </Card>
         </TabsContent>
 
-        {/* Traefik Integration Tab */}
-        <TabsContent value="traefik">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Globe className="h-5 w-5" />
-                Traefik Integration
-              </CardTitle>
-              <CardDescription>
-                Traefik middleware and configuration status
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {isLoading ? (
-                <div className="space-y-2">
-                  <div className="h-12 bg-muted animate-pulse rounded" />
-                  <div className="h-12 bg-muted animate-pulse rounded" />
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between p-4 border rounded-lg">
-                    <div>
-                      <p className="font-medium">Middleware Configured</p>
-                      <p className="text-sm text-muted-foreground">
-                        CrowdSec middleware integration
-                      </p>
-                    </div>
-                    {diagnostics?.traefik_integration?.middleware_configured ? (
-                      <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-                    ) : (
-                      <XCircle className="h-5 w-5 text-destructive" />
-                    )}
-                  </div>
-
-                  <div className="flex items-center justify-between p-4 border rounded-lg">
-                    <div>
-                      <p className="font-medium">LAPI Key Found</p>
-                      <p className="text-sm text-muted-foreground">
-                        Local API authentication key
-                      </p>
-                    </div>
-                    {diagnostics?.traefik_integration?.lapi_key_found ? (
-                      <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-                    ) : (
-                      <XCircle className="h-5 w-5 text-destructive" />
-                    )}
-                  </div>
-
-                  <div className="flex items-center justify-between p-4 border rounded-lg">
-                    <div>
-                      <p className="font-medium">AppSec Enabled</p>
-                      <p className="text-sm text-muted-foreground">
-                        Application security features
-                      </p>
-                    </div>
-                    {diagnostics?.traefik_integration?.appsec_enabled ? (
-                      <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-                    ) : (
-                      <XCircle className="h-5 w-5 text-destructive" />
-                    )}
-                  </div>
-
-                  {diagnostics?.traefik_integration?.config_files && diagnostics.traefik_integration.config_files.length > 0 && (
-                    <div className="p-4 border rounded-lg">
-                      <p className="font-medium mb-2">Configuration Files</p>
-                      <ul className="space-y-1">
-                        {diagnostics.traefik_integration.config_files.map((file, index) => (
-                          <li key={index} className="text-sm font-mono text-muted-foreground">
-                            {file}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
       </Tabs>
 
       {/* Timestamp */}
