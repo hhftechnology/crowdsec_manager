@@ -286,7 +286,6 @@ function DiagnosticsSummaryPanel({ diagnostics }: { diagnostics: DiagnosticResul
         </div>
       )}
 
-      {/* Traefik integration status */}
       <Separator />
       <StatusRow label="Timestamp" value={new Date(diagnostics.timestamp).toLocaleString()} />
     </div>

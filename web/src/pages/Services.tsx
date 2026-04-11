@@ -236,7 +236,7 @@ export default function Services() {
             <li>Centralized management of multiple instances</li>
             <li>Access to CTI (Cyber Threat Intelligence)</li>
             <li>Real-time metrics and analytics</li>
-            <li>Alert notifications and monitoring</li>
+            <li>Alert analysis and monitoring</li>
             <li>Community blocklists and scenarios</li>
           </ul>
           <div className="pt-2">
