@@ -21,6 +21,7 @@ vi.mock('react-router-dom', async () => {
 
 describe('LoginPage', () => {
   beforeEach(() => {
+    localStorage.clear();
     mockUseApi.mockReset();
     mockNavigate.mockReset();
     mockUseApi.mockReturnValue({
@@ -87,5 +88,32 @@ describe('LoginPage', () => {
       target: { value: 'pp6evkhe.3kyqq4a7eay6rp6ow6dacallhm' },
     });
     expect(screen.getByRole('button', { name: 'Connect' })).toBeEnabled();
+  });
+
+  it('prefills non-secret saved connection fields from storage', () => {
+    localStorage.setItem(
+      'csm_connection_profile',
+      JSON.stringify({
+        mode: 'proxy-basic',
+        baseUrl: 'https://proxy.example.com',
+        allowInsecure: false,
+        proxyUsername: 'alice',
+        proxyPassword: '',
+        pangolinToken: '',
+        pangolinTokenParam: 'p_token',
+      }),
+    );
+
+    render(<LoginPage />);
+
+    const proxyTab = screen.getByRole('tab', { name: 'Proxy' });
+    fireEvent.mouseDown(proxyTab);
+    fireEvent.click(proxyTab);
+
+    expect(screen.getByLabelText('Server URL')).toHaveValue(
+      'https://proxy.example.com',
+    );
+    expect(screen.getByLabelText('Proxy username')).toHaveValue('alice');
+    expect(screen.getByLabelText('Proxy password')).toHaveValue('');
   });
 });

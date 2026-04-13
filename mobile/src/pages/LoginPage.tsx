@@ -7,14 +7,20 @@ import { Button } from '@/components/ui/button';
 import {
   createDefaultConnectionProfileDraft,
   isConnectionDraftComplete,
+  parseStoredConnectionProfile,
   type ConnectionProfileDraft,
 } from '@/lib/connection';
+
+const CONNECTION_PROFILE_KEY = 'csm_connection_profile';
 
 export default function LoginPage() {
   const navigate = useNavigate();
   const { login, isLoading, error } = useApi();
   const [profile, setProfile] = useState<ConnectionProfileDraft>(
-    createDefaultConnectionProfileDraft,
+    () =>
+      parseStoredConnectionProfile(
+        localStorage.getItem(CONNECTION_PROFILE_KEY),
+      ) ?? createDefaultConnectionProfileDraft(),
   );
 
   const handleSubmit = async (event: React.FormEvent) => {

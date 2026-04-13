@@ -111,7 +111,7 @@ describe('ApiContext', () => {
     });
   });
 
-  it('persists the full profile and clears it on logout', async () => {
+  it('persists only non-secret profile fields and clears them on logout', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -150,7 +150,7 @@ describe('ApiContext', () => {
       mode: 'proxy-basic',
       baseUrl: 'https://proxy.example.com',
       proxyUsername: 'alice',
-      proxyPassword: 'secret',
+      proxyPassword: '',
     });
 
     fireEvent.click(screen.getByRole('button', { name: 'Logout' }));
@@ -159,6 +159,30 @@ describe('ApiContext', () => {
       expect(screen.getByTestId('base-url')).toHaveTextContent('');
     });
     expect(localStorage.getItem('csm_connection_profile')).toBeNull();
+  });
+
+  it('does not restore secret-backed authenticated sessions from sanitized storage', () => {
+    localStorage.setItem(
+      'csm_connection_profile',
+      JSON.stringify({
+        mode: 'pangolin',
+        baseUrl: 'https://pangolin.example.com',
+        allowInsecure: false,
+        proxyUsername: '',
+        proxyPassword: '',
+        pangolinToken: '',
+        pangolinTokenParam: 'p_token',
+      }),
+    );
+
+    render(
+      <ApiProvider>
+        <Harness draft={createDraft()} />
+      </ApiProvider>,
+    );
+
+    expect(screen.getByTestId('base-url')).toHaveTextContent('');
+    expect(screen.getByTestId('mode')).toHaveTextContent('');
   });
 
   it('migrates legacy url-only storage into the new profile shape', () => {

@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import {
   buildConnectionCandidates,
+  canAutoRestoreConnectionProfile,
   createDefaultConnectionProfileDraft,
   finalizeConnectionProfile,
   isExplicitHttpUrl,
@@ -8,6 +9,7 @@ import {
   parsePangolinAccessToken,
   parseStoredConnectionProfile,
   serializeConnectionProfile,
+  stripSensitiveConnectionFields,
   type ConnectionMode,
   type ConnectionProfile,
   type ConnectionProfileDraft,
@@ -35,7 +37,7 @@ function readInitialConnectionProfile(): ConnectionProfile | null {
   const stored = parseStoredConnectionProfile(
     localStorage.getItem(CONNECTION_PROFILE_KEY),
   );
-  if (stored) return stored;
+  if (stored && canAutoRestoreConnectionProfile(stored)) return stored;
 
   const legacyBaseUrl = localStorage.getItem(LEGACY_BASE_URL_KEY);
   if (!legacyBaseUrl) return null;
@@ -162,7 +164,9 @@ export const ApiProvider: React.FC<{ children: React.ReactNode }> = ({
           setConnectionProfile(candidateProfile);
           localStorage.setItem(
             CONNECTION_PROFILE_KEY,
-            serializeConnectionProfile(candidateProfile),
+            serializeConnectionProfile(
+              stripSensitiveConnectionFields(candidateProfile),
+            ),
           );
           localStorage.removeItem(LEGACY_BASE_URL_KEY);
           localStorage.removeItem(LEGACY_INSECURE_KEY);

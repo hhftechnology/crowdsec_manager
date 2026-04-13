@@ -136,6 +136,37 @@ export function parseStoredConnectionProfile(value: string | null): ConnectionPr
   }
 }
 
+export function stripSensitiveConnectionFields(
+  profile: ConnectionProfile,
+): ConnectionProfile {
+  const normalized = normalizeConnectionProfileDraft(profile);
+
+  return {
+    ...normalized,
+    proxyPassword: '',
+    pangolinToken: '',
+  };
+}
+
+export function canAutoRestoreConnectionProfile(
+  profile: ConnectionProfile,
+): boolean {
+  const normalized = normalizeConnectionProfileDraft(profile);
+
+  if (normalized.mode === 'proxy-basic') {
+    return Boolean(normalized.baseUrl && normalized.proxyPassword);
+  }
+
+  if (normalized.mode === 'pangolin') {
+    return Boolean(
+      normalized.baseUrl &&
+        parsePangolinAccessToken(normalized.pangolinToken),
+    );
+  }
+
+  return Boolean(normalized.baseUrl);
+}
+
 export function serializeConnectionProfile(profile: ConnectionProfile): string {
   return JSON.stringify(normalizeConnectionProfileDraft(profile));
 }
