@@ -14,16 +14,16 @@ CrowdSec Manager is a web-based management interface for CrowdSec operations, Tr
 
 ## Stable release
 
-- Current baseline: `2.3.1`
+- Current baseline: `2.3.2`
 - Multi-proxy support: hhftechnology/crowdsec-manager:independent
 - Docker image size (linux/amd64): <!-- IMAGE_SIZE_START -->44MB<!-- IMAGE_SIZE_END -->
 
 ### Crowdsec-Manager mobile app.
 
 <div align="center">
-<a href="https://apps.apple.com/us/app/#"><img width="135" height="39" alt="appstore" src="https://github.com/user-attachments/assets/45e31a11-cf6b-40a2-a083-6dc8d1f01291" /></a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://play.google.com/store/apps/details?id=com.crowdsec.manager.mobile"><img width="135" height="39" alt="googleplay" src="https://github.com/user-attachments/assets/acbba639-858f-4c74-85c7-92a4096efbf5" /></a>
+<a href="https://apps.apple.com/us/app/#"><img width="135" height="39" alt="appstore" src="https://github.com/user-attachments/assets/45e31a11-cf6b-40a2-a083-6dc8d1f01291" /></a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://play.google.com/store/apps/details?id=com.crowdsec.manager.mobile"><img width="135" height="39" alt="googleplay" src="https://github.com/user-attachments/assets/acbba639-858f-4c74-85c7-92a4096efbf5" /></a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://play.google.com/store/apps/details?id=com.crowdsec.manager.independent"><img width="135" height="39" alt="googleplay" src="https://github.com/user-attachments/assets/acbba639-858f-4c74-85c7-92a4096efbf5" /></a>
 </div>
-
+## All apps are Pangolin and Basis auth supported.
 
 
 ## Images
