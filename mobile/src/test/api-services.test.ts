@@ -1,9 +1,20 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApi } from '@/lib/api';
 import { parseHubItems } from '@/lib/api/hub';
+import type { ConnectionProfile } from '@/lib/connection';
+
+const profile: ConnectionProfile = {
+  mode: 'direct',
+  baseUrl: 'https://api.example.com',
+  allowInsecure: false,
+  proxyUsername: '',
+  proxyPassword: '',
+  pangolinToken: '',
+  pangolinTokenParam: 'p_token',
+};
 
 describe('API service route usage', () => {
-  const api = createApi('https://api.example.com');
+  const api = createApi(profile);
 
   afterEach(() => {
     vi.restoreAllMocks();

@@ -1,13 +1,18 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { GlobeLock, Link2Off, Moon, Sun, Monitor, ChevronRight, Info } from 'lucide-react';
+import { Link2Off, Moon, Sun, Monitor, ChevronRight, Info } from 'lucide-react';
 import { useApi } from '@/contexts/ApiContext';
 import { useTheme } from '@/contexts/ThemeContext';
+import { ConnectionProfileForm } from '@/components/ConnectionProfileForm';
 import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Switch } from '@/components/ui/switch';
 import { showActionError, showActionSuccess } from '@/lib/actionToast';
+import {
+  createDefaultConnectionProfileDraft,
+  isConnectionDraftComplete,
+  normalizeConnectionProfileDraft,
+  type ConnectionProfileDraft,
+} from '@/lib/connection';
 
 const themeOptions = [
   { value: 'light' as const, icon: Sun, label: 'Light' },
@@ -15,20 +20,27 @@ const themeOptions = [
   { value: 'system' as const, icon: Monitor, label: 'System' },
 ];
 
+function buildDraft(profile: ReturnType<typeof useApi>['connectionProfile']): ConnectionProfileDraft {
+  return normalizeConnectionProfileDraft(profile ?? createDefaultConnectionProfileDraft());
+}
+
 export default function MorePage() {
   const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
-  const { baseUrl, login, logout, allowInsecure, setAllowInsecure, isLoading } = useApi();
+  const { connectionProfile, login, logout, isLoading } = useApi();
+  const [draft, setDraft] = useState<ConnectionProfileDraft>(() => buildDraft(connectionProfile));
 
-  const [serverUrl, setServerUrl] = useState(baseUrl);
+  useEffect(() => {
+    setDraft(buildDraft(connectionProfile));
+  }, [connectionProfile]);
 
   const reconnect = async () => {
-    if (!serverUrl.trim()) return;
+    if (!isConnectionDraftComplete(draft)) return;
 
     try {
-      const ok = await login(serverUrl.trim());
+      const ok = await login(draft);
       if (ok) {
-        showActionSuccess('Connected', serverUrl.trim());
+        showActionSuccess('Connected', normalizeConnectionProfileDraft(draft).baseUrl);
       }
     } catch (err) {
       showActionError('Failed to connect', err);
@@ -37,19 +49,19 @@ export default function MorePage() {
 
   return (
     <div className="pb-nav">
-      <PageHeader title="Settings" subtitle="Connection, security mode, and theme" />
+      <PageHeader title="Settings" subtitle="Connection, proxy access, and theme" />
 
       <div className="px-4 space-y-4">
-        <section className="rounded-xl border border-border bg-card p-4 space-y-3">
-          <h3 className="text-sm font-semibold">API Connection</h3>
-          <Input
-            type="url"
-            placeholder="https://your-server.example"
-            value={serverUrl}
-            onChange={(e) => setServerUrl(e.target.value)}
-          />
+        <section className="rounded-xl border border-border bg-card p-4 space-y-4">
+          <div>
+            <h3 className="text-sm font-semibold">API Connection</h3>
+            <p className="text-xs text-muted-foreground mt-1">Update the saved connection profile used for API requests and terminal websockets.</p>
+          </div>
+
+          <ConnectionProfileForm value={draft} onChange={setDraft} disabled={isLoading} />
+
           <div className="flex gap-2">
-            <Button onClick={reconnect} disabled={isLoading || !serverUrl.trim()}>
+            <Button onClick={reconnect} disabled={isLoading || !isConnectionDraftComplete(draft)}>
               Reconnect
             </Button>
             <Button
@@ -63,23 +75,7 @@ export default function MorePage() {
               Disconnect
             </Button>
           </div>
-          <p className="text-xs text-muted-foreground">Current server: {baseUrl || 'Not connected'}</p>
-        </section>
-
-        <section className="rounded-xl border border-border bg-card p-4 space-y-3">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h3 className="text-sm font-semibold">Insecure/LAN Mode</h3>
-              <p className="text-xs text-muted-foreground">
-                Off = HTTPS required. On = allow HTTP/LAN hosts for trusted private networks.
-              </p>
-            </div>
-            <Switch checked={allowInsecure} onCheckedChange={setAllowInsecure} />
-          </div>
-          <div className="text-xs text-muted-foreground flex items-center gap-2">
-            <GlobeLock className="h-3.5 w-3.5" />
-            {allowInsecure ? 'Insecure mode enabled' : 'Secure mode enabled'}
-          </div>
+          <p className="text-xs text-muted-foreground">Current server: {connectionProfile?.baseUrl || 'Not connected'}</p>
         </section>
 
         <section className="rounded-xl border border-border bg-card p-4 space-y-3">

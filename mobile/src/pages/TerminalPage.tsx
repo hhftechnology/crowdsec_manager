@@ -9,10 +9,11 @@ import { QueryStateView } from '@/components/QueryStateView';
 import { InlineErrorBanner } from '@/components/InlineErrorBanner';
 import { useTerminal } from '@/hooks/useTerminal';
 import { showActionError, showActionSuccess } from '@/lib/actionToast';
+import type { WebSocketUrlOptions } from '@/lib/api/client';
 import type { HealthContainer } from '@/lib/api';
 
 export default function TerminalPage() {
-  const { api } = useApi();
+  const { api, connectionProfile } = useApi();
   const [containers, setContainers] = useState<HealthContainer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -41,9 +42,9 @@ export default function TerminalPage() {
   });
 
   const getWebSocketUrl = useCallback(
-    (container: string) => {
-      if (!api) return '';
-      return api.terminal.getWebSocketUrl(container);
+    (container: string, options?: WebSocketUrlOptions) => {
+      if (!api) return Promise.resolve('');
+      return api.terminal.getWebSocketUrl(container, options);
     },
     [api],
   );
@@ -51,6 +52,7 @@ export default function TerminalPage() {
   const { terminalRef, connected, reconnecting, connectionError, connect, disconnect, reconnect } = useTerminal({
     getWebSocketUrl,
     container: selectedContainer,
+    allowPreOpenAuthRefresh: connectionProfile?.mode === 'pangolin',
     onConnect: () => showActionSuccess('Terminal connected', selectedContainer),
     onDisconnect: () => showActionSuccess('Terminal disconnected'),
     onError: (msg) => showActionError('Terminal error', new Error(msg)),
@@ -60,7 +62,7 @@ export default function TerminalPage() {
     <div className="pb-nav">
       <PageHeader
         title="Terminal"
-        subtitle={connected ? `Connected to ${selectedContainer}` : reconnecting ? 'Reconnecting...' : 'Interactive container shell'}
+        subtitle={connected ? 'Connected to ' + selectedContainer : reconnecting ? 'Reconnecting...' : 'Interactive container shell'}
         action={
           <Button variant="ghost" size="icon" onClick={loadContainers} disabled={loading}>
             <RefreshCw className={loading ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
@@ -125,11 +127,11 @@ export default function TerminalPage() {
                   Reconnect
                 </Button>
               )}
-              <div className={`ml-auto flex items-center gap-1.5 text-xs ${connected ? 'text-success' : reconnecting ? 'text-warning' : 'text-muted-foreground'}`}>
+              <div className={'ml-auto flex items-center gap-1.5 text-xs ' + (connected ? 'text-success' : reconnecting ? 'text-warning' : 'text-muted-foreground')}>
                 {reconnecting ? (
                   <Loader2 className="h-3 w-3 animate-spin" />
                 ) : (
-                  <span className={`inline-block h-2 w-2 rounded-full ${connected ? 'bg-success' : 'bg-muted-foreground'}`} />
+                  <span className={'inline-block h-2 w-2 rounded-full ' + (connected ? 'bg-success' : 'bg-muted-foreground')} />
                 )}
                 {connected ? 'Connected' : reconnecting ? 'Reconnecting' : 'Disconnected'}
               </div>

@@ -67,6 +67,36 @@ describe('DashboardPage', () => {
     expect(screen.queryByText('API unreachable')).not.toBeInTheDocument();
   });
 
+  it('defaults missing bouncers to zero without crashing', async () => {
+    mockUseApi.mockReset();
+    const api = createBaseApi();
+    api.health.getStack.mockResolvedValue({
+      containers: [{ id: 'abc', name: 'crowdsec', running: true, status: 'running' }],
+      allRunning: true,
+      timestamp: '2026-03-20T12:00:00Z',
+    });
+    api.health.getCrowdsec.mockResolvedValue({
+      status: 'healthy',
+      checks: {},
+      timestamp: '2026-03-20T12:00:00Z',
+    });
+    api.health.getComplete.mockResolvedValue({
+      decisions: [{ id: 1 }],
+      timestamp: '2026-03-20T12:00:00Z',
+    });
+    api.crowdsec.alertsAnalysis.mockResolvedValue(null);
+    mockUseApi.mockReturnValue({ api });
+
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Diagnostics Summary')).toBeInTheDocument();
+    });
+
+    expect(screen.getAllByText('0')).not.toHaveLength(0);
+    expect(screen.queryByText('API unreachable')).not.toBeInTheDocument();
+  });
+
   it('shows retryable inline error when critical requests fail', async () => {
     mockUseApi.mockReset();
     const api = createBaseApi();

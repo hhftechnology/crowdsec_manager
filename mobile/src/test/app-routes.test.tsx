@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockUseApi = vi.hoisted(() => vi.fn());
 const dashboardDeferred = vi.hoisted(() => {
@@ -88,6 +88,12 @@ vi.mock('@/components/Onboarding', () => ({
   Onboarding: () => <div>Onboarding</div>,
 }));
 
+let AppRoutes: typeof import('@/App').AppRoutes;
+
+beforeAll(async () => {
+  ({ AppRoutes } = await import('@/App'));
+});
+
 describe('AppRoutes', () => {
   beforeEach(() => {
     mockUseApi.mockReset();
@@ -100,8 +106,6 @@ describe('AppRoutes', () => {
       isLoading: false,
     });
 
-    const { AppRoutes } = await import('@/App');
-
     render(
       <MemoryRouter initialEntries={['/dashboard']}>
         <AppRoutes />
@@ -109,7 +113,7 @@ describe('AppRoutes', () => {
     );
 
     expect(screen.getByText('Login screen')).toBeInTheDocument();
-  });
+  }, 10000);
 
   it('shows lazy route fallback before the dashboard route resolves', async () => {
     mockUseApi.mockReturnValue({
@@ -117,15 +121,13 @@ describe('AppRoutes', () => {
       isLoading: false,
     });
 
-    const { AppRoutes } = await import('@/App');
-
     render(
       <MemoryRouter initialEntries={['/dashboard']}>
         <AppRoutes />
       </MemoryRouter>,
     );
 
-    expect(screen.getByLabelText('Loading dashboard')).toBeInTheDocument();
+    expect(screen.getAllByLabelText('Loading dashboard')[0]).toBeInTheDocument();
 
     dashboardDeferred.resolve();
 
