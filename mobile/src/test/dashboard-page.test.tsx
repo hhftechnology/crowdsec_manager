@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import DashboardPage from '@/pages/DashboardPage';
+import type { DiagnosticResult } from '@/lib/api';
 
 const mockUseApi = vi.fn();
 
@@ -60,6 +61,37 @@ describe('DashboardPage', () => {
       timestamp: '2026-03-20T12:00:00Z',
     });
     api.ip.getPublicIP.mockRejectedValue(new TypeError('Failed to fetch'));
+    api.crowdsec.alertsAnalysis.mockResolvedValue(null);
+    mockUseApi.mockReturnValue({ api });
+
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Diagnostics Summary')).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('Diagnostics Summary')).toBeInTheDocument();
+    expect(screen.queryByText('API unreachable')).not.toBeInTheDocument();
+  });
+
+  it('renders dashboard content when diagnostics omit bouncers', async () => {
+    mockUseApi.mockReset();
+    const api = createBaseApi();
+    api.health.getStack.mockResolvedValue({
+      containers: [{ id: 'abc', name: 'crowdsec', running: true, status: 'running' }],
+      allRunning: true,
+      timestamp: '2026-03-20T12:00:00Z',
+    });
+    api.health.getCrowdsec.mockResolvedValue({
+      status: 'healthy',
+      checks: {},
+      timestamp: '2026-03-20T12:00:00Z',
+    });
+    api.health.getComplete.mockResolvedValue({
+      decisions: [{ id: '1' }],
+      timestamp: '2026-03-20T12:00:00Z',
+    } as unknown as DiagnosticResult);
+    api.ip.getPublicIP.mockResolvedValue({ ip: '1.2.3.4' });
     api.crowdsec.alertsAnalysis.mockResolvedValue(null);
     mockUseApi.mockReturnValue({ api });
 

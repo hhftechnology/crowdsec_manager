@@ -105,6 +105,8 @@ export default function DashboardPage() {
     fetchData();
   });
 
+  const completeBouncers = complete?.bouncers ?? [];
+
   return (
     <PullToRefresh onRefresh={fetchData}>
       <div className="pb-nav">
@@ -146,8 +148,8 @@ export default function DashboardPage() {
               <StatCard
                 icon={Server}
                 title="Bouncers"
-                value={complete ? String(complete.bouncers.length) : '—'}
-                tone={complete && complete.bouncers.length > 0 ? 'ok' : 'warn'}
+                value={complete ? String(completeBouncers.length) : '—'}
+                tone={complete && completeBouncers.length > 0 ? 'ok' : 'warn'}
               />
             </div>
 
@@ -260,6 +262,9 @@ function HealthChecksPanel({ crowdsec }: { crowdsec: CrowdsecHealth }) {
 /* ────────────────────────── Diagnostics Summary Panel ────────────────────────── */
 
 function DiagnosticsSummaryPanel({ diagnostics }: { diagnostics: DiagnosticResult }) {
+  const bouncers = diagnostics.bouncers ?? [];
+  const decisions = diagnostics.decisions ?? [];
+
   return (
     <div className="rounded-xl border border-border bg-card p-4 space-y-3">
       <h3 className="text-sm font-semibold">Diagnostics Summary</h3>
@@ -267,21 +272,21 @@ function DiagnosticsSummaryPanel({ diagnostics }: { diagnostics: DiagnosticResul
       <div className="grid grid-cols-2 gap-2">
         <MetricCard
           label="Bouncers"
-          value={diagnostics.bouncers.length}
-          variant={diagnostics.bouncers.length > 0 ? 'success' : 'warning'}
+          value={bouncers.length}
+          variant={bouncers.length > 0 ? 'success' : 'warning'}
         />
         <MetricCard
           label="Decisions"
-          value={diagnostics.decisions.length}
+          value={decisions.length}
           variant="default"
         />
       </div>
 
       {/* Bouncers mini-list */}
-      {diagnostics.bouncers.length > 0 && (
+      {bouncers.length > 0 && (
         <div className="space-y-1">
           <h4 className="text-xs font-medium text-muted-foreground">Active Bouncers</h4>
-          {diagnostics.bouncers.slice(0, 5).map((bouncer: Bouncer) => (
+          {bouncers.slice(0, 5).map((bouncer: Bouncer) => (
             <div key={bouncer.name} className="flex items-center justify-between py-1">
               <div className="flex items-center gap-2 min-w-0">
                 <StatusDot color={bouncer.valid ? 'success' : 'error'} />
@@ -290,8 +295,8 @@ function DiagnosticsSummaryPanel({ diagnostics }: { diagnostics: DiagnosticResul
               <span className="text-[10px] text-muted-foreground font-mono shrink-0">{bouncer.ip_address}</span>
             </div>
           ))}
-          {diagnostics.bouncers.length > 5 && (
-            <p className="text-[10px] text-muted-foreground">+{diagnostics.bouncers.length - 5} more</p>
+          {bouncers.length > 5 && (
+            <p className="text-[10px] text-muted-foreground">+{bouncers.length - 5} more</p>
           )}
         </div>
       )}
