@@ -8,9 +8,10 @@ import { createLogsApi } from './logs';
 import { createScenariosApi } from './scenarios';
 import { createServicesApi } from './services';
 import { createTerminalApi } from './terminal';
+import type { ConnectionProfile } from '@/lib/connection';
 
-export function createApi(baseUrl: string) {
-  const client = new ApiClient(baseUrl);
+export function createApi(profile: ConnectionProfile) {
+  const client = new ApiClient(profile);
 
   return {
     client,

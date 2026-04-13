@@ -1,3 +1,4 @@
+import { parsePangolinAccessToken, type ConnectionProfile } from '@/lib/connection';
 import type { ApiEnvelope, ApiResult } from './types';
 
 export class ApiError extends Error {
@@ -53,11 +54,17 @@ function hasEnvelope(value: unknown): value is ApiEnvelope<unknown> {
   );
 }
 
+function encodeBasicCredentials(username: string, password: string): string {
+  return btoa(`${username}:${password}`);
+}
+
 export class ApiClient {
+  readonly profile: ConnectionProfile;
   private readonly baseUrl: string;
 
-  constructor(baseUrl: string) {
-    this.baseUrl = normalizeBaseUrl(baseUrl);
+  constructor(profile: ConnectionProfile) {
+    this.profile = profile;
+    this.baseUrl = normalizeBaseUrl(profile.baseUrl);
   }
 
   async get<T>(path: string, options?: RequestOptions): Promise<ApiResult<T>> {
@@ -76,19 +83,59 @@ export class ApiClient {
     return this.request<T>('DELETE', path, options);
   }
 
+  async verifyConnection(): Promise<void> {
+    await this.get('/api/health/stack');
+  }
+
   getWebSocketUrl(path: string, params?: RequestOptions['params']): string {
-    const url = `${this.baseUrl}${normalizePath(path)}${buildQuery(params)}`;
-    const parsed = new URL(url);
+    const parsed = this.buildUrl(path, this.decorateWebSocketParams(params));
     parsed.protocol = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
+
+    if (this.isProxyBasicMode()) {
+      parsed.username = this.profile.proxyUsername;
+      parsed.password = this.profile.proxyPassword;
+    }
+
     return parsed.toString();
   }
 
-  private async request<T>(method: string, path: string, options?: MutationOptions): Promise<ApiResult<T>> {
-    const requestUrl = `${this.baseUrl}${normalizePath(path)}${buildQuery(options?.params)}`;
+  isPangolinMode(): boolean {
+    return this.profile.mode === 'pangolin';
+  }
+
+  private isProxyBasicMode(): boolean {
+    return this.profile.mode === 'proxy-basic';
+  }
+
+  private buildUrl(path: string, params?: RequestOptions['params']): URL {
+    return new URL(this.baseUrl + normalizePath(path) + buildQuery(params));
+  }
+
+  private async request<T>(
+    method: string,
+    path: string,
+    options?: MutationOptions,
+  ): Promise<ApiResult<T>> {
+    const requestUrl = this.buildUrl(path, options?.params).toString();
 
     const headers: Record<string, string> = {
       ...(options?.headers ?? {}),
     };
+
+    if (this.isProxyBasicMode()) {
+      headers.Authorization = `Basic ${encodeBasicCredentials(
+        this.profile.proxyUsername,
+        this.profile.proxyPassword,
+      )}`;
+    }
+
+    if (this.isPangolinMode()) {
+      const token = parsePangolinAccessToken(this.profile.pangolinToken);
+      if (token) {
+        headers['P-Access-Token-Id'] = token.id;
+        headers['P-Access-Token'] = token.token;
+      }
+    }
 
     const init: RequestInit = {
       method,
@@ -106,16 +153,10 @@ export class ApiClient {
     }
 
     const response = await fetch(requestUrl, init);
-    const contentType = response.headers.get('content-type') || '';
-    const shouldTreatAsText = options?.responseType === 'text' || contentType.includes('text/plain');
-
-    let payload: unknown;
-    if (shouldTreatAsText) {
-      payload = await response.text();
-    } else {
-      const raw = await response.text();
-      payload = raw ? safeJsonParse(raw) : undefined;
-    }
+    const payload = await this.readResponsePayload(
+      response,
+      options?.responseType ?? 'json',
+    );
 
     if (!response.ok) {
       const message = extractErrorMessage(payload) || `${response.status} ${response.statusText}`;
@@ -124,8 +165,13 @@ export class ApiClient {
 
     if (hasEnvelope(payload)) {
       if (!payload.success) {
-        throw new ApiError(payload.error || payload.message || 'Request failed', response.status, payload);
+        throw new ApiError(
+          payload.error || payload.message || 'Request failed',
+          response.status,
+          payload,
+        );
       }
+
       return {
         data: (payload.data as T) ?? (null as T),
         message: payload.message,
@@ -135,6 +181,36 @@ export class ApiClient {
     return {
       data: (payload as T) ?? (null as T),
     };
+  }
+
+  private decorateWebSocketParams(
+    params?: RequestOptions['params'],
+  ): RequestOptions['params'] {
+    if (!this.isPangolinMode()) return params;
+
+    const token = parsePangolinAccessToken(this.profile.pangolinToken);
+    if (!token) return params;
+
+    return {
+      ...(params ?? {}),
+      [this.profile.pangolinTokenParam]: token.combined,
+    };
+  }
+
+  private async readResponsePayload(
+    response: Response,
+    responseType: 'json' | 'text',
+  ): Promise<unknown> {
+    const contentType = response.headers.get('content-type') || '';
+    const shouldTreatAsText =
+      responseType === 'text' || contentType.includes('text/plain');
+
+    if (shouldTreatAsText) {
+      return response.text();
+    }
+
+    const raw = await response.text();
+    return raw ? safeJsonParse(raw) : undefined;
   }
 }
 

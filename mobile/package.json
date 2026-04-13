@@ -2,7 +2,7 @@
   "name": "crowdsec-manager-mobile",
   "private": true,
   "description": "Mobile companion app for Crowdsec",
-  "version": "2.3.1",
+  "version": "2.3.2",
   "type": "module",
   "scripts": {
     "dev": "vite",
