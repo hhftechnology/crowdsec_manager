@@ -14,8 +14,9 @@ CrowdSec Manager is a web-based management interface for CrowdSec operations, Tr
 
 ## Stable release
 
-- Current baseline: `2.3.0`
-- Multi-proxy support: not available in this release
+- Current baseline: `2.3.1`
+- Multi-proxy support: hhftechnology/crowdsec-manager:independent
+- Docker image size (linux/amd64): <!-- IMAGE_SIZE_START -->44MB<!-- IMAGE_SIZE_END -->
 
 ### Crowdsec-Manager mobile app.
 
