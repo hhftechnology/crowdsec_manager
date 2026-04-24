@@ -19,6 +19,7 @@ import type {
   BulkReapplyDecisionsRequest,
   BulkReapplyResult,
   HistoryStats,
+  HistoryActivityResponse,
 } from './types'
 
 export const crowdsecAPI = {
@@ -100,6 +101,9 @@ export const crowdsecAPI = {
 
   getHistoryStats: () =>
     apiClient.get<ApiResponse<HistoryStats>>('/crowdsec/history/stats'),
+
+  getHistoryActivity: (params: { window: '24h' | '7d'; bucket: 'hour' | 'day' }) =>
+    apiClient.get<ApiResponse<HistoryActivityResponse>>('/crowdsec/history/activity', { params }),
 
   reapplyDecision: (data: ReapplyDecisionRequest) =>
     apiClient.post<ApiResponse<{ message: string }>>('/crowdsec/decisions/history/reapply', data),

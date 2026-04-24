@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import api, { Container as ContainerType, Decision, CrowdSecAlert } from '@/lib/api'
+import type { HistoryActivityResponse } from '@/lib/api/types'
 import { PageHeader, QueryError, ScenarioName, CountryFlag } from '@/components/common'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -78,77 +79,20 @@ function groupBySourceField(
   return top
 }
 
-/**
- * Build combined activity buckets at either hourly or daily granularity.
- */
-function buildActivityBuckets(
-  alerts: CrowdSecAlert[],
-  decisions: Decision[],
-  granularity: Granularity,
-): ActivityBucket[] {
-  const now = new Date()
-  const buckets: Record<string, ActivityBucket> = {}
-
-  if (granularity === 'hour') {
-    // Last 24 hours, one bucket per hour
-    for (let i = 23; i >= 0; i--) {
-      const d = new Date(now)
-      d.setHours(d.getHours() - i, 0, 0, 0)
-      const key = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
-      buckets[key] = { date: key, alerts: 0, decisions: 0 }
+function formatHistoryActivityBuckets(activity: HistoryActivityResponse | null | undefined): ActivityBucket[] {
+  if (!activity?.buckets?.length) return []
+  const hourly = activity.bucket === 'hour'
+  return activity.buckets.map((bucket) => {
+    const ts = new Date(bucket.ts)
+    const date = hourly
+      ? ts.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' })
+      : ts.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
+    return {
+      date,
+      alerts: bucket.alerts ?? 0,
+      decisions: bucket.decisions ?? 0,
     }
-
-    const cutoff = new Date(now)
-    cutoff.setHours(cutoff.getHours() - 24)
-
-    for (const alert of alerts) {
-      const ts = new Date(alert.start_at)
-      if (ts < cutoff) continue
-      const rounded = new Date(ts)
-      rounded.setMinutes(0, 0, 0)
-      const key = rounded.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
-      if (buckets[key]) {
-        buckets[key].alerts += 1
-      }
-    }
-
-    for (const decision of decisions) {
-      if (!decision.created_at) continue
-      const ts = new Date(decision.created_at)
-      if (ts < cutoff) continue
-      const rounded = new Date(ts)
-      rounded.setMinutes(0, 0, 0)
-      const key = rounded.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
-      if (buckets[key]) {
-        buckets[key].decisions += 1
-      }
-    }
-  } else {
-    // Last 7 days, one bucket per day
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(now)
-      d.setDate(d.getDate() - i)
-      const key = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-      buckets[key] = { date: key, alerts: 0, decisions: 0 }
-    }
-
-    for (const alert of alerts) {
-      const dateKey = new Date(alert.start_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-      if (buckets[dateKey]) {
-        buckets[dateKey].alerts += 1
-      }
-    }
-
-    for (const decision of decisions) {
-      if (!decision.created_at) continue
-      const dateKey = new Date(decision.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-      if (buckets[dateKey]) {
-        buckets[dateKey].decisions += 1
-      }
-    }
-  }
-
-  return Object.values(buckets)
+  })
 }
 
 export default function Dashboard() {
@@ -191,7 +135,7 @@ export default function Dashboard() {
     refetchInterval: 30000,
   })
 
-  const { data: alertsData, dataUpdatedAt: alertsUpdatedAt } = useQuery({
+  const { data: alertsData, isLoading: alertsLoading, dataUpdatedAt: alertsUpdatedAt } = useQuery({
     queryKey: ['alerts-dashboard'],
     queryFn: async () => {
       const response = await api.crowdsec.getAlertsAnalysis({ since: '7d' })
@@ -200,11 +144,32 @@ export default function Dashboard() {
     refetchInterval: 30000,
   })
 
+  const { data: activityData, isLoading: activityLoading, dataUpdatedAt: activityUpdatedAt } = useQuery({
+    queryKey: ['history-activity', granularity],
+    queryFn: async () => {
+      const params = granularity === 'hour'
+        ? { window: '24h' as const, bucket: 'hour' as const }
+        : { window: '7d' as const, bucket: 'day' as const }
+      const response = await api.crowdsec.getHistoryActivity(params)
+      return response.data.data ?? null
+    },
+    refetchInterval: 30000,
+  })
+
+  const { data: activity7dData, isLoading: activity7dLoading, dataUpdatedAt: activity7dUpdatedAt } = useQuery({
+    queryKey: ['history-activity-7d'],
+    queryFn: async () => {
+      const response = await api.crowdsec.getHistoryActivity({ window: '7d', bucket: 'day' })
+      return response.data.data ?? null
+    },
+    refetchInterval: 30000,
+  })
+
   const lastUpdated = useMemo(() => {
-    const timestamps = [healthUpdatedAt, decisionsUpdatedAt, bouncersUpdatedAt, alertsUpdatedAt].filter(Boolean)
+    const timestamps = [healthUpdatedAt, decisionsUpdatedAt, bouncersUpdatedAt, alertsUpdatedAt, activityUpdatedAt, activity7dUpdatedAt].filter(Boolean)
     if (timestamps.length === 0) return null
     return new Date(Math.max(...timestamps))
-  }, [healthUpdatedAt, decisionsUpdatedAt, bouncersUpdatedAt, alertsUpdatedAt])
+  }, [healthUpdatedAt, decisionsUpdatedAt, bouncersUpdatedAt, alertsUpdatedAt, activityUpdatedAt, activity7dUpdatedAt])
 
   const lastUpdatedLabel = lastUpdated ? `Updated ${lastUpdated.toLocaleTimeString()}` : 'Not refreshed yet'
 
@@ -238,7 +203,10 @@ export default function Dashboard() {
     return []
   }, [alertsData])
 
-  const alertsCount = alertsData?.count ?? alerts.length
+  const activity7dAlertsCount = useMemo(() => {
+    if (!activity7dData?.buckets) return 0
+    return activity7dData.buckets.reduce((sum, bucket) => sum + (bucket.alerts ?? 0), 0)
+  }, [activity7dData])
 
   const decisionTypeData = useMemo(() => {
     if (decisions.length === 0) return []
@@ -265,8 +233,8 @@ export default function Dashboard() {
   }, [decisions])
 
   const combinedActivityData = useMemo<ActivityBucket[]>(
-    () => buildActivityBuckets(alerts, decisions, granularity),
-    [alerts, decisions, granularity],
+    () => formatHistoryActivityBuckets(activityData),
+    [activityData],
   )
 
   const topScenarios = useMemo(() => {
@@ -289,10 +257,10 @@ export default function Dashboard() {
   const threatMapData = useMemo(() => buildThreatMapPoints(alerts), [alerts])
 
   const lastUpdatedAt = useMemo(() => {
-    const timestamps = [healthUpdatedAt, decisionsUpdatedAt, bouncersUpdatedAt, alertsUpdatedAt].filter(Boolean)
+    const timestamps = [healthUpdatedAt, decisionsUpdatedAt, bouncersUpdatedAt, alertsUpdatedAt, activityUpdatedAt, activity7dUpdatedAt].filter(Boolean)
     if (timestamps.length === 0) return null
     return Math.max(...timestamps)
-  }, [healthUpdatedAt, decisionsUpdatedAt, bouncersUpdatedAt, alertsUpdatedAt])
+  }, [healthUpdatedAt, decisionsUpdatedAt, bouncersUpdatedAt, alertsUpdatedAt, activityUpdatedAt, activity7dUpdatedAt])
 
   const activityTitle = granularity === 'hour'
     ? 'Activity History (24h)'
@@ -336,11 +304,11 @@ export default function Dashboard() {
         <div className="cursor-pointer" onClick={() => navigate('/alerts')}>
           <StatCard
             title="Alerts (7d)"
-            value={alertsCount}
+            value={activity7dAlertsCount}
             description="Alerts in the last 7 days"
             icon={<Activity className="h-4 w-4 text-muted-foreground" />}
-            loading={!alertsData && !decisionsLoading}
-            className={alertsData ? getThresholdBorder(alertsCount, 20, 50) : undefined}
+            loading={activity7dLoading && !activity7dData}
+            className={activity7dData ? getThresholdBorder(activity7dAlertsCount, 20, 50) : undefined}
           />
         </div>
         <div className="cursor-pointer" onClick={() => navigate('/bouncers')}>
@@ -421,18 +389,24 @@ export default function Dashboard() {
 
       {/* Row 3: Threat Map */}
       <ChartCard title="Threat Map" description="Geographic distribution of alert sources over the last 7 days">
-        <ThreatMap
-          data={threatMapData}
-          height={320}
-          formatTooltip={(point) => {
-            const label = point.country ?? point.label ?? 'Unknown source'
-            return `${label}: ${point.value.toLocaleString()} alert${point.value === 1 ? '' : 's'}`
-          }}
-          onMarkerClick={(point) => {
-            if (!point.country) return
-            navigate(`/alerts?country=${point.country}`)
-          }}
-        />
+        {alertsLoading && !alertsData ? (
+          <div className="flex items-center justify-center h-80 text-muted-foreground text-sm">
+            Loading alert details...
+          </div>
+        ) : (
+          <ThreatMap
+            data={threatMapData}
+            height={320}
+            formatTooltip={(point) => {
+              const label = point.country ?? point.label ?? 'Unknown source'
+              return `${label}: ${point.value.toLocaleString()} alert${point.value === 1 ? '' : 's'}`
+            }}
+            onMarkerClick={(point) => {
+              if (!point.country) return
+              navigate(`/alerts?country=${point.country}`)
+            }}
+          />
+        )}
       </ChartCard>
 
       {/* Row 4: Top Countries + Top Autonomous Systems */}
@@ -446,7 +420,11 @@ export default function Dashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {topCountries.length > 0 ? (
+            {alertsLoading && !alertsData ? (
+              <p className="text-muted-foreground text-sm text-center py-4">
+                Loading alert details...
+              </p>
+            ) : topCountries.length > 0 ? (
               <div className="space-y-3">
                 {topCountries.map((item) => (
                   <div
@@ -492,7 +470,11 @@ export default function Dashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {topAS.length > 0 ? (
+            {alertsLoading && !alertsData ? (
+              <p className="text-muted-foreground text-sm text-center py-4">
+                Loading alert details...
+              </p>
+            ) : topAS.length > 0 ? (
               <div className="space-y-3">
                 {topAS.map((item) => (
                   <div key={item.name} className="flex items-center justify-between py-1">
@@ -547,7 +529,11 @@ export default function Dashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {topScenarios.length > 0 ? (
+            {alertsLoading && !alertsData ? (
+              <p className="text-muted-foreground text-sm text-center py-4">
+                Loading alert details...
+              </p>
+            ) : topScenarios.length > 0 ? (
               <div className="space-y-3">
                 {topScenarios.map((item) => (
                   <div key={item.name} className="flex items-center justify-between">

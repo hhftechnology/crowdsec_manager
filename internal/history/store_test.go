@@ -175,3 +175,126 @@ func TestParseAlertsOutputNestedSource(t *testing.T) {
 		t.Errorf("EventsCount: got %d, want 11", a.EventsCount)
 	}
 }
+
+func TestGetHistoryActivityHourBuckets(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	now := time.Date(2026, 4, 23, 12, 34, 0, 0, time.UTC)
+
+	decision := models.Decision{
+		ID:        1,
+		AlertID:   1,
+		Origin:    "crowdsec",
+		Type:      "ban",
+		Scope:     "Ip",
+		Value:     "1.1.1.1",
+		Duration:  "4h",
+		Scenario:  "crowdsecurity/http-probing",
+		CreatedAt: now.Add(-2 * time.Hour).Format(time.RFC3339),
+	}
+	if err := store.UpsertDecisionSnapshots(ctx, []UpsertDecisionInput{
+		{Decision: decision, SnapshotAt: now},
+	}); err != nil {
+		t.Fatalf("UpsertDecisionSnapshots failed: %v", err)
+	}
+
+	alert := AlertSnapshot{
+		ID:          11,
+		Scenario:    "crowdsecurity/http-probing",
+		Scope:       "Ip",
+		Value:       "2.2.2.2",
+		Origin:      "crowdsec",
+		Type:        "ban",
+		EventsCount: 1,
+		StartAt:     now.Add(-90 * time.Minute).Format(time.RFC3339),
+	}
+	if err := store.UpsertAlertSnapshots(ctx, []UpsertAlertInput{
+		{Alert: alert, SnapshotAt: now},
+	}); err != nil {
+		t.Fatalf("UpsertAlertSnapshots failed: %v", err)
+	}
+
+	endAt := now.Truncate(time.Hour)
+	result, err := store.GetActivityBuckets(ctx, GetActivityBucketsInput{
+		Window: 24 * time.Hour,
+		Bucket: ActivityBucketHour,
+		EndAt:  endAt,
+	})
+	if err != nil {
+		t.Fatalf("GetActivityBuckets failed: %v", err)
+	}
+	if result.LatestSnapshotAt == nil {
+		t.Fatalf("expected latest snapshot timestamp")
+	}
+	if len(result.Buckets) != 24 {
+		t.Fatalf("expected 24 buckets, got %d", len(result.Buckets))
+	}
+
+	decisionTS := endAt.Add(-2 * time.Hour).Format(time.RFC3339)
+	alertTS := endAt.Add(-1 * time.Hour).Format(time.RFC3339)
+	var decisionHits, alertHits int
+	for _, b := range result.Buckets {
+		if b.Timestamp == decisionTS {
+			decisionHits = b.Decisions
+		}
+		if b.Timestamp == alertTS {
+			alertHits = b.Alerts
+		}
+	}
+	if decisionHits != 1 {
+		t.Fatalf("expected 1 decision in %s bucket, got %d", decisionTS, decisionHits)
+	}
+	if alertHits != 1 {
+		t.Fatalf("expected 1 alert in %s bucket, got %d", alertTS, alertHits)
+	}
+}
+
+func TestGetHistoryActivityDayBuckets(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	now := time.Date(2026, 4, 23, 15, 0, 0, 0, time.UTC)
+
+	if err := store.UpsertDecisionSnapshots(ctx, []UpsertDecisionInput{
+		{
+			Decision: models.Decision{
+				ID:        10,
+				AlertID:   0,
+				Origin:    "crowdsec",
+				Type:      "ban",
+				Scope:     "Ip",
+				Value:     "9.9.9.9",
+				Duration:  "4h",
+				Scenario:  "crowdsecurity/test",
+				CreatedAt: now.Add(-48 * time.Hour).Format(time.RFC3339),
+			},
+			SnapshotAt: now,
+		},
+	}); err != nil {
+		t.Fatalf("UpsertDecisionSnapshots failed: %v", err)
+	}
+
+	endAt := now.Truncate(24 * time.Hour)
+	result, err := store.GetActivityBuckets(ctx, GetActivityBucketsInput{
+		Window: 7 * 24 * time.Hour,
+		Bucket: ActivityBucketDay,
+		EndAt:  endAt,
+	})
+	if err != nil {
+		t.Fatalf("GetActivityBuckets failed: %v", err)
+	}
+	if len(result.Buckets) != 7 {
+		t.Fatalf("expected 7 buckets, got %d", len(result.Buckets))
+	}
+
+	targetTS := endAt.Add(-48 * time.Hour).Format(time.RFC3339)
+	var hits int
+	for _, b := range result.Buckets {
+		if b.Timestamp == targetTS {
+			hits = b.Decisions
+			break
+		}
+	}
+	if hits != 1 {
+		t.Fatalf("expected 1 decision in %s bucket, got %d", targetTS, hits)
+	}
+}

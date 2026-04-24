@@ -8,6 +8,7 @@ import type {
   DecisionHistoryResponse,
   DeleteDecisionRequest,
   DecisionsResponse,
+  HistoryActivityResponse,
   MetricsResponse,
   ReapplyDecisionRequest,
 } from './types';
@@ -91,6 +92,14 @@ export function createCrowdsecApi(client: ApiClient) {
     },
     async reapplyDecision(body: ReapplyDecisionRequest) {
       return client.post<{ message?: string }>('/api/crowdsec/decisions/history/reapply', { body });
+    },
+    async decisionsSummary() {
+      const payload = (await client.get<DecisionsResponse | Decision[]>('/api/crowdsec/decisions', { params: { summary: 'true' } })).data;
+      if (Array.isArray(payload)) return { count: payload.length };
+      return { count: payload.count ?? (payload.decisions?.length ?? 0) };
+    },
+    async historyActivity(params: { window: '24h' | '7d'; bucket: 'hour' | 'day' }) {
+      return (await client.get<HistoryActivityResponse>('/api/crowdsec/history/activity', { params })).data;
     },
     toDecisionRows(input: DecisionsResponse | Decision[] | null | undefined): Decision[] {
       if (!input) return [];

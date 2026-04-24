@@ -2,7 +2,7 @@
   "name": "crowdsec-manager-mobile",
   "private": true,
   "description": "Mobile companion app for Crowdsec",
-  "version": "2.3.2",
+  "version": "2.3.3",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -79,7 +79,7 @@
   "overrides": {
     "serialize-javascript": ">=7.0.5",
     "tar": ">=7.5.11",
-    "@xmldom/xmldom": ">=0.8.12",
+    "@xmldom/xmldom": ">=0.9.10",
     "minimatch": ">=3.1.4"
   }
 }
