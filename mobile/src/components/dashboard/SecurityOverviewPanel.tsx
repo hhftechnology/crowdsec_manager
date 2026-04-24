@@ -1,10 +1,12 @@
 import { Shield, AlertTriangle } from 'lucide-react';
 import { MetricCard } from '@/components/MetricCard';
+import type { HistoryActivityBucket } from '@/lib/api';
 
 interface SecurityOverviewPanelProps {
   decisionsTotal: number;
   alertsCount: number;
   topScenarios?: Record<string, number>;
+  activityBuckets?: HistoryActivityBucket[];
 }
 
 function decisionsBorderVariant(count: number) {
@@ -19,12 +21,16 @@ function alertsBorderVariant(count: number) {
   return 'success' as const;
 }
 
-export function SecurityOverviewPanel({ decisionsTotal, alertsCount, topScenarios }: SecurityOverviewPanelProps) {
+export function SecurityOverviewPanel({ decisionsTotal, alertsCount, topScenarios, activityBuckets }: SecurityOverviewPanelProps) {
   const sortedScenarios = topScenarios
     ? Object.entries(topScenarios)
         .sort(([, a], [, b]) => b - a)
         .slice(0, 5)
     : [];
+
+  const activity24hAlerts = activityBuckets?.reduce((sum, b) => sum + b.alerts, 0) ?? 0;
+  const activity24hDecisions = activityBuckets?.reduce((sum, b) => sum + b.decisions, 0) ?? 0;
+  const hasActivity = activityBuckets && activityBuckets.length > 0;
 
   return (
     <div className="rounded-xl border border-border bg-card p-4 space-y-4">
@@ -58,6 +64,16 @@ export function SecurityOverviewPanel({ decisionsTotal, alertsCount, topScenario
                 <span className="text-xs font-mono font-medium tabular-nums shrink-0">{count}</span>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {hasActivity && (
+        <div className="space-y-2">
+          <h4 className="text-xs font-medium text-muted-foreground">Recent Activity</h4>
+          <div className="grid grid-cols-2 gap-2">
+            <MetricCard label="Alerts" value={activity24hAlerts} variant="default" />
+            <MetricCard label="Decisions" value={activity24hDecisions} variant="default" />
           </div>
         </div>
       )}

@@ -507,3 +507,17 @@ export interface HistoryStats {
   active_alerts: number
   repeated_offender_count: number
 }
+
+export interface HistoryActivityBucket {
+  ts: string
+  alerts: number
+  decisions: number
+}
+
+export interface HistoryActivityResponse {
+  window: '24h' | '7d'
+  bucket: 'hour' | 'day'
+  buckets: HistoryActivityBucket[]
+  generated_at: string
+  latest_snapshot_at: string | null
+}

@@ -15,7 +15,7 @@ import { DashboardSkeleton } from '@/components/dashboard/DashboardSkeleton';
 import { SecurityOverviewPanel } from '@/components/dashboard/SecurityOverviewPanel';
 import { RecentActivityPanel } from '@/components/dashboard/RecentActivityPanel';
 import { normalizeAppError, type AppErrorState } from '@/lib/errors';
-import type { CrowdsecHealth, CrowdsecAlert, DiagnosticResult, HealthContainer, StackHealth, Bouncer, HealthCheckItem, AlertsResponse } from '@/lib/api';
+import type { CrowdsecHealth, CrowdsecAlert, DiagnosticResult, HealthContainer, HistoryActivityBucket, StackHealth, Bouncer, HealthCheckItem, AlertsResponse } from '@/lib/api';
 
 export default function DashboardPage() {
   const { api } = useApi();
@@ -29,6 +29,7 @@ export default function DashboardPage() {
   const [alertsCount, setAlertsCount] = useState(0);
   const [topScenarios, setTopScenarios] = useState<Record<string, number>>({});
   const [recentAlerts, setRecentAlerts] = useState<CrowdsecAlert[]>([]);
+  const [activityBuckets, setActivityBuckets] = useState<HistoryActivityBucket[]>([]);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   const fetchData = useCallback(async () => {
@@ -36,12 +37,14 @@ export default function DashboardPage() {
     setLoading(true);
     setError(null);
 
-    const [stackRes, crowdsecRes, completeRes, publicRes, alertsRes] = await Promise.allSettled([
+    const [stackRes, crowdsecRes, completeRes, publicRes, alertsRes, decisionsSummaryRes, activityRes] = await Promise.allSettled([
         api.health.getStack(),
         api.health.getCrowdsec(),
         api.health.getComplete(),
         api.ip.getPublicIP(),
         api.crowdsec.alertsAnalysis({ since: '7d' }).catch(() => null),
+        api.crowdsec.decisionsSummary().catch(() => null),
+        api.crowdsec.historyActivity({ window: '24h', bucket: 'hour' }).catch(() => null),
       ]);
 
     const criticalResults = [stackRes, crowdsecRes, completeRes];
@@ -59,7 +62,14 @@ export default function DashboardPage() {
 
     if (completeRes.status === 'fulfilled') {
       setComplete(completeRes.value);
-      setDecisionsTotal(completeRes.value?.decisions?.length ?? 0);
+    }
+
+    if (decisionsSummaryRes.status === 'fulfilled' && decisionsSummaryRes.value) {
+      setDecisionsTotal(decisionsSummaryRes.value.count);
+    }
+
+    if (activityRes.status === 'fulfilled' && activityRes.value) {
+      setActivityBuckets(activityRes.value.buckets ?? []);
     }
 
     if (publicRes.status === 'fulfilled') {
@@ -158,6 +168,7 @@ export default function DashboardPage() {
               decisionsTotal={decisionsTotal}
               alertsCount={alertsCount}
               topScenarios={topScenarios}
+              activityBuckets={activityBuckets}
             />
 
             {/* Stack Health — Container Status */}

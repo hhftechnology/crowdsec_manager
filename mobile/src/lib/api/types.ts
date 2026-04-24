@@ -310,3 +310,17 @@ export interface ReapplyDecisionRequest {
 export interface MetricsResponse {
   [key: string]: unknown;
 }
+
+export interface HistoryActivityBucket {
+  ts: string;
+  alerts: number;
+  decisions: number;
+}
+
+export interface HistoryActivityResponse {
+  window: string;
+  bucket: string;
+  buckets: HistoryActivityBucket[];
+  generated_at: string;
+  latest_snapshot_at: string | null;
+}

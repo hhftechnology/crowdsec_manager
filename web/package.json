@@ -1,13 +1,14 @@
 {
   "name": "crowdsec-manager-ui",
-  "version": "2.3.2",
+  "version": "2.3.3",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "build:check": "tsc && vite build",
     "preview": "vite preview",
-    "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0"
+    "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "test": "TMPDIR=/tmp vitest run"
   },
   "dependencies": {
     "@radix-ui/react-alert-dialog": "^1.1.1",
@@ -55,6 +56,8 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.1",
     "@eslint/js": "^9.22.0",
+    "@testing-library/jest-dom": "^6.6.0",
+    "@testing-library/react": "^16.0.0",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@types/react-simple-maps": "^3.0.6",
@@ -65,10 +68,12 @@
     "eslint": "^9.22.0",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.5.2",
+    "jsdom": "^29.0.2",
     "postcss": "^8.4.39",
     "shadcn": "^3.5.0",
     "tailwindcss": "^3.4.6",
     "typescript": "^5.5.3",
-    "vite": "^8.0.1"
+    "vite": "^8.0.1",
+    "vitest": "^4.0.0"
   }
 }
