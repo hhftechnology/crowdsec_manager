@@ -1,0 +1,86 @@
+---
+title: Hub Browser
+description: Browse, install, upgrade CrowdSec collections, parsers, scenarios
+---
+
+# Hub Browser
+
+The Hub Browser allows you to manage CrowdSec hub items (collections, parsers, scenarios, postoverflows, etc.) directly from the CrowdSec Manager interface. You can browse available items, install new ones, upgrade existing items, and remove items you no longer need.
+
+## Features
+
+- **Browse Hub Items**: View all available hub items by category.
+- **Install Items**: Install new hub items from the CrowdSec hub.
+- **Upgrade Items**: Upgrade installed hub items to their latest versions.
+- **Remove Items**: Remove hub items that are no longer needed.
+- **Manual Apply**: Apply custom YAML configurations directly to the CrowdSec container.
+- **Preference Management**: Set default behaviors for hub operations per category.
+- **Operation History**: Audit all hub operations performed through the manager.
+
+## API Endpoints
+
+The Hub Browser exposes the following API endpoints under the `/api/hub` prefix:
+
+### Categories
+
+- `GET /hub/categories` - List all supported hub categories with metadata.
+
+### Items
+
+- `GET /hub/list` - Legacy endpoint for browsing all hub items (raw format).
+- `GET /hub/:category/items` - List hub items for a specific category.
+- `POST /hub/:category/install` - Install a hub item in the specified category.
+- `POST /hub/:category/remove` - Remove a hub item from the specified category.
+- `POST /hub/:category/manual-apply` - Apply a custom YAML file to the CrowdSec container.
+
+### Preferences
+
+- `GET /hub/preferences` - Get all hub preferences.
+- `GET /hub/preferences/:category` - Get preference for a specific category.
+- `PUT /hub/preferences/:category` - Update preference for a specific category.
+
+### History
+
+- `GET /hub/history` - List hub operation history with filtering options.
+- `GET /hub/history/:id` - Get details of a specific hub operation.
+
+### Upgrades
+
+- `POST /hub/upgrade` - Upgrade all hub items to their latest versions.
+
+## Usage Examples
+
+### Listing Categories
+
+```bash
+curl http://localhost:8080/api/hub/categories
+```
+
+### Installing a Scenario
+
+```bash
+curl -X POST http://localhost:8080/api/hub/scenarios/install \
+  -H "Content-Type: application/json" \
+  -d '{"item_name": "crowdsecurity/ssh-bf"}'
+```
+
+### Applying Custom YAML
+
+```bash
+curl -X POST http://localhost:8080/api/hub/parsers/manual-apply \
+  -H "Content-Type: application/json" \
+  -d '{
+    "filename": "custom-parser.yaml",
+    "yaml": "filter: ...",
+    "target_path": "/etc/crowdsec/parsers/custom-parser.yaml"
+  }'
+```
+
+## Configuration
+
+Hub behavior can be customized through environment variables or the configuration file. Refer to the [Configuration](../configuration/index.mdx) documentation for details.
+
+## Related Topics
+
+- [Configuration](../configuration/index.mdx)
+- [Backup and Restore](../features/backups.mdx)

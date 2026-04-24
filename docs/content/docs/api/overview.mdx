@@ -25,7 +25,7 @@ Responses are generally returned in JSON format.
 
 ```json
 {
-  "status": "success",
+  "success": true,
   "data": { ... }
 }
 ```
@@ -34,7 +34,7 @@ Responses are generally returned in JSON format.
 
 ```json
 {
-  "status": "error",
-  "message": "Error description"
+  "success": false,
+  "error": "Error description"
 }
 ```

@@ -10,7 +10,7 @@ CrowdSec Manager is built as a monolithic application with a clear separation be
 ## Backend (Go)
 
 The backend is written in Go and handles:
-- **API Server**: Exposes REST endpoints using `chi` router.
+- **API Server**: Exposes REST endpoints using `gin-gonic/gin` router.
 - **Docker Integration**: Communicates with the Docker daemon via the Docker SDK.
 - **Database**: Uses SQLite for storing configuration and state.
 - **Background Jobs**: Runs cron jobs for backups and maintenance.

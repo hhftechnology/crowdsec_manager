@@ -1,0 +1,89 @@
+---
+title: Terminal
+description: Web-based shell into the CrowdSec container
+---
+
+# Terminal
+
+The Terminal feature provides a web-based interactive shell directly into the CrowdSec container running within CrowdSec Manager. This allows you to execute commands, troubleshoot issues, and perform administrative tasks without needing direct SSH or Docker access to the container.
+
+## Features
+
+- **Interactive Shell**: Full-featured terminal access to the CrowdSec container.
+- **Multiple Container Support**: Access different containers by specifying the container name.
+- **Real-time Output**: See command output as it happens, just like a local terminal.
+- **Resize Support**: Terminal automatically adjusts to your browser window size.
+- **Secure Connection**: WebSocket-based connection with proper authentication.
+
+## API Endpoints
+
+The Terminal exposes the following WebSocket endpoint:
+
+### WebSocket Connection
+
+- `GET /terminal/:container` - Establish a WebSocket connection to an interactive terminal in the specified container.
+
+## Usage Examples
+
+### Connecting to the CrowdSec Container
+
+To access the CrowdSec container's terminal through the web interface:
+
+1. Navigate to the Terminal section in the CrowdSec Manager UI
+2. Select "crowdsec" (or your configured container name) from the container dropdown
+3. Click "Connect" to establish the terminal session
+
+### Direct WebSocket Connection (for custom clients)
+
+```javascript
+// Example using JavaScript WebSocket API
+const ws = new WebSocket('ws://localhost:8080/terminal/crowdsec');
+
+ws.onopen = () => {
+  console.log('Connected to terminal');
+  // Send a command
+  ws.send('ls -la\n');
+};
+
+ws.onmessage = (event) => {
+  console.log('Received:', event.data);
+  // Display output in your terminal UI
+};
+
+ws.onclose = () => {
+  console.log('Disconnected from terminal');
+};
+```
+
+### Available Containers
+
+You can access different containers by changing the `:container` parameter in the endpoint:
+- `crowdsec` - The main CrowdSec Security Engine container
+- Other containers defined in your Docker Compose setup (specified via environment variables)
+
+## How It Works
+
+The terminal feature uses:
+- **WebSocket Protocol**: For real-time, bidirectional communication
+- **Docker Exec API**: To create interactive exec sessions in the specified container
+- **Pseudo-terminal (PTY)**: To properly handle terminal features like resizing, colors, and interactive programs
+
+## Security Considerations
+
+- Terminal access is restricted to the same network access rules as the rest of the API
+- Container name validation prevents path traversal and injection attacks
+- Each terminal session creates an isolated exec process in the container
+- Sessions automatically close when the WebSocket connection is terminated
+
+## Configuration
+
+Terminal behavior depends on your Docker configuration. Refer to the [Configuration](../configuration/index.mdx) documentation for details about:
+- Container names (`CrowdsecContainerName`)
+- Docker host settings (`DOCKER_HOSTS` for multi-host setups)
+- General Docker connectivity
+
+## Related Topics
+
+- [Configuration](../configuration/index.mdx)
+- [Logs Monitoring](../features/logs-monitoring.mdx)
+- [Multi-Host Docker](../features/multi-host.mdx) *(if applicable)*

@@ -1,0 +1,76 @@
+---
+title: Config Validation
+description: Detect drift between running config and saved snapshots
+---
+
+# Config Validation
+
+The Config Validation feature allows you to detect configuration drift between the current running configuration of CrowdSec Manager and saved configuration snapshots. This helps ensure consistency and identify unintended changes.
+
+## Features
+
+- **Configuration Drift Detection**: Compare running configuration against saved snapshots
+- **Snapshot Management**: Create, list, and restore configuration snapshots
+- **Detailed Diff Reports**: View specific differences between configurations
+- **Automated Validation**: Schedule regular configuration validation checks
+
+## API Endpoints
+
+The Config Validation exposes the following API endpoints under the `/api/config-validation` prefix:
+
+### Snapshots
+
+- `POST /config-validation/snapshot` - Create a new configuration snapshot
+- `GET /config-validation/snapshots` - List all saved configuration snapshots
+- `GET /config-validation/snapshot/:id` - Get details of a specific snapshot
+- `DELETE /config-validation/snapshot/:id` - Delete a configuration snapshot
+
+### Validation
+
+- `POST /config-validation/validate` - Validate current configuration against a snapshot
+- `GET /config-validation/validation/:id` - Get results of a specific validation
+- `GET /config-validation/validations` - List all validation results
+
+### Restoration
+
+- `POST /config-validation/restore/:id` - Restore configuration from a snapshot
+
+## Usage Examples
+
+### Creating a Snapshot
+
+```bash
+curl -X POST http://localhost:8080/api/config-validation/snapshot \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "pre-update-backup",
+    "description": "Backup before applying security updates"
+  }'
+```
+
+### Validating Configuration
+
+```bash
+curl -X POST http://localhost:8080/api/config-validation/validate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "snapshot_id": "abc123",
+    "check_items": ["api_config", "database_config", "docker_settings"]
+  }'
+```
+
+### Restoring from Snapshot
+
+```bash
+curl -X POST http://localhost:8080/api/config-validation/restore/abc123
+```
+
+## Configuration
+
+Config validation behavior can be customized through environment variables or the configuration file. Refer to the [Configuration](../configuration/index.mdx) documentation for details.
+
+## Related Topics
+
+- [Configuration](../configuration/index.mdx)
+- [Backup and Restore](../features/backups.mdx)
+- [History](../features/history.mdx)

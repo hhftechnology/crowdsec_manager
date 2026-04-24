@@ -1,0 +1,75 @@
+---
+title: Simulation Mode
+description: Toggle CrowdSec simulation mode from UI
+---
+
+# Simulation Mode
+
+CrowdSec Manager allows you to toggle CrowdSec's simulation mode directly from the interface. In simulation mode, CrowdSec will detect and log potential security events but will not apply any actual remediation actions (like banning IP addresses). This is useful for testing new configurations or scenarios without affecting your live traffic.
+
+## Features
+
+- **Status Check**: View whether simulation mode is currently enabled or disabled.
+- **Toggle Control**: Enable or disable simulation mode for specific scenarios or globally.
+- **Scenario-specific Control**: Configure simulation mode on a per-scenario basis.
+- **Real-time Feedback**: See the current state and recent changes immediately.
+
+## API Endpoints
+
+The Simulation Mode exposes the following API endpoints under the `/api/simulation` prefix:
+
+### Status
+
+- `GET /simulation/status` - Get the current simulation status for all scenarios or a specific scenario.
+
+### Toggle
+
+- `POST /simulation/toggle` - Enable or disable simulation mode for a specific scenario.
+
+## Usage Examples
+
+### Checking Simulation Status
+
+```bash
+curl http://localhost:8080/api/simulation/status
+```
+
+### Enabling Simulation for a Scenario
+
+```bash
+curl -X POST http://localhost:8080/api/simulation/toggle \
+  -H "Content-Type: application/json" \
+  -d '{
+    "scenario": "crowdsecurity/ssh-bf",
+    "enabled": true
+  }'
+```
+
+### Disabling Simulation for a Scenario
+
+```bash
+curl -X POST http://localhost:8080/api/simulation/toggle \
+  -H "Content-Type: application/json" \
+  -d '{
+    "scenario": "crowdsecurity/ssh-bf",
+    "enabled": false
+  }'
+```
+
+## How Simulation Mode Works
+
+When simulation mode is enabled for a scenario:
+- CrowdSec will still process logs and detect when the scenario would trigger.
+- Instead of applying the configured action (ban, captcha, etc.), it will only log the event.
+- The event will appear in your alerts and decisions history as if it were applied, but no actual action is taken.
+- This allows you to test the effectiveness of scenarios without impacting legitimate traffic.
+
+## Configuration
+
+Simulation mode behavior is controlled entirely through the CrowdSec CLI (`cscli`) under the hood. No additional configuration is required in CrowdSec Manager beyond what's exposed via the API.
+
+## Related Topics
+
+- [Decisions](../features/decisions.mdx)
+- [Hub Browser](../features/hub.mdx)
+- [Alerts Analysis](../features/alerts.mdx)
