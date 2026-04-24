@@ -1,3 +1,4 @@
+import type { ConnectionProfile } from '@/lib/connection';
 import { ApiClient } from './client';
 import { createAllowlistApi } from './allowlist';
 import { createCrowdsecApi } from './crowdsec';
@@ -8,8 +9,8 @@ import { createScenariosApi } from './scenarios';
 import { createServicesApi } from './services';
 import { createTerminalApi } from './terminal';
 
-export function createApi(baseUrl: string) {
-  const client = new ApiClient(baseUrl);
+export function createApi(profile: ConnectionProfile) {
+  const client = new ApiClient(profile);
 
   return {
     client,

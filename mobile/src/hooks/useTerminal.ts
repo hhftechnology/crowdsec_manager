@@ -2,24 +2,34 @@ import { useRef, useCallback, useState } from 'react';
 import { useMountEffect } from '@/hooks/useMountEffect';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
+import type { WebSocketUrlOptions } from '@/lib/api/client';
 
 const MAX_RECONNECT_ATTEMPTS = 3;
 const RECONNECT_BASE_DELAY = 1000;
 
 interface UseTerminalOptions {
-  getWebSocketUrl: (container: string) => string;
+  getWebSocketUrl: (container: string, options?: WebSocketUrlOptions) => Promise<string>;
   container: string;
+  allowPreOpenAuthRefresh?: boolean;
   onConnect?: () => void;
   onDisconnect?: () => void;
   onError?: (error: string) => void;
 }
 
-export function useTerminal({ getWebSocketUrl, container, onConnect, onDisconnect, onError }: UseTerminalOptions) {
+export function useTerminal({
+  getWebSocketUrl,
+  container,
+  allowPreOpenAuthRefresh = false,
+  onConnect,
+  onDisconnect,
+  onError,
+}: UseTerminalOptions) {
   const terminalRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<Terminal | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const reconnectAttemptsRef = useRef(0);
+  const authRefreshAttemptsRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const manualDisconnectRef = useRef(false);
   const [connected, setConnected] = useState(false);
@@ -33,28 +43,45 @@ export function useTerminal({ getWebSocketUrl, container, onConnect, onDisconnec
     }
   }, []);
 
-  const connectWs = useCallback((term: Terminal, fitAddon: FitAddon) => {
+  const connectWs = useCallback(async (
+    term: Terminal,
+    fitAddon: FitAddon,
+    options?: WebSocketUrlOptions,
+  ) => {
     if (!container) return;
 
-    const url = getWebSocketUrl(container);
+    let url = '';
+    try {
+      url = await getWebSocketUrl(container, options);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to prepare WebSocket connection.';
+      setConnectionError(message);
+      setReconnecting(false);
+      onError?.(message);
+      return;
+    }
+
     if (!url) {
       setConnectionError('Unable to build WebSocket URL. Check server connection.');
+      setReconnecting(false);
       onError?.('Unable to build WebSocket URL');
       return;
     }
 
     const ws = new WebSocket(url);
+    let opened = false;
     ws.binaryType = 'arraybuffer';
     wsRef.current = ws;
 
     ws.onopen = () => {
+      opened = true;
       setConnected(true);
       setReconnecting(false);
       setConnectionError(null);
       reconnectAttemptsRef.current = 0;
+      authRefreshAttemptsRef.current = 0;
       onConnect?.();
 
-      // Send initial resize
       const dims = fitAddon.proposeDimensions();
       if (dims) {
         ws.send(JSON.stringify({
@@ -83,16 +110,23 @@ export function useTerminal({ getWebSocketUrl, container, onConnect, onDisconnec
         return;
       }
 
-      // Auto-reconnect with exponential backoff
+      if (!opened && allowPreOpenAuthRefresh && authRefreshAttemptsRef.current < 1) {
+        authRefreshAttemptsRef.current += 1;
+        setReconnecting(true);
+        term.write('\r\n\x1b[33mRefreshing session and retrying...\x1b[0m\r\n');
+        void connectWs(term, fitAddon, { forceRefreshAuth: true });
+        return;
+      }
+
       if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
         const attempt = reconnectAttemptsRef.current + 1;
         const delay = RECONNECT_BASE_DELAY * Math.pow(2, reconnectAttemptsRef.current);
         reconnectAttemptsRef.current = attempt;
         setReconnecting(true);
-        term.write(`\r\n\x1b[33mConnection lost. Reconnecting (${attempt}/${MAX_RECONNECT_ATTEMPTS})...\x1b[0m\r\n`);
+        term.write('\r\n\x1b[33mConnection lost. Reconnecting (' + attempt + '/' + MAX_RECONNECT_ATTEMPTS + ')...\x1b[0m\r\n');
 
         reconnectTimerRef.current = setTimeout(() => {
-          connectWs(term, fitAddon);
+          void connectWs(term, fitAddon);
         }, delay);
       } else {
         term.write('\r\n\x1b[31mSession disconnected. Max reconnection attempts reached.\x1b[0m\r\n');
@@ -103,25 +137,24 @@ export function useTerminal({ getWebSocketUrl, container, onConnect, onDisconnec
     };
 
     ws.onerror = () => {
-      const errorMsg = `WebSocket connection failed to ${url.replace(/^wss?:\/\//, '')}`;
+      const errorMsg = 'WebSocket connection failed to ' + url.replace(/^wss?:\/\//, '');
       setConnectionError(errorMsg);
       onError?.(errorMsg);
     };
-  }, [container, getWebSocketUrl, onConnect, onDisconnect, onError]);
+  }, [allowPreOpenAuthRefresh, container, getWebSocketUrl, onConnect, onDisconnect, onError]);
 
   const connect = useCallback(() => {
     if (!terminalRef.current || !container) return;
 
-    // Clean up previous terminal if exists
     clearReconnectTimer();
     wsRef.current?.close();
     termRef.current?.dispose();
 
     manualDisconnectRef.current = false;
     reconnectAttemptsRef.current = 0;
+    authRefreshAttemptsRef.current = 0;
     setConnectionError(null);
 
-    // Create terminal
     const term = new Terminal({
       cursorBlink: true,
       fontSize: 12,
@@ -143,17 +176,14 @@ export function useTerminal({ getWebSocketUrl, container, onConnect, onDisconnec
     termRef.current = term;
     fitAddonRef.current = fitAddon;
 
-    // Forward terminal input to WebSocket (registered once per connect, not per reconnect)
     term.onData((data) => {
       if (wsRef.current?.readyState === WebSocket.OPEN) {
         wsRef.current.send(data);
       }
     });
 
-    // Connect WebSocket
-    connectWs(term, fitAddon);
+    void connectWs(term, fitAddon);
 
-    // Handle resize
     const handleResize = () => {
       fitAddon.fit();
       const dims = fitAddon.proposeDimensions();
@@ -180,7 +210,7 @@ export function useTerminal({ getWebSocketUrl, container, onConnect, onDisconnec
       setConnected(false);
       setReconnecting(false);
     };
-  }, [container, connectWs, clearReconnectTimer]);
+  }, [clearReconnectTimer, connectWs, container]);
 
   const disconnect = useCallback(() => {
     manualDisconnectRef.current = true;
@@ -195,11 +225,11 @@ export function useTerminal({ getWebSocketUrl, container, onConnect, onDisconnec
 
   const reconnect = useCallback(() => {
     reconnectAttemptsRef.current = 0;
+    authRefreshAttemptsRef.current = 0;
     setConnectionError(null);
     connect();
   }, [connect]);
 
-  // Cleanup on unmount
   useMountEffect(() => {
     return () => {
       clearReconnectTimer();

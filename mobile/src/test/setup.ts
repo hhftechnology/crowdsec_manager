@@ -1,5 +1,5 @@
-import "@testing-library/jest-dom";
-import { afterEach, vi } from "vitest";
+import '@testing-library/jest-dom';
+import { afterEach, vi } from 'vitest';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -7,7 +7,7 @@ afterEach(() => {
 
 const storage = new Map<string, string>();
 
-Object.defineProperty(window, "localStorage", {
+Object.defineProperty(window, 'localStorage', {
   writable: true,
   value: {
     getItem: (key: string) => storage.get(key) ?? null,
@@ -23,7 +23,7 @@ Object.defineProperty(window, "localStorage", {
   },
 });
 
-Object.defineProperty(window, "matchMedia", {
+Object.defineProperty(window, 'matchMedia', {
   writable: true,
   value: (query: string) => ({
     matches: false,
@@ -36,3 +36,28 @@ Object.defineProperty(window, "matchMedia", {
     dispatchEvent: () => {},
   }),
 });
+
+class ResizeObserverMock {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+
+if (!globalThis.ResizeObserver) {
+  globalThis.ResizeObserver = ResizeObserverMock as unknown as typeof ResizeObserver;
+}
+
+if (!globalThis.requestAnimationFrame) {
+  globalThis.requestAnimationFrame = (callback: FrameRequestCallback) => {
+    callback(0);
+    return 0;
+  };
+}
+
+if (!globalThis.cancelAnimationFrame) {
+  globalThis.cancelAnimationFrame = () => {};
+}
+
+if (!globalThis.btoa) {
+  globalThis.btoa = (value: string) => Buffer.from(value, 'utf8').toString('base64');
+}
