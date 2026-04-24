@@ -240,6 +240,28 @@ func TestGetHistoryActivityHTTP(t *testing.T) {
 	}
 }
 
+func TestGetHistoryActivityDailyEndsAfterCurrentUTCDay(t *testing.T) {
+	t.Parallel()
+
+	service := newFakeHistoryActivityService(7, nil)
+	router := gin.New()
+	router.GET("/history/activity", getHistoryActivity(service))
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/history/activity?window=7d&bucket=day", nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status mismatch: got %d want %d body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	nowUTC := time.Now().UTC()
+	wantEndAt := time.Date(nowUTC.Year(), nowUTC.Month(), nowUTC.Day(), 0, 0, 0, 0, time.UTC).Add(24 * time.Hour)
+	if !service.input.EndAt.Equal(wantEndAt) {
+		t.Fatalf("daily endAt mismatch: got %s want %s", service.input.EndAt.Format(time.RFC3339), wantEndAt.Format(time.RFC3339))
+	}
+}
+
 func newFakeHistoryActivityService(count int, latest *time.Time) *fakeHistoryActivityService {
 	buckets := make([]models.HistoryActivityBucket, 0, count)
 	start := time.Date(2026, 4, 23, 0, 0, 0, 0, time.UTC)

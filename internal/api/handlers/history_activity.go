@@ -50,7 +50,8 @@ func getHistoryActivity(service historyActivityQuerier) gin.HandlerFunc {
 		nowUTC := time.Now().UTC()
 		endAt := nowUTC.Truncate(time.Hour)
 		if bucket == history.ActivityBucketDay {
-			endAt = time.Date(nowUTC.Year(), nowUTC.Month(), nowUTC.Day(), 0, 0, 0, 0, time.UTC)
+			todayUTC := time.Date(nowUTC.Year(), nowUTC.Month(), nowUTC.Day(), 0, 0, 0, 0, time.UTC)
+			endAt = todayUTC.Add(24 * time.Hour)
 		}
 
 		result, err := service.GetActivityBuckets(c.Request.Context(), history.GetActivityBucketsInput{

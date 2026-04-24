@@ -135,7 +135,7 @@ export default function Dashboard() {
     refetchInterval: 30000,
   })
 
-  const { data: alertsData, dataUpdatedAt: alertsUpdatedAt } = useQuery({
+  const { data: alertsData, isLoading: alertsLoading, dataUpdatedAt: alertsUpdatedAt } = useQuery({
     queryKey: ['alerts-dashboard'],
     queryFn: async () => {
       const response = await api.crowdsec.getAlertsAnalysis({ since: '7d' })
@@ -144,7 +144,7 @@ export default function Dashboard() {
     refetchInterval: 30000,
   })
 
-  const { data: activityData, dataUpdatedAt: activityUpdatedAt } = useQuery({
+  const { data: activityData, isLoading: activityLoading, dataUpdatedAt: activityUpdatedAt } = useQuery({
     queryKey: ['history-activity', granularity],
     queryFn: async () => {
       const params = granularity === 'hour'
@@ -194,7 +194,10 @@ export default function Dashboard() {
     return []
   }, [alertsData])
 
-  const alertsCount = alertsData?.count ?? alerts.length
+  const activityAlertsCount = useMemo(() => {
+    if (!activityData?.buckets) return 0
+    return activityData.buckets.reduce((sum, bucket) => sum + (bucket.alerts ?? 0), 0)
+  }, [activityData])
 
   const decisionTypeData = useMemo(() => {
     if (decisions.length === 0) return []
@@ -292,11 +295,11 @@ export default function Dashboard() {
         <div className="cursor-pointer" onClick={() => navigate('/alerts')}>
           <StatCard
             title="Alerts (7d)"
-            value={alertsCount}
+            value={activityAlertsCount}
             description="Alerts in the last 7 days"
             icon={<Activity className="h-4 w-4 text-muted-foreground" />}
-            loading={!alertsData && !decisionsLoading}
-            className={alertsData ? getThresholdBorder(alertsCount, 20, 50) : undefined}
+            loading={activityLoading && !activityData}
+            className={activityData ? getThresholdBorder(activityAlertsCount, 20, 50) : undefined}
           />
         </div>
         <div className="cursor-pointer" onClick={() => navigate('/bouncers')}>
@@ -377,18 +380,24 @@ export default function Dashboard() {
 
       {/* Row 3: Threat Map */}
       <ChartCard title="Threat Map" description="Geographic distribution of alert sources over the last 7 days">
-        <ThreatMap
-          data={threatMapData}
-          height={320}
-          formatTooltip={(point) => {
-            const label = point.country ?? point.label ?? 'Unknown source'
-            return `${label}: ${point.value.toLocaleString()} alert${point.value === 1 ? '' : 's'}`
-          }}
-          onMarkerClick={(point) => {
-            if (!point.country) return
-            navigate(`/alerts?country=${point.country}`)
-          }}
-        />
+        {alertsLoading && !alertsData ? (
+          <div className="flex items-center justify-center h-80 text-muted-foreground text-sm">
+            Loading alert details...
+          </div>
+        ) : (
+          <ThreatMap
+            data={threatMapData}
+            height={320}
+            formatTooltip={(point) => {
+              const label = point.country ?? point.label ?? 'Unknown source'
+              return `${label}: ${point.value.toLocaleString()} alert${point.value === 1 ? '' : 's'}`
+            }}
+            onMarkerClick={(point) => {
+              if (!point.country) return
+              navigate(`/alerts?country=${point.country}`)
+            }}
+          />
+        )}
       </ChartCard>
 
       {/* Row 4: Top Countries + Top Autonomous Systems */}
@@ -402,7 +411,11 @@ export default function Dashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {topCountries.length > 0 ? (
+            {alertsLoading && !alertsData ? (
+              <p className="text-muted-foreground text-sm text-center py-4">
+                Loading alert details...
+              </p>
+            ) : topCountries.length > 0 ? (
               <div className="space-y-3">
                 {topCountries.map((item) => (
                   <div
@@ -448,7 +461,11 @@ export default function Dashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {topAS.length > 0 ? (
+            {alertsLoading && !alertsData ? (
+              <p className="text-muted-foreground text-sm text-center py-4">
+                Loading alert details...
+              </p>
+            ) : topAS.length > 0 ? (
               <div className="space-y-3">
                 {topAS.map((item) => (
                   <div key={item.name} className="flex items-center justify-between py-1">
@@ -503,7 +520,11 @@ export default function Dashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {topScenarios.length > 0 ? (
+            {alertsLoading && !alertsData ? (
+              <p className="text-muted-foreground text-sm text-center py-4">
+                Loading alert details...
+              </p>
+            ) : topScenarios.length > 0 ? (
               <div className="space-y-3">
                 {topScenarios.map((item) => (
                   <div key={item.name} className="flex items-center justify-between">

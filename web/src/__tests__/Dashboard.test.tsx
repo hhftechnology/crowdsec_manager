@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -110,8 +110,27 @@ describe('Dashboard', () => {
     })
 
     expect(await screen.findByText('42')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(within(screen.getByLabelText('Alerts (7d)')).getByText('2')).toBeInTheDocument()
+    })
     expect(screen.getAllByTestId('activity-bar')).toHaveLength(7)
     expect(mockApi.crowdsec.getDecisions).toHaveBeenCalled()
+  })
+
+  it('renders the alert count and activity chart while detailed alert analysis is still loading', async () => {
+    mockApi.crowdsec.getAlertsAnalysis.mockReturnValue(new Promise(() => undefined))
+
+    renderDashboard()
+
+    await waitFor(() => {
+      expect(mockApi.crowdsec.getHistoryActivity).toHaveBeenCalledWith({ window: '7d', bucket: 'day' })
+    })
+
+    await waitFor(() => {
+      expect(within(screen.getByLabelText('Alerts (7d)')).getByText('2')).toBeInTheDocument()
+    })
+    expect(screen.getAllByTestId('activity-bar')).toHaveLength(7)
+    expect(screen.getAllByText('Loading alert details...').length).toBeGreaterThan(0)
   })
 
   it('renders hourly history bars without requiring decisions list data', async () => {
@@ -152,15 +171,18 @@ function renderDashboard() {
 
 function makeHistoryActivity(window: '24h' | '7d', bucket: 'hour' | 'day'): HistoryActivityResponse {
   const count = bucket === 'hour' ? 24 : 7
-  const start = new Date('2026-04-23T00:00:00Z')
+  const stepMs = bucket === 'hour' ? 60 * 60 * 1000 : 24 * 60 * 60 * 1000
+  const start = bucket === 'hour'
+    ? new Date('2026-04-23T00:00:00Z')
+    : new Date('2026-04-18T00:00:00Z')
   return {
     window,
     bucket,
     generated_at: '2026-04-24T00:00:00Z',
     latest_snapshot_at: '2026-04-23T23:00:00Z',
     buckets: Array.from({ length: count }, (_, index) => ({
-      ts: new Date(start.getTime() + index * 60 * 60 * 1000).toISOString(),
-      alerts: index === 0 ? 1 : 0,
+      ts: new Date(start.getTime() + index * stepMs).toISOString(),
+      alerts: index === 0 ? 2 : 0,
       decisions: index === 1 ? 1 : 0,
     })),
   }

@@ -206,6 +206,51 @@ func TestGetActivityBuckets_DailyGapFillSortedAndMixedCounts(t *testing.T) {
 	}
 }
 
+func TestGetActivityBuckets_DailyIncludesCurrentDayFinalBucket(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	today := time.Date(2026, 4, 24, 0, 0, 0, 0, time.UTC)
+	endAt := today.Add(24 * time.Hour)
+
+	if err := store.UpsertAlertSnapshots(ctx, []UpsertAlertInput{
+		{
+			Alert: AlertSnapshot{
+				ID:          1,
+				Scenario:    "crowdsecurity/http-probing",
+				Scope:       "Ip",
+				Value:       "1.1.1.1",
+				Origin:      "crowdsec",
+				Type:        "ban",
+				EventsCount: 1,
+				StartAt:     today.Add(15 * time.Hour).Format(time.RFC3339),
+			},
+			SnapshotAt: today.Add(16 * time.Hour),
+		},
+	}); err != nil {
+		t.Fatalf("UpsertAlertSnapshots failed: %v", err)
+	}
+
+	result, err := store.GetActivityBuckets(ctx, GetActivityBucketsInput{
+		Window: 7 * 24 * time.Hour,
+		Bucket: ActivityBucketDay,
+		EndAt:  endAt,
+	})
+	if err != nil {
+		t.Fatalf("GetActivityBuckets failed: %v", err)
+	}
+	if len(result.Buckets) != 7 {
+		t.Fatalf("expected 7 buckets, got %d", len(result.Buckets))
+	}
+
+	last := result.Buckets[len(result.Buckets)-1]
+	if last.Timestamp != today.Format(time.RFC3339) {
+		t.Fatalf("final bucket timestamp mismatch: got %s want %s", last.Timestamp, today.Format(time.RFC3339))
+	}
+	if last.Alerts != 1 {
+		t.Fatalf("expected current-day alert in final bucket, got %d", last.Alerts)
+	}
+}
+
 func TestGetActivityBuckets_LatestSnapshotAt_AlertsOnly(t *testing.T) {
 	store := newTestStore(t)
 	ctx := context.Background()
