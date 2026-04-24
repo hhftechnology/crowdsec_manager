@@ -1,0 +1,84 @@
+name: Publish Independent
+
+on:
+  push:
+    tags:
+      - "independent-*"
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Publish independent tag
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout tag
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify tag belongs to independent branch
+        run: |
+          set -euo pipefail
+
+          tag_name="${GITHUB_REF_NAME}"
+
+          if [[ ! "${tag_name}" =~ ^independent-[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Tag '${tag_name}' must match independent-X.Y.Z, for example independent-2.3.1."
+            exit 1
+          fi
+
+          git fetch origin independent:refs/remotes/origin/independent
+
+          if ! git merge-base --is-ancestor "${GITHUB_SHA}" origin/independent; then
+            echo "Tag '${tag_name}' points to ${GITHUB_SHA}, which is not on origin/independent."
+            echo "Create the tag from the independent branch and push it again."
+            exit 1
+          fi
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: docker_meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ secrets.DOCKERHUB_USERNAME }}/crowdsec-manager
+          tags: |
+            type=raw,value=${{ github.ref_name }}
+            type=sha,prefix=independent-
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.docker_meta.outputs.tags }}
+          labels: ${{ steps.docker_meta.outputs.labels }}
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          tag_name="${GITHUB_REF_NAME}"
+
+          if gh release view "${tag_name}" >/dev/null 2>&1; then
+            echo "Release '${tag_name}' already exists."
+            exit 0
+          fi
+
+          gh release create "${tag_name}" \
+            --target "${GITHUB_SHA}" \
+            --title "${tag_name}" \
+            --generate-notes
