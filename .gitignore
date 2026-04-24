@@ -128,3 +128,7 @@ dist
 .yarn/install-state.gz
 .pnp.*
 .omx/
+
+# ios build files
+mobile/ios/App/App.xcworkspace/contents.xcworkspacedata
+mobile/ios/App/Podfile.lock

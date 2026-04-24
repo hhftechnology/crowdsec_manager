@@ -1,0 +1,98 @@
+---
+title: Multi-Host Docker
+description: Manage multiple Docker hosts (docs say "not available")
+---
+
+# Multi-Host Docker
+
+CrowdSec Manager supports managing multiple Docker hosts simultaneously through the `DOCKER_HOSTS` environment variable. This allows you to monitor and control CrowdSec instances running on different Docker daemons from a single CrowdSec Manager interface.
+
+## Features
+
+- **Multiple Docker Daemon Management**: Connect to and manage multiple Docker hosts
+- **Host-specific Operations**: Perform actions on specific Docker hosts by ID
+- **Unified Dashboard**: View combined status and metrics from all connected hosts
+- **Failover Support**: Automatic fallback to available hosts when one becomes unreachable
+- **Isolated Management**: Each host's CrowdSec instance is managed independently
+
+## How It Works
+
+The `DOCKER_HOSTS` environment variable specifies a comma-separated list of Docker host connections in the format `id:endpoint`, where:
+- `id` is a unique identifier for the host (used in API calls)
+- `endpoint` is the Docker daemon URL (e.g., `unix:///var/run/docker.sock` or `tcp://192.168.1.100:2376`)
+
+Example: `DOCKER_HOSTS="local:unix:///var/run/docker.sock,remote:tcp://192.168.1.100:2376"`
+
+## API Endpoints
+
+Multi-host functionality is primarily accessed through the existing API endpoints with host specification:
+
+### Host Management
+
+- `GET /hosts/list` - List all configured Docker hosts and their connection status
+
+### Host-specific Operations
+
+Most API endpoints that interact with Docker can be scoped to a specific host using the `host` query parameter:
+- `GET /health/stack?host=local` - Check stack health on a specific host
+- `GET /crowdsec/decisions?host=remote` - Get decisions from a specific host
+- `POST /hub/scenarios/install?host=local` - Install a scenario on a specific host
+
+## Usage Examples
+
+### Setting Up Multi-Host
+
+```bash
+# In your .env file or environment
+DOCKER_HOSTS="local:unix:///var/run/docker.sock,staging:tcp://staging.example.com:2376,production:tcp://prod.example.com:2376"
+```
+
+### Checking Host Status
+
+```bash
+curl http://localhost:8080/api/hosts/list
+```
+
+### Running Host-specific Health Check
+
+```bash
+curl "http://localhost:8080/api/health/stack?host=staging"
+```
+
+### Installing Hub Item on Specific Host
+
+```bash
+curl -X POST "http://localhost:8080/api/hub/scenarios/install?host=production" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "item_name": "crowdsecurity/ssh-bf"
+  }'
+```
+
+## Configuration
+
+Multi-host Docker is configured exclusively through the `DOCKER_HOSTS` environment variable. No additional configuration is required in CrowdSec Manager.
+
+### Environment Variable
+
+- **DOCKER_HOSTS**: Comma-separated list of `id:endpoint` pairs defining Docker hosts to manage
+  - Format: `id1:endpoint1,id2:endpoint2,...`
+  - Example: `local:unix:///var/run/docker.sock,remote:tcp://192.168.1.100:2376`
+
+### Default Behavior
+
+When `DOCKER_HOSTS` is not set or empty, CrowdSec Manager defaults to using the single Docker host specified by `DOCKER_HOST` (or the default Unix socket).
+
+## Limitations and Considerations
+
+- Each Docker host must be accessible from the machine running CrowdSec Manager
+- Docker API versions should be compatible across all hosts
+- Authentication to Docker daemons (if using TLS) must be configured separately
+- Performance may vary based on network latency to remote Docker hosts
+- Some operations that require host-level privileges may need additional configuration
+
+## Related Topics
+
+- [Configuration](../configuration/index.mdx)
+- [Hosts Management](../features/hosts.mdx) *(if separate hosts feature exists)*
+- [Terminal](../features/terminal.mdx) (for accessing containers on specific hosts)
