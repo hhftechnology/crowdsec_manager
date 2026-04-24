@@ -102,6 +102,7 @@ func TestGetHistoryActivityHTTP(t *testing.T) {
 		wantWindow string
 		wantBucket string
 		wantCount  int
+		wantError  string
 	}{
 		{
 			name:       "defaults",
@@ -168,12 +169,14 @@ func TestGetHistoryActivityHTTP(t *testing.T) {
 			target:     "/history/activity",
 			service:    &fakeHistoryActivityService{err: history.ErrStoreUnavailable},
 			wantStatus: http.StatusServiceUnavailable,
+			wantError:  "history unavailable",
 		},
 		{
 			name:       "query failure",
 			target:     "/history/activity",
 			service:    &fakeHistoryActivityService{err: errors.New("database closed")},
-			wantStatus: http.StatusServiceUnavailable,
+			wantStatus: http.StatusInternalServerError,
+			wantError:  "history error",
 		},
 	}
 
@@ -236,6 +239,9 @@ func TestGetHistoryActivityHTTP(t *testing.T) {
 			if envelope.Error == "" {
 				t.Fatalf("expected error message")
 			}
+			if tc.wantError != "" && envelope.Error != tc.wantError {
+				t.Fatalf("error mismatch: got %q want %q", envelope.Error, tc.wantError)
+			}
 		})
 	}
 }
@@ -247,6 +253,9 @@ func TestGetHistoryActivityDailyEndsAfterCurrentUTCDay(t *testing.T) {
 	router := gin.New()
 	router.GET("/history/activity", getHistoryActivity(service))
 
+	nowUTCPre := time.Now().UTC()
+	wantEndAtPre := time.Date(nowUTCPre.Year(), nowUTCPre.Month(), nowUTCPre.Day(), 0, 0, 0, 0, time.UTC).Add(24 * time.Hour)
+
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/history/activity?window=7d&bucket=day", nil)
 	router.ServeHTTP(w, req)
@@ -255,10 +264,15 @@ func TestGetHistoryActivityDailyEndsAfterCurrentUTCDay(t *testing.T) {
 		t.Fatalf("status mismatch: got %d want %d body=%s", w.Code, http.StatusOK, w.Body.String())
 	}
 
-	nowUTC := time.Now().UTC()
-	wantEndAt := time.Date(nowUTC.Year(), nowUTC.Month(), nowUTC.Day(), 0, 0, 0, 0, time.UTC).Add(24 * time.Hour)
-	if !service.input.EndAt.Equal(wantEndAt) {
-		t.Fatalf("daily endAt mismatch: got %s want %s", service.input.EndAt.Format(time.RFC3339), wantEndAt.Format(time.RFC3339))
+	nowUTCPost := time.Now().UTC()
+	wantEndAtPost := time.Date(nowUTCPost.Year(), nowUTCPost.Month(), nowUTCPost.Day(), 0, 0, 0, 0, time.UTC).Add(24 * time.Hour)
+	if !service.input.EndAt.Equal(wantEndAtPre) && !service.input.EndAt.Equal(wantEndAtPost) {
+		t.Fatalf(
+			"daily endAt mismatch: got %s want %s or %s",
+			service.input.EndAt.Format(time.RFC3339),
+			wantEndAtPre.Format(time.RFC3339),
+			wantEndAtPost.Format(time.RFC3339),
+		)
 	}
 }
 

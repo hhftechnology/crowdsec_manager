@@ -148,6 +148,7 @@ describe('Dashboard', () => {
     await waitFor(() => {
       expect(screen.getAllByTestId('activity-bar')).toHaveLength(24)
     })
+    expect(within(screen.getByLabelText('Alerts (7d)')).getByText('2')).toBeInTheDocument()
   })
 })
 
@@ -182,7 +183,7 @@ function makeHistoryActivity(window: '24h' | '7d', bucket: 'hour' | 'day'): Hist
     latest_snapshot_at: '2026-04-23T23:00:00Z',
     buckets: Array.from({ length: count }, (_, index) => ({
       ts: new Date(start.getTime() + index * stepMs).toISOString(),
-      alerts: index === 0 ? 2 : 0,
+      alerts: index === 0 ? (bucket === 'hour' ? 99 : 2) : 0,
       decisions: index === 1 ? 1 : 0,
     })),
   }

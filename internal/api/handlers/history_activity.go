@@ -60,11 +60,14 @@ func getHistoryActivity(service historyActivityQuerier) gin.HandlerFunc {
 			EndAt:  endAt,
 		})
 		if err != nil {
-			if !errors.Is(err, history.ErrStoreUnavailable) {
-				logger.Warn("Failed to load history activity", "error", err)
+			if errors.Is(err, history.ErrStoreUnavailable) {
+				logHistoryActivityRequest(c, window, string(bucket), http.StatusServiceUnavailable, time.Since(started))
+				c.JSON(http.StatusServiceUnavailable, models.Response{Success: false, Error: "history unavailable"})
+				return
 			}
-			logHistoryActivityRequest(c, window, string(bucket), http.StatusServiceUnavailable, time.Since(started))
-			c.JSON(http.StatusServiceUnavailable, models.Response{Success: false, Error: "history unavailable"})
+			logger.Warn("Failed to load history activity", "error", err)
+			logHistoryActivityRequest(c, window, string(bucket), http.StatusInternalServerError, time.Since(started))
+			c.JSON(http.StatusInternalServerError, models.Response{Success: false, Error: "history error"})
 			return
 		}
 

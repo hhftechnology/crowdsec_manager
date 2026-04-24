@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import DashboardPage from '@/pages/DashboardPage';
 import type { DiagnosticResult } from '@/lib/api';
@@ -21,6 +21,8 @@ function createBaseApi() {
     },
     crowdsec: {
       alertsAnalysis: vi.fn(),
+      decisionsSummary: vi.fn(),
+      historyActivity: vi.fn(),
     },
   };
 }
@@ -34,6 +36,8 @@ describe('DashboardPage', () => {
     api.health.getComplete.mockReturnValue(new Promise(() => {}));
     api.ip.getPublicIP.mockReturnValue(new Promise(() => {}));
     api.crowdsec.alertsAnalysis.mockReturnValue(new Promise(() => {}));
+    api.crowdsec.decisionsSummary.mockReturnValue(new Promise(() => {}));
+    api.crowdsec.historyActivity.mockReturnValue(new Promise(() => {}));
     mockUseApi.mockReturnValue({ api });
 
     render(<DashboardPage />);
@@ -62,6 +66,8 @@ describe('DashboardPage', () => {
     });
     api.ip.getPublicIP.mockRejectedValue(new TypeError('Failed to fetch'));
     api.crowdsec.alertsAnalysis.mockResolvedValue(null);
+    api.crowdsec.decisionsSummary.mockRejectedValue(new Error('summary unavailable'));
+    api.crowdsec.historyActivity.mockRejectedValue(new Error('activity unavailable'));
     mockUseApi.mockReturnValue({ api });
 
     render(<DashboardPage />);
@@ -71,6 +77,9 @@ describe('DashboardPage', () => {
     });
 
     expect(screen.getByText('Diagnostics Summary')).toBeInTheDocument();
+    const activeDecisionsCard = screen.getByText('Active Decisions').parentElement?.parentElement;
+    expect(activeDecisionsCard).toBeTruthy();
+    expect(within(activeDecisionsCard as HTMLElement).getByText('1')).toBeInTheDocument();
     expect(screen.queryByText('API unreachable')).not.toBeInTheDocument();
   });
 
@@ -93,6 +102,8 @@ describe('DashboardPage', () => {
     } as unknown as DiagnosticResult);
     api.ip.getPublicIP.mockResolvedValue({ ip: '1.2.3.4' });
     api.crowdsec.alertsAnalysis.mockResolvedValue(null);
+    api.crowdsec.decisionsSummary.mockResolvedValue({ count: 1 });
+    api.crowdsec.historyActivity.mockResolvedValue({ buckets: [] });
     mockUseApi.mockReturnValue({ api });
 
     render(<DashboardPage />);
@@ -113,6 +124,8 @@ describe('DashboardPage', () => {
     api.health.getComplete.mockRejectedValue(new TypeError('Failed to fetch'));
     api.ip.getPublicIP.mockResolvedValue({ ip: '1.2.3.4' });
     api.crowdsec.alertsAnalysis.mockResolvedValue(null);
+    api.crowdsec.decisionsSummary.mockResolvedValue({ count: 0 });
+    api.crowdsec.historyActivity.mockResolvedValue({ buckets: [] });
     mockUseApi.mockReturnValue({ api });
 
     render(<DashboardPage />);

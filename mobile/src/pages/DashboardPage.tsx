@@ -66,10 +66,16 @@ export default function DashboardPage() {
 
     if (decisionsSummaryRes.status === 'fulfilled' && decisionsSummaryRes.value) {
       setDecisionsTotal(decisionsSummaryRes.value.count);
+    } else if (completeRes.status === 'fulfilled' && Array.isArray(completeRes.value.decisions)) {
+      setDecisionsTotal(completeRes.value.decisions.length);
+    } else {
+      setDecisionsTotal(0);
     }
 
     if (activityRes.status === 'fulfilled' && activityRes.value) {
       setActivityBuckets(activityRes.value.buckets ?? []);
+    } else {
+      setActivityBuckets([]);
     }
 
     if (publicRes.status === 'fulfilled') {

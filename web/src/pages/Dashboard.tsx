@@ -85,8 +85,8 @@ function formatHistoryActivityBuckets(activity: HistoryActivityResponse | null |
   return activity.buckets.map((bucket) => {
     const ts = new Date(bucket.ts)
     const date = hourly
-      ? ts.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
-      : ts.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      ? ts.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' })
+      : ts.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
     return {
       date,
       alerts: bucket.alerts ?? 0,
@@ -156,11 +156,20 @@ export default function Dashboard() {
     refetchInterval: 30000,
   })
 
+  const { data: activity7dData, isLoading: activity7dLoading, dataUpdatedAt: activity7dUpdatedAt } = useQuery({
+    queryKey: ['history-activity-7d'],
+    queryFn: async () => {
+      const response = await api.crowdsec.getHistoryActivity({ window: '7d', bucket: 'day' })
+      return response.data.data ?? null
+    },
+    refetchInterval: 30000,
+  })
+
   const lastUpdated = useMemo(() => {
-    const timestamps = [healthUpdatedAt, decisionsUpdatedAt, bouncersUpdatedAt, alertsUpdatedAt, activityUpdatedAt].filter(Boolean)
+    const timestamps = [healthUpdatedAt, decisionsUpdatedAt, bouncersUpdatedAt, alertsUpdatedAt, activityUpdatedAt, activity7dUpdatedAt].filter(Boolean)
     if (timestamps.length === 0) return null
     return new Date(Math.max(...timestamps))
-  }, [healthUpdatedAt, decisionsUpdatedAt, bouncersUpdatedAt, alertsUpdatedAt, activityUpdatedAt])
+  }, [healthUpdatedAt, decisionsUpdatedAt, bouncersUpdatedAt, alertsUpdatedAt, activityUpdatedAt, activity7dUpdatedAt])
 
   const lastUpdatedLabel = lastUpdated ? `Updated ${lastUpdated.toLocaleTimeString()}` : 'Not refreshed yet'
 
@@ -194,10 +203,10 @@ export default function Dashboard() {
     return []
   }, [alertsData])
 
-  const activityAlertsCount = useMemo(() => {
-    if (!activityData?.buckets) return 0
-    return activityData.buckets.reduce((sum, bucket) => sum + (bucket.alerts ?? 0), 0)
-  }, [activityData])
+  const activity7dAlertsCount = useMemo(() => {
+    if (!activity7dData?.buckets) return 0
+    return activity7dData.buckets.reduce((sum, bucket) => sum + (bucket.alerts ?? 0), 0)
+  }, [activity7dData])
 
   const decisionTypeData = useMemo(() => {
     if (decisions.length === 0) return []
@@ -248,10 +257,10 @@ export default function Dashboard() {
   const threatMapData = useMemo(() => buildThreatMapPoints(alerts), [alerts])
 
   const lastUpdatedAt = useMemo(() => {
-    const timestamps = [healthUpdatedAt, decisionsUpdatedAt, bouncersUpdatedAt, alertsUpdatedAt, activityUpdatedAt].filter(Boolean)
+    const timestamps = [healthUpdatedAt, decisionsUpdatedAt, bouncersUpdatedAt, alertsUpdatedAt, activityUpdatedAt, activity7dUpdatedAt].filter(Boolean)
     if (timestamps.length === 0) return null
     return Math.max(...timestamps)
-  }, [healthUpdatedAt, decisionsUpdatedAt, bouncersUpdatedAt, alertsUpdatedAt, activityUpdatedAt])
+  }, [healthUpdatedAt, decisionsUpdatedAt, bouncersUpdatedAt, alertsUpdatedAt, activityUpdatedAt, activity7dUpdatedAt])
 
   const activityTitle = granularity === 'hour'
     ? 'Activity History (24h)'
@@ -295,11 +304,11 @@ export default function Dashboard() {
         <div className="cursor-pointer" onClick={() => navigate('/alerts')}>
           <StatCard
             title="Alerts (7d)"
-            value={activityAlertsCount}
+            value={activity7dAlertsCount}
             description="Alerts in the last 7 days"
             icon={<Activity className="h-4 w-4 text-muted-foreground" />}
-            loading={activityLoading && !activityData}
-            className={activityData ? getThresholdBorder(activityAlertsCount, 20, 50) : undefined}
+            loading={activity7dLoading && !activity7dData}
+            className={activity7dData ? getThresholdBorder(activity7dAlertsCount, 20, 50) : undefined}
           />
         </div>
         <div className="cursor-pointer" onClick={() => navigate('/bouncers')}>
