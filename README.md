@@ -91,9 +91,28 @@ Native iOS and Android app. Supports **Pangolin** (token-based remote access) an
 ### Pangolin (full stack)
 
 ```bash
-git clone https://github.com/hhftechnology/crowdsec_manager.git
-cd crowdsec_manager
-mkdir -p ./config/crowdsec ./config/traefik ./backups ./logs/app ./logs/traefik ./data
+  # Your CrowdSec Manager
+  crowdsec-manager:
+    image: hhftechnology/crowdsec-manager:latest
+    container_name: crowdsec-manager
+    restart: unless-stopped
+    environment:
+      - PORT=8080
+      - ENVIRONMENT=production
+      - TRAEFIK_DYNAMIC_CONFIG=/etc/traefik/dynamic_config.yml
+      - TRAEFIK_CONTAINER_NAME=traefik
+      - TRAEFIK_STATIC_CONFIG=/etc/traefik/traefik_config.yml
+      - CROWDSEC_METRICS_URL=http://crowdsec:6060/metrics
+      - ALERT_LIST_LIMIT=5000
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /root/config:/app/config # pangolin config folder
+      - /root/docker-compose.yml:/app/docker-compose.yml # pangolin compose yml
+      - ./crowdsec-manager/backups:/app/backups
+      - ./crowdsec-manager/data:/app/data
+    depends_on:
+      crowdsec:
+        condition: service_healthy
 docker compose up -d
 ```
 
