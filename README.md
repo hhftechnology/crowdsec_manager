@@ -13,7 +13,25 @@ A web-based management interface for CrowdSec — decisions, alerts, allowlists,
 ## Mobile App
 
 <div align="center">
-<a href="https://apps.apple.com/us/app/#"><img width="135" height="39" alt="Download on the App Store" src="https://github.com/user-attachments/assets/45e31a11-cf6b-40a2-a083-6dc8d1f01291" /></a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://play.google.com/store/apps/details?id=com.crowdsec.manager.mobile"><img width="135" height="39" alt="Get it on Google Play" src="https://github.com/user-attachments/assets/acbba639-858f-4c74-85c7-92a4096efbf5" /></a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://play.google.com/store/apps/details?id=com.crowdsec.manager.independent"><img width="135" height="39" alt="Get it on Google Play (Independent)" src="https://github.com/user-attachments/assets/acbba639-858f-4c74-85c7-92a4096efbf5" /></a>
+
+
+
+<table>
+  <tr>
+    <td align="center">
+      <a href="https://apps.apple.com/us/app/#"><img width="135" height="39" alt="Download on the App Store" src="https://github.com/user-attachments/assets/45e31a11-cf6b-40a2-a083-6dc8d1f01291" /></a><br>
+      <sub>Coming Soon</sub>
+    </td>
+    <td align="center">
+      <a href="https://play.google.com/store/apps/details?id=com.crowdsec.manager.mobile"><img width="135" height="39" alt="Get it on Google Play" src="https://github.com/user-attachments/assets/acbba639-858f-4c74-85c7-92a4096efbf5" /></a><br>
+      <sub>For Pangolin Users</sub>
+    </td>
+    <td align="center">
+      <a href="https://play.google.com/store/apps/details?id=com.crowdsec.manager.independent"><img width="135" height="39" alt="Get it on Google Play (Independent)" src="https://github.com/user-attachments/assets/acbba639-858f-4c74-85c7-92a4096efbf5" /></a><br>
+      <sub>For Multi Proxy(independent)</sub>
+    </td>
+  </tr>
+</table> 
 </div>
 
 ## Mobile Screenshots
