@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import type { Metadata } from 'next';
 import { getSiteUrl } from '@/lib/seo';
-import pkg from '../../../package.json' with { type: 'json' };
+import pkg from 'package.json' with { type: 'json' };
 
 const siteUrl = getSiteUrl();
 
