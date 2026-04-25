@@ -174,14 +174,38 @@ curl http://localhost:8080/api/health/stack
 
 ## Screenshots
 
-<img width="1200" height="630" alt="Dashboard" src="/images/dashboard-overview-countries-systems.jpeg"/>
-<img width="1200" height="630" alt="Health & Diagnostics" src="/images/health-diagnostics-overview.jpeg"/>
-<img width="1200" height="630" alt="Decisions Analysis" src="/images/decisions-analysis-overview.jpeg"/>
-<img width="1200" height="630" alt="Alert Analysis" src="/images/alerts-analysis-overview.jpeg"/>
-<img width="1200" height="630" alt="Allowlists" src="/images/allowlists-management.jpeg"/>
-<img width="1200" height="630" alt="Hub" src="/images/hub-home-categories.jpeg"/>
-<img width="1200" height="630" alt="Logs" src="/images/logs-service-logs.jpeg"/>
-<img width="1200" height="630" alt="Terminal" src="/images/terminal-container-shell.png"/>
+<img width="1200" height="630" alt="Alerts Analysis Filters" src="/images/alerts-analysis-filters.jpeg"/>
+<img width="1200" height="630" alt="Alerts Analysis Inspect Modal" src="/images/alerts-analysis-inspect-modal.jpeg"/>
+<img width="1200" height="630" alt="Alerts Analysis Overview" src="/images/alerts-analysis-overview.jpeg"/>
+<img width="1200" height="630" alt="Alerts Analysis Results Table" src="/images/alerts-analysis-results-table.jpeg"/>
+<img width="1200" height="630" alt="Allowlists Management" src="/images/allowlists-management.jpeg"/>
+<img width="1200" height="630" alt="Backup Management" src="/images/backup-management.jpeg"/>
+<img width="1200" height="630" alt="Bouncers Management" src="/images/bouncers-management.jpeg"/>
+<img width="1200" height="630" alt="Captcha Protection Detect" src="/images/captcha-protection-detect.jpeg"/>
+<img width="1200" height="630" alt="Config Validation" src="/images/config-validation.jpeg"/>
+<img width="1200" height="630" alt="Configuration Settings" src="/images/configuration-settings.jpeg"/>
+<img width="1200" height="630" alt="Crowdsec Health Overview" src="/images/crowdsec-health-overview.jpeg"/>
+<img width="1200" height="630" alt="Dashboard Overview Countries Systems" src="/images/dashboard-overview-countries-systems.jpeg"/>
+<img width="1200" height="630" alt="Dashboard Overview Scenarios Blocked Ips" src="/images/dashboard-overview-scenarios-blocked-ips.jpeg"/>
+<img width="1200" height="630" alt="Decisions Analysis Overview" src="/images/decisions-analysis-overview.jpeg"/>
+<img width="1200" height="630" alt="Decisions Results Table" src="/images/decisions-results-table.jpeg"/>
+<img width="1200" height="630" alt="Health Diagnostics Overview" src="/images/health-diagnostics-overview.jpeg"/>
+<img width="1200" height="630" alt="Hub Appsec Configurations" src="/images/hub-appsec-configurations.jpeg"/>
+<img width="1200" height="630" alt="Hub Appsec Rules" src="/images/hub-appsec-rules.jpeg"/>
+<img width="1200" height="630" alt="Hub Collections" src="/images/hub-collections.jpeg"/>
+<img width="1200" height="630" alt="Hub Home Categories" src="/images/hub-home-categories.jpeg"/>
+<img width="1200" height="630" alt="Hub Log Parsers" src="/images/hub-log-parsers.jpeg"/>
+<img width="1200" height="630" alt="Hub Postoverflows" src="/images/hub-postoverflows.jpeg"/>
+<img width="1200" height="630" alt="Hub Remediation Components" src="/images/hub-remediation-components.jpeg"/>
+<img width="1200" height="630" alt="Hub Scenarios Install Mode" src="/images/hub-scenarios-install-mode.jpeg"/>
+<img width="1200" height="630" alt="Ip Management" src="/images/ip-management.jpeg"/>
+<img width="1200" height="630" alt="Logs Service Logs" src="/images/logs-service-logs.jpeg"/>
+<img width="1200" height="630" alt="Notifications Detect" src="/images/notifications-detect.jpeg"/>
+<img width="1200" height="630" alt="Scenarios Management" src="/images/scenarios-management.jpeg"/>
+<img width="1200" height="630" alt="Services Management" src="/images/services-management.jpeg"/>
+<img width="1200" height="630" alt="System Update" src="/images/system-update.jpeg"/>
+<img width="1200" height="630" alt="Terminal Container Shell" src="/images/terminal-container-shell.png"/>
+<img width="1200" height="630" alt="Whitelist Management" src="/images/whitelist-management.jpeg"/>
 
 
 
