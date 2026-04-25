@@ -103,6 +103,67 @@ curl http://localhost:8080/api/health/stack
 <img width="1200" height="630" alt="Logs" src="/images/logs-service-logs.jpeg"/>
 <img width="1200" height="630" alt="Terminal" src="/images/terminal-container-shell.png"/>
 
+## Mobile Screenshots
+
+<table>
+  <tr>
+    <td align="center">
+      <img src="images/mobile/3.png" width="180" alt="Connection setup (3.png)"><br>
+      <sub>Connection Setup</sub>
+    </td>
+    <td align="center">
+      <img src="images/mobile/1.png" width="180" alt="Dashboard overview (1.png)"><br>
+      <sub>Dashboard Overview</sub>
+    </td>
+    <td align="center">
+      <img src="images/mobile/2.png" width="180" alt="Security IP check (2.png)"><br>
+      <sub>Security IP Check</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="images/mobile/4.png" width="180" alt="Security alerts list (4.png)"><br>
+      <sub>Security Alerts List</sub>
+    </td>
+    <td align="center">
+      <img src="images/mobile/5.png" width="180" alt="Security metrics (5.png)"><br>
+      <sub>Security Metrics</sub>
+    </td>
+    <td align="center">
+      <img src="images/mobile/6.png" width="180" alt="Logs viewer (6.png)"><br>
+      <sub>Logs Viewer</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="images/mobile/7.png" width="180" alt="Management home (7.png)"><br>
+      <sub>Management Home</sub>
+    </td>
+    <td align="center">
+      <img src="images/mobile/8.png" width="180" alt="Allowlists management (8.png)"><br>
+      <sub>Allowlists Management</sub>
+    </td>
+    <td align="center">
+      <img src="images/mobile/9.png" width="180" alt="Hub management (9.png)"><br>
+      <sub>Hub Management</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="images/mobile/10.png" width="180" alt="Scenarios management (10.png)"><br>
+      <sub>Scenarios Management</sub>
+    </td>
+    <td align="center">
+      <img src="images/mobile/11.png" width="180" alt="Container controls (11.png)"><br>
+      <sub>Container Controls</sub>
+    </td>
+    <td align="center">
+      <img src="images/mobile/12.png" width="180" alt="Terminal shell (12.png)"><br>
+      <sub>Terminal Shell</sub>
+    </td>
+  </tr>
+</table>
+
 ## Documentation
 
 Full installation guide, configuration reference, mobile app setup, and API docs:
