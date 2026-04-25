@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import type { Metadata } from 'next';
 import { getSiteUrl } from '@/lib/seo';
+import pkg from '../../../package.json' with { type: 'json' };
 
 const siteUrl = getSiteUrl();
 
@@ -112,7 +113,7 @@ export default function HomePage() {
       <section className="border-b border-border/60 bg-gradient-to-b from-muted/40 to-background">
         <div className="container mx-auto px-4 py-16 text-center lg:py-20">
           <p className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-            Stable · v2.3.4
+            Stable · v{pkg.version}
           </p>
           <h1 className="mb-4 text-4xl font-extrabold tracking-tight text-foreground lg:text-6xl">
             CrowdSec Manager
@@ -141,6 +142,14 @@ export default function HomePage() {
               className="rounded-md border border-input bg-background px-6 py-3 text-sm font-medium shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground"
             >
               GitHub
+            </a>
+            <a
+              href="https://discord.gg/HDCt9MjyMJ"
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-md border border-input bg-background px-6 py-3 text-sm font-medium shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground"
+            >
+              Discord
             </a>
           </div>
         </div>
