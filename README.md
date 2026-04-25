@@ -5,343 +5,114 @@
 ![Stars](https://img.shields.io/github/stars/hhftechnology/crowdsec_manager?style=flat-square)
 [![Discord](https://img.shields.io/discord/994247717368909884?logo=discord&style=flat-square)](https://discord.gg/HDCt9MjyMJ)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![Go Version](https://img.shields.io/badge/go-1.23+-00ADD8.svg)
-![React Version](https://img.shields.io/badge/react-18.3-61DAFB.svg)
 ![Status](https://img.shields.io/badge/status-stable-22c55e.svg)
 </div>
 
-CrowdSec Manager is a web-based management interface for CrowdSec operations, Traefik integration, decisions, scenarios, backups, and logs.
+A web-based management interface for CrowdSec — decisions, alerts, allowlists, scenarios, hub, logs, backups, and Traefik integration.
 
-## Stable release
-
-- Current baseline: `2.3.2`
-- Multi-proxy support: hhftechnology/crowdsec-manager:independent
-- Docker image size (linux/amd64): <!-- IMAGE_SIZE_START -->44MB<!-- IMAGE_SIZE_END -->
-
-### Crowdsec-Manager mobile app.
+## Mobile App
 
 <div align="center">
-<a href="https://apps.apple.com/us/app/#"><img width="135" height="39" alt="appstore" src="https://github.com/user-attachments/assets/45e31a11-cf6b-40a2-a083-6dc8d1f01291" /></a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://play.google.com/store/apps/details?id=com.crowdsec.manager.mobile"><img width="135" height="39" alt="googleplay" src="https://github.com/user-attachments/assets/acbba639-858f-4c74-85c7-92a4096efbf5" /></a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://play.google.com/store/apps/details?id=com.crowdsec.manager.independent"><img width="135" height="39" alt="googleplay" src="https://github.com/user-attachments/assets/acbba639-858f-4c74-85c7-92a4096efbf5" /></a>
+<a href="https://apps.apple.com/us/app/#"><img width="135" height="39" alt="Download on the App Store" src="https://github.com/user-attachments/assets/45e31a11-cf6b-40a2-a083-6dc8d1f01291" /></a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://play.google.com/store/apps/details?id=com.crowdsec.manager.mobile"><img width="135" height="39" alt="Get it on Google Play" src="https://github.com/user-attachments/assets/acbba639-858f-4c74-85c7-92a4096efbf5" /></a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://play.google.com/store/apps/details?id=com.crowdsec.manager.independent"><img width="135" height="39" alt="Get it on Google Play (Independent)" src="https://github.com/user-attachments/assets/acbba639-858f-4c74-85c7-92a4096efbf5" /></a>
 </div>
-## All apps are Pangolin and Basis auth supported.
 
+Native iOS and Android app. Supports **Pangolin** (token-based remote access) and **Basis** (direct URL) connection modes.
 
-## Images
+## Release
 
-<img width="1200" height="630" alt="Dashboard" src="/images/dashboard-overview-countries-systems.jpeg"/>
-<img width="1200" height="630" alt="Health & Diagnostics" src="/images/health-diagnostics-overview.jpeg"/>
-<img width="1200" height="630" alt="Whitelist Management" src="/images/whitelist-management.jpeg"/>
-<img width="1200" height="630" alt="IP Management" src="/images/ip-management.jpeg"/>
-<img width="1200" height="630" alt="CrowdSec Allowlist Management" src="/images/allowlists-management.jpeg"/>
-<img width="1200" height="630" alt="Scenario Management" src="/images/scenarios-management.jpeg"/>
-<img width="1200" height="630" alt="Captcha Setup" src="/images/captcha-protection-detect.jpeg"/>
-<img width="1200" height="630" alt="Decision List Analysis" src="/images/decisions-analysis-overview.jpeg"/>
-<img width="1200" height="630" alt="Alert List Analysis" src="/images/alerts-analysis-overview.jpeg"/>
-<img width="1200" height="630" alt="Logs Viewer" src="/images/logs-service-logs.jpeg"/>
-<img width="1200" height="630" alt="Backup Management" src="/images/backup-management.jpeg"/>
-<img width="1200" height="630" alt="System Update" src="/images/system-update.jpeg"/>
-<img width="1200" height="630" alt="Services Management" src="/images/services-management.jpeg"/>
-<img width="1200" height="630" alt="Configuration" src="/images/configuration-settings.jpeg"/>
-<img width="1200" height="630" alt="Alert Filters" src="/images/alerts-analysis-filters.jpeg"/>
-<img width="1200" height="630" alt="Alert Inspect Modal" src="/images/alerts-analysis-inspect-modal.jpeg"/>
-<img width="1200" height="630" alt="Alert Results Table" src="/images/alerts-analysis-results-table.jpeg"/>
-<img width="1200" height="630" alt="Bouncers Management" src="/images/bouncers-management.jpeg"/>
-<img width="1200" height="630" alt="Config Validation" src="/images/config-validation.jpeg"/>
-<img width="1200" height="630" alt="CrowdSec Health Overview" src="/images/crowdsec-health-overview.jpeg"/>
-<img width="1200" height="630" alt="Dashboard Scenarios and Blocked IPs" src="/images/dashboard-overview-scenarios-blocked-ips.jpeg"/>
-<img width="1200" height="630" alt="Decision Results Table" src="/images/decisions-results-table.jpeg"/>
-<img width="1200" height="630" alt="Hub AppSec Configurations" src="/images/hub-appsec-configurations.jpeg"/>
-<img width="1200" height="630" alt="Hub AppSec Rules" src="/images/hub-appsec-rules.jpeg"/>
-<img width="1200" height="630" alt="Hub Collections" src="/images/hub-collections.jpeg"/>
-<img width="1200" height="630" alt="Hub Home Categories" src="/images/hub-home-categories.jpeg"/>
-<img width="1200" height="630" alt="Hub Log Parsers" src="/images/hub-log-parsers.jpeg"/>
-<img width="1200" height="630" alt="Hub Postoverflows" src="/images/hub-postoverflows.jpeg"/>
-<img width="1200" height="630" alt="Hub Remediation Components" src="/images/hub-remediation-components.jpeg"/>
-<img width="1200" height="630" alt="Hub Scenarios Install Mode" src="/images/hub-scenarios-install-mode.jpeg"/>
-<img width="1200" height="630" alt="Notifications Detect" src="/images/notifications-detect.jpeg"/>
-<img width="1200" height="630" alt="Terminal Container Shell" src="/images/terminal-container-shell.png"/>
+- Version: `2.3.4`
+- Pangolin image: `hhftechnology/crowdsec-manager:latest` — full stack with Traefik, Pangolin, Gerbil
+- Independent image: `hhftechnology/crowdsec-manager:independent` — CrowdSec only, no Traefik
+- Image size (linux/amd64): <!-- IMAGE_SIZE_START -->44MB<!-- IMAGE_SIZE_END -->
 
-### Image Index
+## Quick Start
 
-| Screenshot File | Page |
-| --- | --- |
-| `alerts-analysis-filters.jpeg` | Alerts Analysis (filters panel) |
-| `alerts-analysis-inspect-modal.jpeg` | Alerts Analysis (inspect modal) |
-| `alerts-analysis-overview.jpeg` | Alerts Analysis (overview charts) |
-| `alerts-analysis-results-table.jpeg` | Alerts Analysis (results table) |
-| `allowlists-management.jpeg` | Allowlists Management |
-| `backup-management.jpeg` | Backup Management |
-| `bouncers-management.jpeg` | Bouncers Management |
-| `captcha-protection-detect.jpeg` | Captcha Protection (detect) |
-| `config-validation.jpeg` | Config Validation |
-| `configuration-settings.jpeg` | Configuration Settings |
-| `crowdsec-health-overview.jpeg` | CrowdSec Health Overview |
-| `dashboard-overview-countries-systems.jpeg` | Dashboard (countries and systems) |
-| `dashboard-overview-scenarios-blocked-ips.jpeg` | Dashboard (scenarios and blocked IPs) |
-| `decisions-analysis-overview.jpeg` | Decisions Analysis (overview) |
-| `decisions-results-table.jpeg` | Decisions Analysis (results table) |
-| `health-diagnostics-overview.jpeg` | Health and Diagnostics |
-| `hub-appsec-configurations.jpeg` | Hub Browser (AppSec configurations) |
-| `hub-appsec-rules.jpeg` | Hub Browser (AppSec rules) |
-| `hub-collections.jpeg` | Hub Browser (collections) |
-| `hub-home-categories.jpeg` | Hub Browser (home categories) |
-| `hub-log-parsers.jpeg` | Hub Browser (log parsers) |
-| `hub-postoverflows.jpeg` | Hub Browser (postoverflows) |
-| `hub-remediation-components.jpeg` | Hub Browser (remediation components) |
-| `hub-scenarios-install-mode.jpeg` | Hub Browser (scenarios install mode) |
-| `ip-management.jpeg` | IP Management |
-| `logs-service-logs.jpeg` | Logs (service logs) |
-| `notifications-detect.jpeg` | Notifications (detect) |
-| `scenarios-management.jpeg` | Scenarios Management |
-| `services-management.jpeg` | Services Management |
-| `system-update.jpeg` | System Update |
-| `terminal-container-shell.png` | Terminal (container shell) |
-| `whitelist-management.jpeg` | Whitelist Management |
-
-## Minimum Docker Compose with tailscale
-
-```yaml
-services:
-  tailscale:
-    image: tailscale/tailscale:latest
-    container_name: tailscale-crowdsec
-    hostname: crowdsec-manager-ts # The name that will appear in your Tailscale admin panel
-    environment:
-      - TS_AUTHKEY=
-      - TS_STATE_DIR=/var/lib/tailscale
-    volumes:
-      - tailscale-data:/var/lib/tailscale
-      - /dev/net/tun:/dev/net/tun
-    cap_add:
-      - net_admin
-      - sys_module
-    ports:
-      - "8080:8080"
-    networks:
-      pangolin:
-        aliases:
-          - crowdsec-manager # Ensures other containers on the network can still reach it by its original name!
-    restart: unless-stopped
-
-  crowdsec-manager:
-    image: hhftechnology/crowdsec-manager:latest
-    container_name: crowdsec-manager
-    network_mode: service:tailscale # This is the magic: it merges networking with the Tailscale container
-    depends_on:
-      - tailscale
-    restart: unless-stopped
-    # 'expose' and 'networks' are removed here because Tailscale manages the network connection now
-    environment:
-      # Core Configuration
-      - PORT=8080
-      - ENVIRONMENT=production
-      - TRAEFIK_DYNAMIC_CONFIG=/etc/traefik/dynamic_config.yml
-      - TRAEFIK_CONTAINER_NAME=traefik
-      - TRAEFIK_STATIC_CONFIG=/etc/traefik/traefik_config.yml
-      - CROWDSEC_METRICS_URL=http://crowdsec:6060/metrics
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - /root/config:/app/config
-      - /root/docker-compose.yml:/app/docker-compose.yml
-      - ./backups:/app/config/backups
-      - ./data:/app/data
-
-networks:
-  pangolin:
-    external: true
-
-volumes:
-  tailscale-data:
-```
-
-## Run
+### Pangolin (full stack)
 
 ```bash
-mkdir -p ./backups ./data
-docker network create pangolin
+git clone https://github.com/hhftechnology/crowdsec_manager.git
+cd crowdsec_manager
+mkdir -p ./config/crowdsec ./config/traefik ./backups ./logs/app ./logs/traefik ./data
 docker compose up -d
 ```
 
-## Verify
+### Independent (CrowdSec only)
 
 ```bash
-curl http://localhost:8080/health
+mkdir -p ./config/crowdsec ./logs/app ./data
 ```
 
-## API Endpoints
+```yaml
+services:
+  crowdsec-manager:
+    image: hhftechnology/crowdsec-manager:independent
+    container_name: crowdsec-manager
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - ENVIRONMENT=production
+      - CONFIG_DIR=/app/config
+      - DATABASE_PATH=/app/data/settings.db
+      - INCLUDE_CROWDSEC=true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./config:/app/config
+      - ./logs/app:/app/logs
+      - ./data:/app/data
+    networks:
+      - crowdsec-network
+    depends_on:
+      - crowdsec
 
-Base prefix: `/api`
+  crowdsec:
+    image: crowdsecurity/crowdsec:latest
+    container_name: crowdsec
+    environment:
+      - COLLECTIONS=crowdsecurity/linux
+    volumes:
+      - ./config/crowdsec/acquis.yaml:/etc/crowdsec/acquis.yaml:ro
+      - crowdsec-db:/var/lib/crowdsec/data/
+      - crowdsec-config:/etc/crowdsec/
+    networks:
+      - crowdsec-network
 
-### Health
-- `GET /api/health/stack`
-- `GET /api/health/crowdsec`
-- `GET /api/health/complete`
+networks:
+  crowdsec-network:
+    driver: bridge
 
-### IP
-- `GET /api/ip/public`
-- `GET /api/ip/blocked/:ip`
-- `GET /api/ip/security/:ip`
-- `POST /api/ip/unban`
+volumes:
+  crowdsec-db:
+  crowdsec-config:
+```
 
-### Whitelist
-- `GET /api/whitelist/view`
-- `POST /api/whitelist/current`
-- `POST /api/whitelist/manual`
-- `POST /api/whitelist/cidr`
-- `POST /api/whitelist/crowdsec`
-- `POST /api/whitelist/traefik`
-- `POST /api/whitelist/comprehensive`
-- `DELETE /api/whitelist/remove`
+```bash
+docker compose up -d
+curl http://localhost:8080/api/health/stack
+```
 
-### Allowlist
-- `GET /api/allowlist/list`
-- `POST /api/allowlist/create`
-- `GET /api/allowlist/inspect/:name`
-- `POST /api/allowlist/add`
-- `POST /api/allowlist/remove`
-- `DELETE /api/allowlist/:name`
+## Screenshots
 
-### Scenarios
-- `POST /api/scenarios/setup`
-- `GET /api/scenarios/list`
-- `GET /api/scenarios/files`
-- `DELETE /api/scenarios/file`
-
-### Captcha
-- `POST /api/captcha/setup`
-- `GET /api/captcha/status`
-- `GET /api/captcha/detect`
-- `POST /api/captcha/config`
-- `POST /api/captcha/apply`
-
-### Logs
-- `GET /api/logs/crowdsec`
-- `GET /api/logs/traefik`
-- `GET /api/logs/traefik/advanced`
-- `GET /api/logs/:service`
-- `GET /api/logs/stream/:service`
-- `GET /api/logs/structured/:service`
-
-### Backup
-- `GET /api/backup/list`
-- `POST /api/backup/create`
-- `POST /api/backup/restore`
-- `DELETE /api/backup/:id`
-- `POST /api/backup/cleanup`
-- `GET /api/backup/latest`
-
-### Update
-- `GET /api/update/check`
-- `POST /api/update/with-crowdsec`
-- `POST /api/update/without-crowdsec`
-
-### Services
-- `GET /api/services/verify`
-- `POST /api/services/shutdown`
-- `POST /api/services/action`
-
-### CrowdSec
-- `GET /api/crowdsec/bouncers`
-- `POST /api/crowdsec/bouncers`
-- `DELETE /api/crowdsec/bouncers/:name`
-- `GET /api/crowdsec/decisions`
-- `POST /api/crowdsec/decisions`
-- `DELETE /api/crowdsec/decisions`
-- `POST /api/crowdsec/decisions/import`
-- `GET /api/crowdsec/decisions/analysis`
-- `GET /api/crowdsec/alerts/analysis`
-- `GET /api/crowdsec/alerts/:id`
-- `DELETE /api/crowdsec/alerts/:id`
-- `GET /api/crowdsec/metrics`
-- `POST /api/crowdsec/enroll`
-- `POST /api/crowdsec/enroll/finalize`
-- `GET /api/crowdsec/enroll/preferences`
-- `PUT /api/crowdsec/enroll/preferences`
-- `GET /api/crowdsec/status`
-
-### Traefik
-- `GET /api/traefik/config`
-- `GET /api/traefik/config-path`
-- `POST /api/traefik/config-path`
-
-### Config
-- `GET /api/config/settings`
-- `PUT /api/config/settings`
-- `GET /api/config/files/:container/:fileType`
-
-### Notifications
-- `GET /api/notifications/discord`
-- `POST /api/notifications/discord`
-- `GET /api/notifications/discord/preview`
-- `GET /api/notifications/discord/detect`
-- `POST /api/notifications/discord/config`
-- `POST /api/notifications/discord/apply`
-
-### Cron
-- `POST /api/cron/setup`
-- `GET /api/cron/list`
-- `DELETE /api/cron/:id`
-
-### Profiles
-- `GET /api/profiles`
-- `POST /api/profiles`
-
-### Hosts
-- `GET /api/hosts/list`
-
-### Terminal
-- `GET /api/terminal/:container`
-
-### Config Validation
-- `GET /api/config/validation/validate`
-- `GET /api/config/validation/snapshots`
-- `POST /api/config/validation/snapshot`
-- `POST /api/config/validation/restore/:type`
-- `POST /api/config/validation/accept/:type`
-- `DELETE /api/config/validation/snapshot/:type`
-
-### Hub
-- `GET /api/hub/list`
-- `POST /api/hub/upgrade`
-- `GET /api/hub/categories`
-- `GET /api/hub/:category/items`
-- `POST /api/hub/:category/install`
-- `POST /api/hub/:category/remove`
-- `POST /api/hub/:category/manual-apply`
-- `GET /api/hub/preferences`
-- `GET /api/hub/preferences/:category`
-- `PUT /api/hub/preferences/:category`
-- `GET /api/hub/history`
-- `GET /api/hub/history/:id`
-
-### Simulation
-- `GET /api/simulation/status`
-- `POST /api/simulation/toggle`
-
-### Events
-- `GET /api/events/ws`
-- `GET /api/events/sse`
+<img width="1200" height="630" alt="Dashboard" src="/images/dashboard-overview-countries-systems.jpeg"/>
+<img width="1200" height="630" alt="Health & Diagnostics" src="/images/health-diagnostics-overview.jpeg"/>
+<img width="1200" height="630" alt="Decisions Analysis" src="/images/decisions-analysis-overview.jpeg"/>
+<img width="1200" height="630" alt="Alert Analysis" src="/images/alerts-analysis-overview.jpeg"/>
+<img width="1200" height="630" alt="Allowlists" src="/images/allowlists-management.jpeg"/>
+<img width="1200" height="630" alt="Hub" src="/images/hub-home-categories.jpeg"/>
+<img width="1200" height="630" alt="Logs" src="/images/logs-service-logs.jpeg"/>
+<img width="1200" height="630" alt="Terminal" src="/images/terminal-container-shell.png"/>
 
 ## Documentation
 
-For installation details, feature guides, and API reference, use the docs in [`docs`](https://crowdsec-manager.hhf.technology).
+Full installation guide, configuration reference, mobile app setup, and API docs:
+[crowdsec-manager.hhf.technology](https://crowdsec-manager.hhf.technology)
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+MIT — see [LICENSE](LICENSE).
 
 ## Support
 
-- **Issues**: [GitHub Issues](https://github.com/hhftechnology/crowdsec_manager/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/hhftechnology/crowdsec_manager/discussions)
-
-## Acknowledgments
-
-- Original bash script by hhf-technology
-- CrowdSec for the security engine
-- Traefik for reverse proxy
-- Shadcn/ui for UI components
-
----
-
-**Built with ❤️ for the CrowdSec/Pangolin community**
+- [GitHub Issues](https://github.com/hhftechnology/crowdsec_manager/issues)
+- [Discord](https://discord.gg/HDCt9MjyMJ)

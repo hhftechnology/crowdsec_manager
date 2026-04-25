@@ -5,29 +5,33 @@ description: Internal architecture of CrowdSec Manager
 
 # Architecture
 
-CrowdSec Manager is built as a monolithic application with a clear separation between the backend API and the frontend UI.
+CrowdSec Manager is a monolithic application with a clear separation between the backend API and the frontend SPA.
 
 ## Backend (Go)
 
 The backend is written in Go and handles:
-- **API Server**: Exposes REST endpoints using `chi` router.
+- **API Server**: Exposes REST endpoints using the `gin` router.
 - **Docker Integration**: Communicates with the Docker daemon via the Docker SDK.
-- **Database**: Uses SQLite for storing configuration and state.
+- **Database**: Uses SQLite for storing configuration, settings, and history.
 - **Background Jobs**: Runs cron jobs for backups and maintenance.
+- **Real-time Streaming**: Delivers live log and event data via WebSocket (`/api/events/ws`) and SSE (`/api/events/sse`).
 
 ### Key Packages
 - `internal/api`: HTTP handlers and routing.
 - `internal/docker`: Docker client wrapper.
 - `internal/database`: Database models and queries.
 - `internal/cron`: Scheduled task manager.
+- `internal/history`: Decision and alert history store.
+- `internal/cache`: In-memory TTL cache for expensive queries.
+- `internal/backup`: Backup creation and retention (Pangolin variant only).
 
 ## Frontend (React)
 
 The frontend is a Single Page Application (SPA) built with React and Vite.
-- **UI Library**: Uses Shadcn UI for components.
-- **State Management**: Uses React Query for data fetching and caching.
-- **Routing**: Client-side routing for navigation.
+- **UI Library**: Shadcn UI for components.
+- **State Management**: TanStack Query (React Query) for data fetching and caching.
+- **Routing**: Client-side routing via react-router-dom.
 
 ## Communication
 
-The frontend communicates with the backend via HTTP requests to the `/api` endpoints. Real-time data (logs) is delivered via WebSockets.
+The frontend communicates with the backend via HTTP requests to the `/api` endpoints. Real-time data (logs, events) is delivered via WebSocket and SSE.

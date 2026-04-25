@@ -1,34 +1,61 @@
 ---
 title: Volumes & Persistence
-description: Required and optional volume mappings
+description: Required and optional volume mappings for each deployment variant
 ---
 
 # Volumes & Persistence
 
-The minimum deployment relies on five volume mappings.
-
-## Required volumes
+## Pangolin variant
 
 | Host path | Container path | Purpose |
-| :--- | :--- | :--- |
-| `/var/run/docker.sock` | `/var/run/docker.sock` | Docker API access for service actions. |
-| `/root/config` | `/app/config` | Runtime configuration files used by manager workflows. |
-| `/root/docker-compose.yml` | `/app/docker-compose.yml` | Compose file used for stack operations. |
-| `./backups` | `/app/backups` | Backup artifacts. |
-| `./data` | `/app/data` | Persistent settings database and app data. |
-
-## Minimum example
+|---|---|---|
+| `/var/run/docker.sock` | `/var/run/docker.sock` | Docker API access for service management |
+| `./config` | `/app/config` | CrowdSec config directory |
+| `./docker-compose.yml` | `/app/docker-compose.yml` | Compose file used for stack operations |
+| `./backups` | `/app/backups` | Backup artifacts |
+| `./logs/app` | `/app/logs` | Application logs |
+| `./data` | `/app/data` | SQLite databases (settings + history) |
+| `./logs/traefik` | `/var/log/traefik` _(read-only)_ | Traefik logs for in-app analysis |
 
 ```yaml
 volumes:
   - /var/run/docker.sock:/var/run/docker.sock
-  - /root/config:/app/config
-  - /root/docker-compose.yml:/app/docker-compose.yml
+  - ./config:/app/config
+  - ./docker-compose.yml:/app/docker-compose.yml
   - ./backups:/app/backups
+  - ./logs/app:/app/logs
+  - ./data:/app/data
+  - ./logs/traefik:/var/log/traefik:ro
+```
+
+## Independent variant
+
+| Host path | Container path | Purpose |
+|---|---|---|
+| `/var/run/docker.sock` | `/var/run/docker.sock` | Docker API access |
+| `./config` | `/app/config` | CrowdSec config directory |
+| `./logs/app` | `/app/logs` | Application logs |
+| `./data` | `/app/data` | SQLite databases (settings + history) |
+
+```yaml
+volumes:
+  - /var/run/docker.sock:/var/run/docker.sock
+  - ./config:/app/config
+  - ./logs/app:/app/logs
   - ./data:/app/data
 ```
 
-## Optional volumes
+No backup volume and no Traefik log volume are needed for the Independent variant.
 
-- Traefik log path mapping, if you want in-app log analysis from host log files.
-- Custom config mounts, only when your host paths differ from defaults.
+## Prepare host directories
+
+```bash
+mkdir -p ./config ./data ./logs/app
+# Pangolin only:
+mkdir -p ./backups ./logs/traefik
+```
+
+## Notes
+
+- All paths in environment variables refer to in-container paths. Use volume mappings to connect them to your host.
+- The `docker.sock` mount is required for all container management features. Ensure the host socket exists at `/var/run/docker.sock`.

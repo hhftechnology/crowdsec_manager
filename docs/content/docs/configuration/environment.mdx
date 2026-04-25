@@ -1,33 +1,178 @@
 ---
 title: Environment Variables
-description: Core runtime configuration for CrowdSec Manager
+description: Complete runtime configuration reference for both deployment variants
 ---
 
 # Environment Variables
 
-The minimum deployment needs only a small environment set. Add more variables only when your paths or container names differ.
+All configuration is loaded from environment variables at startup. Values are in-container paths — use Docker volume mappings to connect them to host paths.
 
-## Minimum variables (recommended)
+## Pangolin variant
 
-| Variable | Example | Purpose |
-| :--- | :--- | :--- |
-| `PORT` | `8080` | HTTP port inside the container. |
-| `ENVIRONMENT` | `production` | Runtime mode. |
-| `TRAEFIK_DYNAMIC_CONFIG` | `/etc/traefik/dynamic_config.yml` | Traefik dynamic config path used by manager actions. |
-| `TRAEFIK_CONTAINER_NAME` | `traefik` | Traefik container name in your stack. |
-| `TRAEFIK_STATIC_CONFIG` | `/etc/traefik/traefik_config.yml` | Traefik static config path. |
+Full variable set from `internal/config/config.go` on the `main` branch.
 
-## Common optional variables
+### Server
 
-| Variable | Default | When to change |
-| :--- | :--- | :--- |
-| `DATABASE_PATH` | `/app/data/settings.db` | If you store app data elsewhere in container. |
-| `BACKUP_DIR` | `/app/backups` | If backup path is customized in container. |
-| `LOG_LEVEL` | `info` | For troubleshooting (`debug`) or quieter logs. |
-| `RETENTION_DAYS` | `60` | To change backup retention policy. |
+| Variable | Default | Purpose |
+|---|---|---|
+| `PORT` | `8080` | HTTP server port |
+| `ENVIRONMENT` | `development` | Runtime mode (set `production` in compose) |
+| `LOG_LEVEL` | `info` | Log verbosity (`debug`, `info`, `warn`, `error`) |
+| `LOG_FILE` | `./logs/crowdsec-manager.log` | Log file path inside container |
 
-## Notes
+### Docker
 
-- Keep environment values as in-container paths.
-- Use Docker volume mappings to map host paths to those container paths.
-- Multi-proxy support is not available in this release.
+| Variable | Default | Purpose |
+|---|---|---|
+| `DOCKER_HOST` | _(empty)_ | Docker socket override (e.g. `unix:///var/run/docker.sock`) |
+| `DOCKER_HOSTS` | _(empty)_ | Multi-host format: `id:endpoint,id:endpoint` |
+| `COMPOSE_FILE` | `./docker-compose.yml` | Docker Compose file used for stack operations |
+| `PANGOLIN_DIR` | `.` | Directory containing Pangolin configuration |
+
+### Database
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `DATABASE_PATH` | `./data/settings.db` | SQLite settings database |
+| `HISTORY_DATABASE_PATH` | `./data/history.db` | SQLite history database |
+
+### CrowdSec paths
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `CONFIG_DIR` | `./config` | CrowdSec config directory |
+| `CROWDSEC_ACQUIS_FILE` | `/etc/crowdsec/acquis.yaml` | Acquisition config file |
+| `CROWDSEC_WHITELIST_PATH` | `/etc/crowdsec/parsers/s02-enrich/mywhitelists.yaml` | Whitelist file |
+| `CROWDSEC_PROFILES_PATH` | `/etc/crowdsec/profiles.yaml` | Profiles file |
+| `CROWDSEC_NOTIFICATIONS_DIR` | `/etc/crowdsec/notifications` | Notifications directory |
+| `CROWDSEC_SCENARIOS_DIR` | `/etc/crowdsec/scenarios` | Scenarios directory |
+| `CROWDSEC_METRICS_URL` | `http://localhost:6060/metrics` | CrowdSec metrics endpoint |
+| `CROWDSEC_CONSOLE_URL` | `https://app.crowdsec.net/` | CrowdSec console URL |
+| `CROWDSEC_CTI_URL_PATTERN` | `https://app.crowdsec.net/cti/{{.Value}}` | CTI URL pattern |
+
+### Traefik paths
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `TRAEFIK_DYNAMIC_CONFIG` | `/etc/traefik/dynamic_config.yml` | Traefik dynamic config |
+| `TRAEFIK_STATIC_CONFIG` | `/etc/traefik/traefik_config.yml` | Traefik static config |
+| `TRAEFIK_ACCESS_LOG` | `/var/log/traefik/access.log` | Traefik access log |
+| `TRAEFIK_ERROR_LOG` | `/var/log/traefik/traefik.log` | Traefik error log |
+| `TRAEFIK_CAPTCHA_HTML_PATH` | `/etc/traefik/conf/captcha.html` | Captcha HTML template |
+| `TRAEFIK_CAPTCHA_ENV_PATH` | `/etc/traefik/captcha.env` | Captcha env file |
+| `CAPTCHA_GRACE_PERIOD` | `1800` | Captcha grace period in seconds |
+
+### Backup
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `BACKUP_DIR` | `./backups` | Backup storage directory |
+| `RETENTION_DAYS` | `60` | Days to keep backups |
+
+### Container names
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `CROWDSEC_CONTAINER_NAME` | `crowdsec` | CrowdSec container name |
+| `TRAEFIK_CONTAINER_NAME` | `traefik` | Traefik container name |
+| `PANGOLIN_CONTAINER_NAME` | `pangolin` | Pangolin container name |
+| `GERBIL_CONTAINER_NAME` | `gerbil` | Gerbil container name |
+
+### Service flags
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `INCLUDE_CROWDSEC` | `true` | Include CrowdSec in managed service list |
+| `INCLUDE_PANGOLIN` | `true` | Include Pangolin in managed service list |
+| `INCLUDE_GERBIL` | `true` | Include Gerbil in managed service list |
+
+### Limits
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `DECISION_LIST_LIMIT` | `200` | Max decisions returned per request |
+| `ALERT_LIST_LIMIT` | `200` | Max alerts returned per request |
+
+### Messaging (optional)
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `NATS_URL` | _(empty)_ | NATS JetStream URL |
+| `NATS_TOKEN` | _(empty)_ | NATS authentication token |
+| `NATS_ENABLED` | `false` | Enable NATS messaging |
+
+### Timeouts
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `SHUTDOWN_TIMEOUT` | `30` | Graceful shutdown timeout in seconds |
+| `READ_TIMEOUT` | `15` | HTTP read timeout in seconds |
+| `WRITE_TIMEOUT` | `15` | HTTP write timeout in seconds |
+
+---
+
+## Independent variant
+
+The Independent variant strips all Traefik, Pangolin, Gerbil, backup, and captcha configuration. Only these variables are available.
+
+### Server
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `PORT` | `8080` | HTTP server port |
+| `ENVIRONMENT` | `development` | Runtime mode |
+| `LOG_LEVEL` | `info` | Log verbosity |
+| `LOG_FILE` | `./logs/crowdsec-manager.log` | Log file path |
+
+### Docker
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `DOCKER_HOST` | _(empty)_ | Docker socket override |
+| `DOCKER_HOSTS` | _(empty)_ | Multi-host format |
+
+### Database
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `DATABASE_PATH` | `./data/settings.db` | SQLite settings database |
+| `HISTORY_DATABASE_PATH` | `./data/history.db` | SQLite history database |
+
+### CrowdSec paths
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `CONFIG_DIR` | `./config` | CrowdSec config directory |
+| `CROWDSEC_SCENARIOS_DIR` | `/etc/crowdsec/scenarios` | Scenarios directory |
+| `CROWDSEC_METRICS_URL` | `http://localhost:6060/metrics` | CrowdSec metrics endpoint |
+| `CROWDSEC_CONSOLE_URL` | `https://app.crowdsec.net/` | CrowdSec console URL |
+| `CROWDSEC_CONTAINER_NAME` | `crowdsec` | CrowdSec container name |
+
+### Service flags
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `INCLUDE_CROWDSEC` | `true` | Include CrowdSec in managed service list |
+
+### Limits
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `DECISION_LIST_LIMIT` | `200` | Max decisions returned per request |
+| `ALERT_LIST_LIMIT` | `200` | Max alerts returned per request |
+
+### Messaging (optional)
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `NATS_URL` | _(empty)_ | NATS JetStream URL |
+| `NATS_TOKEN` | _(empty)_ | NATS authentication token |
+| `NATS_ENABLED` | `false` | Enable NATS messaging |
+
+### Timeouts
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `SHUTDOWN_TIMEOUT` | `30` | Graceful shutdown timeout in seconds |
+| `READ_TIMEOUT` | `15` | HTTP read timeout in seconds |
+| `WRITE_TIMEOUT` | `15` | HTTP write timeout in seconds |

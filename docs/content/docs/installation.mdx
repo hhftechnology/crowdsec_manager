@@ -1,75 +1,235 @@
 ---
 title: Installation
-description: Canonical deployment for CrowdSec Manager
+description: Deploy CrowdSec Manager — Pangolin stack or Independent variant
 ---
 
 # Installation
 
-This is the canonical setup for CrowdSec Manager `1.0.0`.
+Choose the variant that matches your setup:
+
+- **Pangolin** — Full integrated stack with Traefik, Pangolin, Gerbil, and CrowdSec. Builds from source. Includes backup management and Traefik/captcha integration.
+- **Independent** — Standalone CrowdSec manager. Uses a pre-built image. No Traefik, no Pangolin/Gerbil, no backup management.
 
 ## Prerequisites
 
-- Docker running on the host.
-- Docker Compose v2.
-- External Docker network `pangolin`.
+**Both variants:**
+- Docker Engine
+- Docker Compose v2
 
-## 1. Prepare host paths
+**Pangolin variant only:**
+- Repository cloned locally (the Dockerfile is built in place)
+
+---
+
+## Pangolin variant
+
+### 1. Clone the repository
 
 ```bash
-mkdir -p ./backups
-mkdir -p ./data
+git clone https://github.com/hhftechnology/crowdsec_manager.git
+cd crowdsec_manager
 ```
 
-## 2. Create or update docker-compose.yml
+### 2. Prepare directories
 
-Use this minimum compose file:
+```bash
+mkdir -p ./config/crowdsec ./config/traefik ./backups ./logs/app ./logs/traefik ./data
+```
+
+### 3. Create your `docker-compose.yml`
 
 ```yaml
 services:
   crowdsec-manager:
-    image: hhftechnology/crowdsec-manager:1.1.0
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: crowdsec-manager
     restart: unless-stopped
-    expose:
-      - "8080"
+    ports:
+      - "8080:8080"
     environment:
       - PORT=8080
       - ENVIRONMENT=production
+      - LOG_LEVEL=info
+      - LOG_FILE=/app/logs/crowdsec-manager.log
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - COMPOSE_FILE=/app/docker-compose.yml
+      - PANGOLIN_DIR=/app
+      - CONFIG_DIR=/app/config
+      - DATABASE_PATH=/app/data/settings.db
       - TRAEFIK_DYNAMIC_CONFIG=/etc/traefik/dynamic_config.yml
-      - TRAEFIK_CONTAINER_NAME=traefik
       - TRAEFIK_STATIC_CONFIG=/etc/traefik/traefik_config.yml
+      - TRAEFIK_ACCESS_LOG=/var/log/traefik/access.log
+      - TRAEFIK_ERROR_LOG=/var/log/traefik/traefik.log
+      - CROWDSEC_ACQUIS_FILE=/etc/crowdsec/acquis.yaml
+      - BACKUP_DIR=/app/backups
+      - RETENTION_DAYS=60
+      - INCLUDE_CROWDSEC=true
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - /root/config:/app/config
-      - /root/docker-compose.yml:/app/docker-compose.yml
+      - ./config:/app/config
+      - ./docker-compose.yml:/app/docker-compose.yml
       - ./backups:/app/backups
+      - ./logs/app:/app/logs
       - ./data:/app/data
+      - ./logs/traefik:/var/log/traefik:ro
     networks:
-      - pangolin
+      - crowdsec-network
+    depends_on:
+      - crowdsec
+      - traefik
+
+  pangolin:
+    image: fosrl/pangolin:latest
+    container_name: pangolin
+    restart: unless-stopped
+    networks:
+      - crowdsec-network
+
+  gerbil:
+    image: fosrl/gerbil:latest
+    container_name: gerbil
+    restart: unless-stopped
+    networks:
+      - crowdsec-network
+
+  crowdsec:
+    image: crowdsecurity/crowdsec:latest
+    container_name: crowdsec
+    restart: unless-stopped
+    environment:
+      - GID=${GID:-1000}
+      - COLLECTIONS=crowdsecurity/linux crowdsecurity/traefik
+    volumes:
+      - ./config/crowdsec/acquis.yaml:/etc/crowdsec/acquis.yaml:ro
+      - crowdsec-db:/var/lib/crowdsec/data/
+      - crowdsec-config:/etc/crowdsec/
+      - ./logs/traefik:/var/log/traefik:ro
+    networks:
+      - crowdsec-network
+
+  traefik:
+    image: traefik:latest
+    container_name: traefik
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8081:8080"
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.file.directory=/etc/traefik"
+      - "--providers.file.watch=true"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--accesslog=true"
+      - "--accesslog.filepath=/var/log/traefik/access.log"
+      - "--log.level=INFO"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./config/traefik:/etc/traefik:ro
+      - ./logs/traefik:/var/log/traefik
+    networks:
+      - crowdsec-network
 
 networks:
-  pangolin:
-    external: true
+  crowdsec-network:
+    driver: bridge
+
+volumes:
+  crowdsec-db:
+  crowdsec-config:
 ```
 
-## 3. Ensure `pangolin` network exists
-
-```bash
-docker network create pangolin
-```
-
-If the network already exists, Docker will return an error and you can ignore it.
-
-## 4. Start CrowdSec Manager
+### 4. Start the stack
 
 ```bash
 docker compose up -d
 ```
 
-## 5. Verify
+### 5. Verify
 
 ```bash
-curl http://localhost:8080/health
+curl http://localhost:8080/api/health/stack
 ```
 
-If the endpoint returns healthy status, open the UI on `http://localhost:8080` or behind your existing reverse proxy route.
+Open the UI at `http://localhost:8080`.
+
+---
+
+## Independent variant
+
+### 1. Prepare directories
+
+```bash
+mkdir -p ./config/crowdsec ./logs/app ./data
+```
+
+### 2. Create your `docker-compose.yml`
+
+```yaml
+services:
+  crowdsec-manager:
+    image: hhftechnology/crowdsec-manager:independent
+    container_name: crowdsec-manager
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - ENVIRONMENT=production
+      - LOG_LEVEL=info
+      - LOG_FILE=/app/logs/crowdsec-manager.log
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - CONFIG_DIR=/app/config
+      - DATABASE_PATH=/app/data/settings.db
+      - INCLUDE_CROWDSEC=true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./config:/app/config
+      - ./logs/app:/app/logs
+      - ./data:/app/data
+    networks:
+      - crowdsec-network
+    depends_on:
+      - crowdsec
+
+  crowdsec:
+    image: crowdsecurity/crowdsec:latest
+    container_name: crowdsec
+    restart: unless-stopped
+    environment:
+      - GID=${GID:-1000}
+      - COLLECTIONS=crowdsecurity/linux
+    volumes:
+      - ./config/crowdsec/acquis.yaml:/etc/crowdsec/acquis.yaml:ro
+      - crowdsec-db:/var/lib/crowdsec/data/
+      - crowdsec-config:/etc/crowdsec/
+    networks:
+      - crowdsec-network
+
+networks:
+  crowdsec-network:
+    driver: bridge
+
+volumes:
+  crowdsec-db:
+  crowdsec-config:
+```
+
+### 3. Start
+
+```bash
+docker compose up -d
+```
+
+### 4. Verify
+
+```bash
+curl http://localhost:8080/api/health/stack
+```
+
+Open the UI at `http://localhost:8080`.

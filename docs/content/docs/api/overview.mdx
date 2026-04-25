@@ -15,18 +15,27 @@ Example: `http://localhost:8080/api/health/stack`
 
 ## Authentication
 
-Currently, the API is protected by the internal network configuration. Access is restricted to the local network or via the exposed port/reverse proxy.
+The API is protected by network configuration. Access is restricted to the local network or via the exposed port/reverse proxy. No token-based authentication is required.
 
 ## Response Format
 
-Responses are generally returned in JSON format.
+All responses use the same JSON envelope.
 
 ### Success Response
 
 ```json
 {
-  "status": "success",
+  "success": true,
   "data": { ... }
+}
+```
+
+### Success with message
+
+```json
+{
+  "success": true,
+  "message": "Operation completed"
 }
 ```
 
@@ -34,7 +43,213 @@ Responses are generally returned in JSON format.
 
 ```json
 {
-  "status": "error",
-  "message": "Error description"
+  "success": false,
+  "error": "Error description"
 }
 ```
+
+## Endpoint Reference
+
+### Health
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/health/stack` | Stack service health |
+| GET | `/api/health/crowdsec` | CrowdSec health |
+| GET | `/api/health/complete` | Full diagnostics |
+
+### IP
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/ip/public` | Get public IP |
+| GET | `/api/ip/blocked/:ip` | Check if IP is blocked |
+| GET | `/api/ip/security/:ip` | IP security lookup |
+| POST | `/api/ip/unban` | Unban an IP |
+
+### Whitelist
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/whitelist/view` | View current whitelist |
+| POST | `/api/whitelist/current` | Whitelist current IP |
+| POST | `/api/whitelist/manual` | Whitelist manual IP |
+| POST | `/api/whitelist/cidr` | Whitelist CIDR range |
+| POST | `/api/whitelist/crowdsec` | Add to CrowdSec whitelist |
+| POST | `/api/whitelist/traefik` | Add to Traefik whitelist |
+| POST | `/api/whitelist/comprehensive` | Setup comprehensive whitelist |
+| DELETE | `/api/whitelist/remove` | Remove from whitelist |
+
+### Allowlist
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/allowlist/list` | List allowlists |
+| POST | `/api/allowlist/create` | Create allowlist |
+| GET | `/api/allowlist/inspect/:name` | Inspect allowlist |
+| POST | `/api/allowlist/add` | Add entries |
+| POST | `/api/allowlist/remove` | Remove entries |
+| POST | `/api/allowlist/import` | Import entries |
+| DELETE | `/api/allowlist/:name` | Delete allowlist |
+
+### Scenarios
+| Method | Path | Description |
+|---|---|---|
+| POST | `/api/scenarios/setup` | Setup custom scenarios |
+| GET | `/api/scenarios/list` | List scenarios |
+| GET | `/api/scenarios/files` | Get scenario files |
+| DELETE | `/api/scenarios/file` | Delete scenario file |
+
+### Captcha
+| Method | Path | Description |
+|---|---|---|
+| POST | `/api/captcha/setup` | Setup captcha |
+| GET | `/api/captcha/status` | Get captcha status |
+| GET | `/api/captcha/detect` | Detect captcha config |
+| POST | `/api/captcha/config` | Save captcha config |
+| POST | `/api/captcha/apply` | Apply captcha config |
+
+### Logs
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/logs/crowdsec` | CrowdSec logs |
+| GET | `/api/logs/traefik` | Traefik logs |
+| GET | `/api/logs/traefik/advanced` | Advanced Traefik log analysis |
+| GET | `/api/logs/:service` | Service logs |
+| GET | `/api/logs/stream/:service` | Stream logs (WebSocket) |
+| GET | `/api/logs/structured/:service` | Structured log view |
+
+### Backup
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/backup/list` | List backups |
+| POST | `/api/backup/create` | Create backup |
+| POST | `/api/backup/restore` | Restore backup |
+| DELETE | `/api/backup/:id` | Delete backup |
+| POST | `/api/backup/cleanup` | Cleanup old backups |
+| GET | `/api/backup/latest` | Get latest backup |
+
+### Update
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/update/check` | Check for updates |
+| POST | `/api/update/with-crowdsec` | Update with CrowdSec restart |
+| POST | `/api/update/without-crowdsec` | Update without CrowdSec restart |
+
+### Services
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/services/verify` | Verify services |
+| POST | `/api/services/shutdown` | Graceful shutdown |
+| POST | `/api/services/action` | Service action |
+
+### CrowdSec
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/crowdsec/bouncers` | List bouncers |
+| POST | `/api/crowdsec/bouncers` | Add bouncer |
+| DELETE | `/api/crowdsec/bouncers/:name` | Delete bouncer |
+| GET | `/api/crowdsec/decisions` | List decisions |
+| POST | `/api/crowdsec/decisions` | Add decision |
+| DELETE | `/api/crowdsec/decisions` | Delete decision |
+| POST | `/api/crowdsec/decisions/import` | Import decisions |
+| GET | `/api/crowdsec/decisions/analysis` | Decision analysis |
+| GET | `/api/crowdsec/decisions/history` | Decision history |
+| GET | `/api/crowdsec/decisions/repeated-offenders` | Repeated offenders |
+| POST | `/api/crowdsec/decisions/history/reapply` | Reapply single decision |
+| POST | `/api/crowdsec/decisions/history/bulk-reapply` | Bulk reapply decisions |
+| GET | `/api/crowdsec/history/stats` | History statistics |
+| GET | `/api/crowdsec/history/activity` | History activity |
+| GET | `/api/crowdsec/history/config` | History config |
+| PUT | `/api/crowdsec/history/config` | Update history config |
+| GET | `/api/crowdsec/alerts/analysis` | Alert analysis |
+| GET | `/api/crowdsec/alerts/history` | Alert history |
+| GET | `/api/crowdsec/alerts/:id` | Inspect alert |
+| DELETE | `/api/crowdsec/alerts/:id` | Delete alert |
+| GET | `/api/crowdsec/metrics` | CrowdSec metrics |
+| POST | `/api/crowdsec/enroll` | Enroll in CrowdSec console |
+| POST | `/api/crowdsec/enroll/finalize` | Finalize enrollment |
+| GET | `/api/crowdsec/enroll/preferences` | Get enrollment preferences |
+| PUT | `/api/crowdsec/enroll/preferences` | Update enrollment preferences |
+| GET | `/api/crowdsec/status` | Enrollment status |
+
+### Traefik
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/traefik/config` | Get Traefik config |
+| GET | `/api/traefik/config-path` | Get config path |
+| POST | `/api/traefik/config-path` | Set config path |
+
+### Config
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/config/settings` | Get settings |
+| PUT | `/api/config/settings` | Update settings |
+| GET | `/api/config/files/:container/:fileType` | Get container file content |
+
+### Config Validation
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/config/validation/validate` | Validate configs |
+| GET | `/api/config/validation/snapshots` | List snapshots |
+| POST | `/api/config/validation/snapshot` | Create snapshot |
+| POST | `/api/config/validation/restore/:type` | Restore config |
+| POST | `/api/config/validation/accept/:type` | Accept current config |
+| DELETE | `/api/config/validation/snapshot/:type` | Delete snapshot |
+
+### Notifications
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/notifications/discord` | Get Discord config |
+| POST | `/api/notifications/discord` | Update Discord config |
+| GET | `/api/notifications/discord/preview` | Preview Discord config |
+| GET | `/api/notifications/discord/detect` | Detect Discord config |
+| POST | `/api/notifications/discord/config` | Save Discord config |
+| POST | `/api/notifications/discord/apply` | Apply Discord config |
+
+### Cron
+| Method | Path | Description |
+|---|---|---|
+| POST | `/api/cron/setup` | Setup cron job |
+| GET | `/api/cron/list` | List cron jobs |
+| DELETE | `/api/cron/:id` | Delete cron job |
+
+### Profiles
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/profiles` | Get profiles |
+| POST | `/api/profiles` | Update profiles |
+
+### Hub
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/hub/list` | List all hub items |
+| POST | `/api/hub/upgrade` | Upgrade all hub items |
+| GET | `/api/hub/categories` | List categories |
+| GET | `/api/hub/:category/items` | List items by category |
+| POST | `/api/hub/:category/install` | Install hub item |
+| POST | `/api/hub/:category/remove` | Remove hub item |
+| POST | `/api/hub/:category/manual-apply` | Manual apply hub YAML |
+| GET | `/api/hub/preferences` | Get hub preferences |
+| GET | `/api/hub/preferences/:category` | Get preference by category |
+| PUT | `/api/hub/preferences/:category` | Update preference |
+| GET | `/api/hub/history` | Hub operation history |
+| GET | `/api/hub/history/:id` | Hub operation by ID |
+
+### Simulation
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/simulation/status` | Get simulation status |
+| POST | `/api/simulation/toggle` | Toggle simulation mode |
+
+### Hosts
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/hosts/list` | List Docker hosts |
+
+### Terminal
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/terminal/:container` | WebSocket terminal session |
+
+### Events
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/events/ws` | WebSocket event stream |
+| GET | `/api/events/sse` | SSE event stream |

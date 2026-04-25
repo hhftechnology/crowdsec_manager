@@ -1,57 +1,93 @@
 ---
 title: Quick Start
-description: Fast path to launch CrowdSec Manager
+description: Shortest path to a running CrowdSec Manager
 ---
 
 # Quick Start
 
-Use this page when you want the shortest path. For full details, use [Installation](/docs/installation).
+For full details and all configuration options, see [Installation](/docs/installation).
 
-## 1. Create directories
+**Which variant?**
+- **Pangolin** — you want the full integrated stack with Traefik, Pangolin, and Gerbil, and you are building from the repository.
+- **Independent** — you want a standalone CrowdSec manager with no Traefik integration, using the pre-built image.
+
+---
+
+## Pangolin
 
 ```bash
-mkdir -p ./backups ./data
+git clone https://github.com/hhftechnology/crowdsec_manager.git
+cd crowdsec_manager
+mkdir -p ./config/crowdsec ./config/traefik ./backups ./logs/app ./logs/traefik ./data
+docker compose up -d
+curl http://localhost:8080/api/health/stack
 ```
 
-## 2. Use this compose file
+The default `docker-compose.yml` in the repo starts the full stack (crowdsec-manager, crowdsec, traefik, pangolin, gerbil).
+
+---
+
+## Independent
+
+```bash
+mkdir -p ./config/crowdsec ./logs/app ./data
+```
+
+Create `docker-compose.yml`:
 
 ```yaml
 services:
   crowdsec-manager:
-    image: hhftechnology/crowdsec-manager:1.1.0
+    image: hhftechnology/crowdsec-manager:independent
     container_name: crowdsec-manager
     restart: unless-stopped
-    expose:
-      - "8080"
+    ports:
+      - "8080:8080"
     environment:
       - PORT=8080
       - ENVIRONMENT=production
-      - TRAEFIK_DYNAMIC_CONFIG=/etc/traefik/dynamic_config.yml
-      - TRAEFIK_CONTAINER_NAME=traefik
-      - TRAEFIK_STATIC_CONFIG=/etc/traefik/traefik_config.yml
+      - LOG_LEVEL=info
+      - LOG_FILE=/app/logs/crowdsec-manager.log
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - CONFIG_DIR=/app/config
+      - DATABASE_PATH=/app/data/settings.db
+      - INCLUDE_CROWDSEC=true
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - /root/config:/app/config
-      - /root/docker-compose.yml:/app/docker-compose.yml
-      - ./backups:/app/backups
+      - ./config:/app/config
+      - ./logs/app:/app/logs
       - ./data:/app/data
     networks:
-      - pangolin
+      - crowdsec-network
+    depends_on:
+      - crowdsec
+
+  crowdsec:
+    image: crowdsecurity/crowdsec:latest
+    container_name: crowdsec
+    restart: unless-stopped
+    environment:
+      - GID=${GID:-1000}
+      - COLLECTIONS=crowdsecurity/linux
+    volumes:
+      - ./config/crowdsec/acquis.yaml:/etc/crowdsec/acquis.yaml:ro
+      - crowdsec-db:/var/lib/crowdsec/data/
+      - crowdsec-config:/etc/crowdsec/
+    networks:
+      - crowdsec-network
 
 networks:
-  pangolin:
-    external: true
+  crowdsec-network:
+    driver: bridge
+
+volumes:
+  crowdsec-db:
+  crowdsec-config:
 ```
 
-## 3. Create network and run
-
 ```bash
-docker network create pangolin
 docker compose up -d
+curl http://localhost:8080/api/health/stack
 ```
 
-## 4. Check health
-
-```bash
-curl http://localhost:8080/health
-```
+Open the UI at `http://localhost:8080`.
