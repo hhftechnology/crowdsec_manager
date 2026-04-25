@@ -1,33 +1,48 @@
 ---
 title: Networking
-description: Required Docker network and access model
+description: Docker network configuration for each deployment variant
 ---
 
 # Networking
 
-CrowdSec Manager expects a shared external Docker network named `pangolin`.
+Both deployment variants use a `crowdsec-network` bridge network that Docker Compose creates automatically. No external network setup is required.
 
-## Required network
-
-```bash
-docker network create pangolin
-```
-
-## Compose requirement
+## Network model
 
 ```yaml
 networks:
-  pangolin:
-    external: true
-
-services:
-  crowdsec-manager:
-    networks:
-      - pangolin
+  crowdsec-network:
+    driver: bridge
 ```
+
+This is defined at the bottom of the compose file. Docker creates it on `docker compose up` if it does not exist.
+
+## Pangolin variant
+
+The Pangolin stack exposes three ports:
+
+| Port | Service | Purpose |
+|---|---|---|
+| `8080` | crowdsec-manager | Direct UI/API access |
+| `80` | traefik | HTTP entrypoint |
+| `443` | traefik | HTTPS entrypoint |
+| `8081` | traefik | Traefik dashboard |
+
+The manager is also reachable via Traefik at `manager.localhost` (requires a host entry or DNS record pointing to the host).
+
+All services (crowdsec-manager, crowdsec, traefik, pangolin, gerbil) share the same `crowdsec-network` bridge, so they resolve each other by container name.
+
+## Independent variant
+
+The Independent variant exposes one port:
+
+| Port | Service | Purpose |
+|---|---|---|
+| `8080` | crowdsec-manager | Direct UI/API access |
+
+Port 8080 is mapped directly to the host. To put a reverse proxy in front of it, add your own proxy service to the compose file and route to `crowdsec-manager:8080` on the `crowdsec-network`.
 
 ## Access patterns
 
-- Keep `expose: "8080"` when a reverse proxy handles routing.
-- Use `ports: "8080:8080"` only if you want direct host access.
-- Multi-proxy deployment is not supported in this release.
+- Use `ports: "8080:8080"` for direct host access (default in both variants).
+- To use `expose` instead of `ports` (proxy-only access), remove the `ports` key and ensure your reverse proxy is on the same `crowdsec-network`.

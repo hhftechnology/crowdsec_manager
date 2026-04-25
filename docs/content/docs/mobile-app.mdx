@@ -1,0 +1,104 @@
+---
+title: Mobile App
+description: CrowdSec Manager mobile app for iOS and Android — setup and connection guide
+---
+
+# Mobile App
+
+CrowdSec Manager is available as a native mobile app for iOS and Android. It supports two connection modes: **Pangolin** (secure remote access via Pangolin proxy) and **Basis** (direct URL connection for LAN or self-managed HTTPS setups).
+
+<div align="center">
+<a href="https://apps.apple.com/us/app/#"><img width="135" height="39" alt="Download on the App Store" src="https://github.com/user-attachments/assets/45e31a11-cf6b-40a2-a083-6dc8d1f01291" /></a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://play.google.com/store/apps/details?id=com.crowdsec.manager.mobile"><img width="135" height="39" alt="Get it on Google Play" src="https://github.com/user-attachments/assets/acbba639-858f-4c74-85c7-92a4096efbf5" /></a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://play.google.com/store/apps/details?id=com.crowdsec.manager.independent"><img width="135" height="39" alt="Get it on Google Play (Independent)" src="https://github.com/user-attachments/assets/acbba639-858f-4c74-85c7-92a4096efbf5" /></a>
+</div>
+
+| | Pangolin app | Independent app |
+|---|---|---|
+| **iOS** | App Store | — |
+| **Android** | Google Play (`com.crowdsec.manager.mobile`) | Google Play (`com.crowdsec.manager.independent`) |
+| **Connection modes** | Pangolin + Basis | Basis only |
+
+---
+
+## Connection Modes
+
+### Basis (direct URL)
+
+Connects directly to your CrowdSec Manager instance over your network. Use this when:
+- Your server is on the same LAN.
+- Your server is behind your own HTTPS reverse proxy with a public domain.
+
+**Setup:**
+1. Open the app.
+2. Set connection mode to **Basis**.
+3. Enter your server URL (e.g. `https://crowdsec.yourdomain.com` or `http://192.168.1.100:8080`).
+4. Enable **Insecure / LAN mode** if using HTTP or a self-signed cert.
+5. Tap **Connect**.
+
+The app probes `GET /api/health/stack` to verify the connection, then stores the URL locally.
+
+---
+
+### Pangolin (remote access via Pangolin proxy)
+
+Connects to your CrowdSec Manager instance through Pangolin — a zero-trust tunneling proxy. The app talks to Pangolin using an access token; **no Pangolin dashboard login is required**. The token gives the app direct access to the specific resource (your CrowdSec Manager) without exposing it publicly.
+
+#### Step 1: Open Links in Pangolin
+
+- Open your Pangolin dashboard.
+- In the left navigation under **ACCESS CONTROL**, click **Links**.
+
+#### Step 2: Create a share link for CrowdSec Manager
+
+- Click **Create share link**.
+- In the **Resource** dropdown, select your CrowdSec Manager resource (e.g. `crowdsec-manager`).
+- Optionally enter a **Title** (e.g. `Mobile-Access`).
+- Set an expiry or check **Never expire**.
+- Click **Create Link**.
+
+#### Step 3: Copy your token credentials
+
+Once the link is created, open its details and find the **See Access Token Usage** section. You will see:
+
+- **Token ID** — e.g. `hkh60m93`
+- **Token** — e.g. `st4hpy42imfxvliiz5fxh44mai`
+
+Keep these secure and do not share them publicly.
+
+#### Step 4: Connect in the app
+
+1. Open the CrowdSec Manager app.
+2. Set connection mode to **Pangolin**.
+3. Enter your **Pangolin Resource URL** (e.g. `crowdsec.pangolin.yourdomain.com`).
+4. In the **Pangolin access token** field, enter your credentials in the format `tokenId.tokenSecret`:
+
+```
+hkh60m93.st4hpy42imfxvliiz5fxh44mai
+```
+
+5. Tap **Connect**.
+
+LAN/Insecure mode is generally not needed for Pangolin connections.
+
+> **Note:** The app uses Pangolin's API only to authenticate and access your specific resource. It does not read or modify any other part of your Pangolin configuration, and no Pangolin dashboard login or credentials are ever required.
+
+---
+
+## Features
+
+The mobile app provides the same core features as the web UI:
+
+- Dashboard with health, metrics, and activity overview
+- Security: IP checks, decisions, alerts analysis
+- CrowdSec Hub: browse, install, and remove collections
+- Allowlists management
+- Scenario management
+- Log viewer (CrowdSec + Traefik)
+- Interactive container terminal (WebSocket)
+- Dark mode (light / dark / system)
+
+---
+
+## Platform notes
+
+- **HTTP / LAN access:** Enable **Insecure / LAN mode** in the app for HTTP or self-signed cert connections. The app includes platform-level cleartext and transport exceptions for both Android and iOS.
+- **PWA:** A Progressive Web App is also available from the web UI — add it to your home screen from any browser.
