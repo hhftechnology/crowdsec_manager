@@ -115,7 +115,7 @@ Native iOS and Android app. Supports **Pangolin** (token-based remote access) an
     container_name: crowdsec-manager
     restart: unless-stopped
     ports:
-     -8080:8080
+      - 8080:8080
     environment:
       - PORT=8080
       - ENVIRONMENT=production
