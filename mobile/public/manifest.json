@@ -4,8 +4,8 @@
   "description": "Mobile CrowdSec security management app",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "'#ffffff'",
-  "theme_color": "#6d1f2f",
+  "background_color": "#faf9f5",
+  "theme_color": "#cc785c",
   "orientation": "portrait",
   "icons": [
     {

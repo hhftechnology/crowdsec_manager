@@ -65,11 +65,12 @@ describe('SecurityPage', () => {
       expect(api.crowdsec.decisionsAnalysis).toHaveBeenCalledWith({ limit: 20, offset: 0 });
     });
 
-    const decisionsTab = screen.getByRole('tab', { name: 'Decisions' });
+    const decisionsTab = screen.getByRole('button', { name: 'Decisions' });
     fireEvent.mouseDown(decisionsTab);
     fireEvent.click(decisionsTab);
     await waitFor(() => {
-      expect(decisionsTab).toHaveAttribute('data-state', 'active');
+      // CategoryTab uses plain buttons; presence of the active class is enough
+expect(decisionsTab.className).toContain('bg-surface-card');
       expect(screen.getByText('1.1.1.1')).toBeInTheDocument();
     });
 
@@ -115,14 +116,14 @@ describe('SecurityPage', () => {
     render(<SecurityPage />);
 
     await waitFor(() => {
-      expect(screen.getByRole('tab', { name: 'History' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'History' })).toBeInTheDocument();
     });
 
-    const historyTab = screen.getByRole('tab', { name: 'History' });
+    const historyTab = screen.getByRole('button', { name: 'History' });
     fireEvent.mouseDown(historyTab);
     fireEvent.click(historyTab);
     await waitFor(() => {
-      expect(historyTab).toHaveAttribute('data-state', 'active');
+      expect(historyTab.className).toContain('bg-surface-card');
       expect(screen.getByText('5.5.5.5')).toBeInTheDocument();
     });
 

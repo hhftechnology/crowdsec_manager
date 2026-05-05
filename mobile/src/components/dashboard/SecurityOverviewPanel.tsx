@@ -33,10 +33,10 @@ export function SecurityOverviewPanel({ decisionsTotal, alertsCount, topScenario
   const hasActivity = activityBuckets && activityBuckets.length > 0;
 
   return (
-    <div className="rounded-xl border border-border bg-card p-4 space-y-4">
-      <h3 className="text-sm font-semibold">Security Overview</h3>
+    <div className="rounded-lg border border-hairline bg-surface-card p-md space-y-md">
+      <h3 className="text-title-sm font-semibold text-ink">Security Overview</h3>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-sm">
         <MetricCard
           label="Active Decisions"
           value={decisionsTotal}
@@ -52,16 +52,16 @@ export function SecurityOverviewPanel({ decisionsTotal, alertsCount, topScenario
       </div>
 
       {sortedScenarios.length > 0 && (
-        <div className="space-y-2">
-          <h4 className="text-xs font-medium text-muted-foreground">Top Scenarios</h4>
+        <div className="space-y-xs">
+          <h4 className="text-caption font-medium text-muted">Top Scenarios</h4>
           <div className="space-y-1.5">
             {sortedScenarios.map(([scenario, count], index) => (
-              <div key={scenario} className="flex items-center gap-2">
-                <span className="text-[10px] font-mono text-muted-foreground w-4 shrink-0">
+              <div key={scenario} className="flex items-center gap-xs">
+                <span className="text-caption font-mono text-muted w-4 shrink-0">
                   {index + 1}.
                 </span>
-                <span className="text-xs truncate flex-1">{scenario}</span>
-                <span className="text-xs font-mono font-medium tabular-nums shrink-0">{count}</span>
+                <span className="text-caption truncate flex-1 text-ink">{scenario}</span>
+                <span className="text-caption font-mono font-medium tabular-nums shrink-0 text-ink">{count}</span>
               </div>
             ))}
           </div>
@@ -69,9 +69,9 @@ export function SecurityOverviewPanel({ decisionsTotal, alertsCount, topScenario
       )}
 
       {hasActivity && (
-        <div className="space-y-2">
-          <h4 className="text-xs font-medium text-muted-foreground">Recent Activity</h4>
-          <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-xs">
+          <h4 className="text-caption font-medium text-muted">Recent Activity</h4>
+          <div className="grid grid-cols-2 gap-xs">
             <MetricCard label="Alerts" value={activity24hAlerts} variant="default" />
             <MetricCard label="Decisions" value={activity24hDecisions} variant="default" />
           </div>

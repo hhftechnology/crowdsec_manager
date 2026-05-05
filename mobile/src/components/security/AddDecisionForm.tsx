@@ -54,19 +54,19 @@ export function AddDecisionForm({ onSubmit, loading }: AddDecisionFormProps) {
   };
 
   return (
-    <section className="rounded-xl border border-border bg-card p-4 space-y-3">
-      <h3 className="text-sm font-semibold">Add Decision</h3>
+    <section className="rounded-lg border border-hairline bg-surface-card p-md space-y-sm">
+      <h3 className="text-title-sm font-semibold text-ink">Add Decision</h3>
 
-      <div className="space-y-2">
+      <div className="space-y-xs">
         <Input
           placeholder="Value (IP/CIDR)"
           value={form.value || ''}
           onChange={(e) => setForm((prev) => ({ ...prev, value: e.target.value }))}
         />
 
-        <div className="grid grid-cols-2 gap-2">
-          <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Type</label>
+        <div className="grid grid-cols-2 gap-xs">
+          <div className="space-y-xxs">
+            <label className="text-caption text-muted">Type</label>
             <Select
               value={form.type || 'ban'}
               onValueChange={(val) => setForm((prev) => ({ ...prev, type: val }))}
@@ -81,8 +81,8 @@ export function AddDecisionForm({ onSubmit, loading }: AddDecisionFormProps) {
             </Select>
           </div>
 
-          <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Scope</label>
+          <div className="space-y-xxs">
+            <label className="text-caption text-muted">Scope</label>
             <Select
               value={form.scope || 'ip'}
               onValueChange={(val) => setForm((prev) => ({ ...prev, scope: val }))}
@@ -100,8 +100,8 @@ export function AddDecisionForm({ onSubmit, loading }: AddDecisionFormProps) {
           </div>
         </div>
 
-        <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">Duration</label>
+        <div className="space-y-xxs">
+          <label className="text-caption text-muted">Duration</label>
           <Select value={durationMode} onValueChange={handleDurationChange}>
             <SelectTrigger>
               <SelectValue placeholder="Duration" />
@@ -119,7 +119,7 @@ export function AddDecisionForm({ onSubmit, loading }: AddDecisionFormProps) {
               placeholder="e.g. 12h, 3d, 2w"
               value={form.duration || ''}
               onChange={(e) => setForm((prev) => ({ ...prev, duration: e.target.value }))}
-              className="mt-1"
+              className="mt-xxs"
             />
           )}
         </div>

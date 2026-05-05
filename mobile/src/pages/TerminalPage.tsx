@@ -1,13 +1,13 @@
 import { useCallback, useState } from 'react';
 import { useMountEffect } from '@/hooks/useMountEffect';
-import { RefreshCw, TerminalSquare, Plug, Unplug, RotateCw, Loader2 } from 'lucide-react';
+import { TerminalSquare } from 'lucide-react';
 import '@xterm/xterm/css/xterm.css';
 import { useApi } from '@/contexts/ApiContext';
-import { PageHeader } from '@/components/PageHeader';
-import { Button } from '@/components/ui/button';
+import { TopBar } from '@/components/TopBar';
 import { QueryStateView } from '@/components/QueryStateView';
 import { InlineErrorBanner } from '@/components/InlineErrorBanner';
 import { useTerminal } from '@/hooks/useTerminal';
+import { ButtonPrimary, ButtonSecondary, CategoryTab, Dot, Pill } from '@/components/design';
 import { showActionError, showActionSuccess } from '@/lib/actionToast';
 import type { HealthContainer } from '@/lib/api';
 
@@ -26,9 +26,7 @@ export default function TerminalPage() {
       const stack = await api.health.getStack();
       const running = (stack?.containers || []).filter((c: HealthContainer) => c.running);
       setContainers(running);
-      if (running.length > 0 && !selectedContainer) {
-        setSelectedContainer(running[0].name);
-      }
+      if (running.length > 0 && !selectedContainer) setSelectedContainer(running[0].name);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load containers');
     } finally {
@@ -41,10 +39,7 @@ export default function TerminalPage() {
   });
 
   const getWebSocketUrl = useCallback(
-    (container: string) => {
-      if (!api) return '';
-      return api.terminal.getWebSocketUrl(container);
-    },
+    (container: string) => (api ? api.terminal.getWebSocketUrl(container) : ''),
     [api],
   );
 
@@ -56,19 +51,30 @@ export default function TerminalPage() {
     onError: (msg) => showActionError('Terminal error', new Error(msg)),
   });
 
-  return (
-    <div className="pb-nav">
-      <PageHeader
-        title="Terminal"
-        subtitle={connected ? `Connected to ${selectedContainer}` : reconnecting ? 'Reconnecting...' : 'Interactive container shell'}
-        action={
-          <Button variant="ghost" size="icon" onClick={loadContainers} disabled={loading}>
-            <RefreshCw className={loading ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
-          </Button>
-        }
-      />
+  const statusPill = connected ? (
+    <Pill tone="success">
+      <Dot tone="success" pulse /> connected
+    </Pill>
+  ) : reconnecting ? (
+    <Pill tone="warning">
+      <Dot tone="warning" pulse /> reconnecting
+    </Pill>
+  ) : (
+    <Pill tone="error">
+      <Dot tone="error" /> offline
+    </Pill>
+  );
 
-      <div className="px-4 space-y-4">
+  return (
+    <div className="pb-nav bg-canvas h-full flex flex-col">
+      <TopBar title="Terminal" right={statusPill} />
+
+      <div className="px-md pt-md pb-xs">
+        <div className="text-caption-uppercase uppercase text-muted">Container</div>
+        <div className="text-title-md text-ink font-display truncate">{selectedContainer || '—'}</div>
+      </div>
+
+      <div className="px-md flex-1 pb-md flex flex-col">
         <QueryStateView
           isLoading={loading}
           error={error}
@@ -77,79 +83,51 @@ export default function TerminalPage() {
           emptyTitle="No running containers"
           emptyDescription="No running containers found. Check your Docker setup."
         >
-          <section className="rounded-xl border border-border bg-card p-4 space-y-3">
-            <h3 className="text-sm font-semibold">Select container</h3>
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              {containers.map((c) => (
-                <Button
-                  key={c.name}
-                  variant={selectedContainer === c.name ? 'default' : 'secondary'}
-                  size="sm"
-                  onClick={() => {
-                    if (connected) disconnect();
-                    setSelectedContainer(c.name);
-                  }}
-                  className="whitespace-nowrap"
-                >
-                  <TerminalSquare className="h-3.5 w-3.5 mr-1" />
-                  {c.name}
-                </Button>
-              ))}
-            </div>
+          <div className="flex gap-xs overflow-x-auto pb-xs mb-sm">
+            {containers.map((c) => (
+              <CategoryTab
+                key={c.name}
+                active={selectedContainer === c.name}
+                onClick={() => {
+                  if (connected) disconnect();
+                  setSelectedContainer(c.name);
+                }}
+              >
+                {c.name}
+              </CategoryTab>
+            ))}
+          </div>
 
-            <div className="flex items-center gap-2">
-              <Button
-                onClick={connect}
-                disabled={connected || reconnecting || !selectedContainer}
-                size="sm"
-              >
-                <Plug className="h-4 w-4 mr-1" />
-                Connect
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={disconnect}
-                disabled={!connected && !reconnecting}
-                size="sm"
-              >
-                <Unplug className="h-4 w-4 mr-1" />
-                Disconnect
-              </Button>
-              {!connected && !reconnecting && connectionError && (
-                <Button
-                  variant="outline"
-                  onClick={reconnect}
-                  size="sm"
-                >
-                  <RotateCw className="h-4 w-4 mr-1" />
-                  Reconnect
-                </Button>
-              )}
-              <div className={`ml-auto flex items-center gap-1.5 text-xs ${connected ? 'text-success' : reconnecting ? 'text-warning' : 'text-muted-foreground'}`}>
-                {reconnecting ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                ) : (
-                  <span className={`inline-block h-2 w-2 rounded-full ${connected ? 'bg-success' : 'bg-muted-foreground'}`} />
-                )}
-                {connected ? 'Connected' : reconnecting ? 'Reconnecting' : 'Disconnected'}
-              </div>
-            </div>
-          </section>
+          <div className="flex items-center gap-xs mb-sm flex-wrap">
+            <ButtonPrimary size="sm" onClick={connect} disabled={connected || reconnecting || !selectedContainer}>
+              Connect
+            </ButtonPrimary>
+            <ButtonSecondary size="sm" onClick={disconnect} disabled={!connected && !reconnecting}>
+              Disconnect
+            </ButtonSecondary>
+            {!connected && !reconnecting && connectionError && (
+              <ButtonSecondary size="sm" onClick={reconnect}>
+                Reconnect
+              </ButtonSecondary>
+            )}
+          </div>
 
           {connectionError && !connected && !reconnecting && (
-            <InlineErrorBanner title="Connection Error" message={connectionError} />
+            <div className="mb-sm">
+              <InlineErrorBanner title="Connection Error" message={connectionError} />
+            </div>
           )}
 
-          <div className="relative">
+          <div className="relative flex-1 min-h-[50vh]">
             <section
               ref={terminalRef}
-              className="rounded-xl border border-border overflow-hidden min-h-[50vh] bg-[hsl(var(--terminal-bg))]"
+              className="absolute inset-0 rounded-lg overflow-hidden bg-surface-dark p-md"
             />
             {!connected && !reconnecting && (
-              <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-[hsl(var(--terminal-bg))]">
+              <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-surface-dark text-on-dark">
                 <div className="text-center">
-                  <TerminalSquare className="h-8 w-8 text-muted-foreground mx-auto mb-2 opacity-50" />
-                  <p className="text-sm text-muted-foreground">Select a container and tap Connect</p>
+                  <TerminalSquare className="h-8 w-8 text-on-dark-soft mx-auto mb-xs opacity-60" />
+                  <p className="text-body-sm text-on-dark-soft">Select a container and tap Connect</p>
                 </div>
               </div>
             )}

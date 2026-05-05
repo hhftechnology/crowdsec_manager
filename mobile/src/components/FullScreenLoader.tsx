@@ -6,8 +6,8 @@ type FullScreenLoaderProps = {
 
 export function FullScreenLoader({ message = 'Loading...' }: FullScreenLoaderProps) {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-6">
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+    <div className="min-h-screen flex items-center justify-center bg-canvas px-lg">
+      <div className="flex items-center gap-xs text-body-sm text-muted">
         <Loader2 className="h-4 w-4 animate-spin" />
         <span>{message}</span>
       </div>

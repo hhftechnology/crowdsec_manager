@@ -6,16 +6,16 @@ type MetricVariant = 'default' | 'success' | 'warning' | 'destructive';
 type BorderVariant = 'success' | 'warning' | 'destructive';
 
 const variantClasses: Record<MetricVariant, string> = {
-  default: 'text-foreground',
-  success: 'text-emerald-600 dark:text-emerald-400',
-  warning: 'text-amber-600 dark:text-amber-400',
-  destructive: 'text-red-600 dark:text-red-400',
+  default: 'text-ink',
+  success: 'text-success',
+  warning: 'text-warning',
+  destructive: 'text-error',
 };
 
 const borderVariantClasses: Record<BorderVariant, string> = {
-  success: 'border-l-4 border-l-emerald-500',
-  warning: 'border-l-4 border-l-amber-500',
-  destructive: 'border-l-4 border-l-red-500',
+  success: 'border-l-4 border-l-success',
+  warning: 'border-l-4 border-l-warning',
+  destructive: 'border-l-4 border-l-error',
 };
 
 interface MetricCardProps {
@@ -29,12 +29,12 @@ interface MetricCardProps {
 
 export function MetricCard({ label, value, icon: Icon, variant = 'default', borderVariant, className }: MetricCardProps) {
   return (
-    <div className={cn('rounded-xl border border-border bg-card p-3', borderVariant && borderVariantClasses[borderVariant], className)}>
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+    <div className={cn('rounded-lg border border-hairline bg-surface-card p-sm', borderVariant && borderVariantClasses[borderVariant], className)}>
+      <div className="flex items-center gap-xs text-caption text-muted">
         {Icon && <Icon className="h-3.5 w-3.5" />}
         {label}
       </div>
-      <div className={cn('mt-1 text-lg font-bold tabular-nums', variantClasses[variant])}>
+      <div className={cn('mt-xxs font-display text-title-lg tabular-nums', variantClasses[variant])}>
         {value}
       </div>
     </div>

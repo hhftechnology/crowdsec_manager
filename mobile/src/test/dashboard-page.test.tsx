@@ -73,13 +73,14 @@ describe('DashboardPage', () => {
     render(<DashboardPage />);
 
     await waitFor(() => {
-      expect(screen.getByText('Diagnostics Summary')).toBeInTheDocument();
+      expect(screen.getByText('Today, calm.')).toBeInTheDocument();
     });
 
-    expect(screen.getByText('Diagnostics Summary')).toBeInTheDocument();
-    const activeDecisionsCard = screen.getByText('Active Decisions').parentElement?.parentElement;
-    expect(activeDecisionsCard).toBeTruthy();
-    expect(within(activeDecisionsCard as HTMLElement).getByText('1')).toBeInTheDocument();
+    // Decisions stat block reflects diagnostic decisions count
+    const decisionsLabel = screen.getByText('Decisions');
+    const decisionsCard = decisionsLabel.parentElement;
+    expect(decisionsCard).toBeTruthy();
+    expect(within(decisionsCard as HTMLElement).getByText('1')).toBeInTheDocument();
     expect(screen.queryByText('API unreachable')).not.toBeInTheDocument();
   });
 
@@ -109,11 +110,65 @@ describe('DashboardPage', () => {
     render(<DashboardPage />);
 
     await waitFor(() => {
-      expect(screen.getByText('Diagnostics Summary')).toBeInTheDocument();
+      expect(screen.getByText('Today, calm.')).toBeInTheDocument();
     });
 
-    expect(screen.getByText('Diagnostics Summary')).toBeInTheDocument();
+    expect(screen.getAllByText('Containers').length).toBeGreaterThan(0);
     expect(screen.queryByText('API unreachable')).not.toBeInTheDocument();
+  });
+
+  it('renders theme-aware security overview counts and top scenarios', async () => {
+    mockUseApi.mockReset();
+    const api = createBaseApi();
+    api.health.getStack.mockResolvedValue({
+      containers: [{ id: 'abc', name: 'crowdsec', running: true, status: 'running' }],
+      allRunning: true,
+      timestamp: '2026-03-20T12:00:00Z',
+    });
+    api.health.getCrowdsec.mockResolvedValue({
+      status: 'healthy',
+      checks: {},
+      timestamp: '2026-03-20T12:00:00Z',
+    });
+    api.health.getComplete.mockResolvedValue({
+      bouncers: [],
+      decisions: [],
+      timestamp: '2026-03-20T12:00:00Z',
+    } as unknown as DiagnosticResult);
+    api.ip.getPublicIP.mockResolvedValue({ ip: '1.2.3.4' });
+    api.crowdsec.alertsAnalysis.mockResolvedValue({
+      count: 3,
+      alerts: [
+        { id: '1', scenario: 'crowdsecurity/http-probing' },
+        { id: '2', scenario: 'crowdsecurity/http-probing' },
+        { id: '3', scenario: 'crowdsecurity/http-bad-user-agent' },
+      ],
+    });
+    api.crowdsec.decisionsSummary.mockResolvedValue({
+      count: 4,
+      by_type: {
+        ban: 2,
+        captcha: 1,
+        whitelist: 1,
+      },
+    });
+    api.crowdsec.historyActivity.mockResolvedValue({ buckets: [] });
+    mockUseApi.mockReturnValue({ api });
+
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('security overview')).toBeInTheDocument();
+    });
+
+    const overviewCard = screen.getByText('security overview').closest('.rounded-lg');
+    expect(overviewCard?.className).toContain('bg-surface-card');
+    expect(overviewCard?.className).toContain('dark:bg-surface-dark');
+    expect(within(overviewCard as HTMLElement).getByText('Bans')).toBeInTheDocument();
+    expect(within(overviewCard as HTMLElement).getByText('Captchas')).toBeInTheDocument();
+    expect(within(overviewCard as HTMLElement).getByText('Whitelisted')).toBeInTheDocument();
+    expect(within(overviewCard as HTMLElement).getByText('crowdsecurity/http-probing')).toBeInTheDocument();
+    expect(within(overviewCard as HTMLElement).getByText('crowdsecurity/http-bad-user-agent')).toBeInTheDocument();
   });
 
   it('shows retryable inline error when critical requests fail', async () => {

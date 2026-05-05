@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import { MemoryRouter } from 'react-router-dom';
 import HubPage from '@/pages/HubPage';
 
 const mockUseApi = vi.fn();
@@ -48,7 +49,11 @@ describe('HubPage', () => {
     api.hub.history.mockResolvedValue([]);
     mockUseApi.mockReturnValue({ api });
 
-    render(<HubPage />);
+    render(
+      <MemoryRouter>
+        <HubPage />
+      </MemoryRouter>,
+    );
 
     await waitFor(() => {
       expect(screen.getByText('All category overview')).toBeInTheDocument();

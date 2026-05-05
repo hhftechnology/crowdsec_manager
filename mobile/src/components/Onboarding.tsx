@@ -1,43 +1,66 @@
 import { useCallback, useRef, useState } from 'react';
-import { Shield, Activity, Settings, Rocket } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { ButtonPrimary, Dot, Spike, UpperBadge, Wordmark } from '@/components/design';
 
-interface Slide {
-  icon: React.ElementType;
+interface SlideContent {
+  step: string;
+  eyebrow: string;
   title: string;
   description: string;
-  gradient: string;
+  feed?: { time: string; line: string; tone?: 'amber' | 'teal' | 'on-dark' }[];
+  note?: { title: string; body: string };
 }
 
-const slides: Slide[] = [
+const slides: SlideContent[] = [
   {
-    icon: Shield,
-    title: 'Welcome to CrowdSec Manager',
+    step: 'Step 01 / 04',
+    eyebrow: 'Welcome',
+    title: 'A literary console for your stack.',
     description:
-      'Your mobile command center for CrowdSec security infrastructure. Monitor, manage, and protect your servers from anywhere.',
-    gradient: 'from-[hsl(348,56%,27%)] to-[hsl(348,45%,18%)]',
+      'CrowdSec Manager is a mobile companion for your security infrastructure — read like a column, scan like a console.',
+    note: {
+      title: "Editor's note",
+      body: 'Tap any tab to dive in. Settings live behind the gear; the terminal is one tap from Manage.',
+    },
   },
   {
-    icon: Activity,
-    title: 'Real-Time Security',
+    step: 'Step 02 / 04',
+    eyebrow: 'Live security',
+    title: 'Real-time security, the editorial way.',
     description:
-      'View live decisions, alerts, and metrics. Check IP reputation, unban addresses, and stay on top of threats as they happen.',
-    gradient: 'from-[hsl(348,45%,22%)] to-[hsl(348,56%,15%)]',
+      'View live decisions and alerts. Check IP reputation, unban addresses, and stay on top of threats as they happen.',
+    feed: [
+      { time: '14:02', line: 'ban 91.214.78.10' },
+      { time: '14:01', line: 'crowdsec/http-bf', tone: 'amber' },
+      { time: '14:01', line: 'captcha 203.0.113.4' },
+      { time: '14:00', line: 'unban 10.0.4.21', tone: 'teal' },
+    ],
+    note: {
+      title: "Editor's note",
+      body: 'Tap & hold any IP to inspect. Swipe a card to ban or whitelist in one motion.',
+    },
   },
   {
-    icon: Settings,
-    title: 'Full Management',
+    step: 'Step 03 / 04',
+    eyebrow: 'Manage',
+    title: 'The control panel, in your pocket.',
     description:
       'Manage allowlists, scenarios, hub items, and bouncers. Access container terminals and view structured logs — all from your phone.',
-    gradient: 'from-[hsl(348,56%,15%)] to-[hsl(348,30%,10%)]',
+    note: {
+      title: "Editor's note",
+      body: 'The terminal speaks WebSocket; long-running sessions reconnect automatically.',
+    },
   },
   {
-    icon: Rocket,
-    title: 'Get Started',
+    step: 'Step 04 / 04',
+    eyebrow: 'Connect',
+    title: 'Connect once. Read everywhere.',
     description:
       'Connect to your CrowdSec Manager server to get started. Your security infrastructure is one tap away.',
-    gradient: 'from-[hsl(348,40%,20%)] to-[hsl(348,56%,27%)]',
+    note: {
+      title: "Editor's note",
+      body: 'You can switch profiles at any time from Settings → API connection.',
+    },
   },
 ];
 
@@ -79,65 +102,86 @@ export function Onboarding({ onComplete }: OnboardingProps) {
   const slide = slides[current];
   const isLast = current === slides.length - 1;
 
+  const feedToneClass = (tone?: 'amber' | 'teal' | 'on-dark') => {
+    if (tone === 'amber') return 'text-accent-amber';
+    if (tone === 'teal') return 'text-accent-teal';
+    return 'text-on-dark';
+  };
+
   return (
     <div
-      className={cn(
-        'fixed inset-0 z-[100] flex flex-col items-center justify-between bg-gradient-to-br transition-all duration-500',
-        slide.gradient,
-      )}
+      className="fixed inset-0 z-[100] flex flex-col bg-canvas safe-top safe-bottom"
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
-      {/* Skip button */}
-      {!isLast && (
-        <div className="w-full flex justify-end p-4 safe-top">
-          <Button
-            variant="ghost"
-            onClick={finish}
-            className="text-white/70 hover:text-white hover:bg-white/10"
-          >
+      <div className="px-md pt-md flex items-center justify-between">
+        <Wordmark />
+        {!isLast ? (
+          <button onClick={finish} className="text-button text-muted hover:text-ink">
             Skip
-          </Button>
-        </div>
-      )}
-      {isLast && <div className="safe-top" />}
-
-      {/* Slide content */}
-      <div className="flex-1 flex flex-col items-center justify-center px-8 max-w-sm">
-        <div className="flex h-24 w-24 items-center justify-center rounded-3xl bg-white/15 backdrop-blur-sm mb-8 shadow-lg">
-          <slide.icon className="h-12 w-12 text-white" />
-        </div>
-        <h2 className="text-2xl font-bold text-white text-center mb-4 text-balance">
-          {slide.title}
-        </h2>
-        <p className="text-base text-white/80 text-center leading-relaxed text-balance">
-          {slide.description}
-        </p>
+          </button>
+        ) : (
+          <span />
+        )}
       </div>
 
-      {/* Bottom: dots + button */}
-      <div className="w-full px-8 pb-6 safe-bottom space-y-6">
-        {/* Dots */}
-        <div className="flex justify-center gap-2">
+      <div className="flex-1 px-md pt-lg overflow-y-auto pb-md">
+        <UpperBadge tone="coral">{slide.step}</UpperBadge>
+        <div className="flex items-center gap-xs mt-sm text-caption-uppercase uppercase font-medium text-muted">
+          <Spike className="w-3 h-3 text-ink" />
+          {slide.eyebrow}
+        </div>
+        <h2 className="mt-xs font-display text-display-md text-ink">{slide.title}</h2>
+        <p className="mt-sm text-body-md text-body">{slide.description}</p>
+
+        {slide.feed && (
+          <div className="mt-lg rounded-lg bg-surface-dark p-lg text-on-dark space-y-sm">
+            <div className="flex items-center gap-xs text-on-dark-soft text-caption-uppercase uppercase">
+              <Dot tone="teal" pulse /> live feed
+            </div>
+            <div className="font-mono text-code space-y-[6px]">
+              {slide.feed.map((row, i) => (
+                <div key={i} className="flex justify-between">
+                  <span className="text-on-dark-soft">{row.time}</span>
+                  <span className={feedToneClass(row.tone)}>{row.line}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {slide.note && (
+          <div className="mt-lg rounded-lg bg-surface-card p-md">
+            <div className="flex items-center gap-sm">
+              <div className="w-10 h-10 rounded-md bg-canvas border border-hairline flex items-center justify-center">
+                <Spike />
+              </div>
+              <div className="min-w-0">
+                <div className="text-title-sm font-medium text-ink">{slide.note.title}</div>
+                <div className="text-caption text-muted">{slide.note.body}</div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="px-md pb-md pt-md space-y-md">
+        <div className="flex justify-center gap-xs">
           {slides.map((_, i) => (
             <button
               key={i}
               onClick={() => setCurrent(i)}
+              aria-label={`Go to slide ${i + 1}`}
               className={cn(
-                'h-2 rounded-full transition-all duration-300',
-                i === current ? 'w-8 bg-white' : 'w-2 bg-white/40',
+                'h-1.5 rounded-pill transition-all',
+                i === current ? 'w-6 bg-primary' : 'w-1.5 bg-muted-soft/40',
               )}
             />
           ))}
         </div>
-
-        {/* Action button */}
-        <Button
-          onClick={next}
-          className="w-full h-14 rounded-xl text-base font-semibold bg-white text-[hsl(348,56%,20%)] hover:bg-white/90"
-        >
+        <ButtonPrimary onClick={next} full size="lg">
           {isLast ? 'Get Started' : 'Next'}
-        </Button>
+        </ButtonPrimary>
       </div>
     </div>
   );

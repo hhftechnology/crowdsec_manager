@@ -51,26 +51,38 @@ export function ConnectionProfileForm({
         : 'your-server.example.com';
 
   return (
-    <div className="space-y-4">
-      <div className="space-y-2">
-        <div className="text-sm font-medium">Connection type</div>
+    <div className="space-y-md">
+      <div className="space-y-xs">
+        <div className="text-body-sm font-medium text-ink">Connection type</div>
         <Tabs value={value.mode} onValueChange={updateMode} className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="direct" disabled={disabled}>
+          <TabsList className="grid w-full grid-cols-3 bg-surface-soft text-ink dark:bg-surface-dark-elevated dark:text-on-dark-soft">
+            <TabsTrigger
+              value="direct"
+              disabled={disabled}
+              className="text-inherit data-[state=active]:bg-canvas data-[state=active]:text-ink dark:data-[state=active]:bg-surface-dark dark:data-[state=active]:text-on-dark"
+            >
               Direct
             </TabsTrigger>
-            <TabsTrigger value="proxy-basic" disabled={disabled}>
+            <TabsTrigger
+              value="proxy-basic"
+              disabled={disabled}
+              className="text-inherit data-[state=active]:bg-canvas data-[state=active]:text-ink dark:data-[state=active]:bg-surface-dark dark:data-[state=active]:text-on-dark"
+            >
               Proxy
             </TabsTrigger>
-            <TabsTrigger value="pangolin" disabled={disabled}>
+            <TabsTrigger
+              value="pangolin"
+              disabled={disabled}
+              className="text-inherit data-[state=active]:bg-canvas data-[state=active]:text-ink dark:data-[state=active]:bg-surface-dark dark:data-[state=active]:text-on-dark"
+            >
               Pangolin
             </TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
 
-      <div className="space-y-2">
-        <label htmlFor="connection-url" className="text-sm font-medium">
+      <div className="space-y-xs">
+        <label htmlFor="connection-url" className="text-body-sm font-medium text-ink">
           {value.mode === 'pangolin' ? 'Pangolin URL' : 'Server URL'}
         </label>
         <Input
@@ -86,16 +98,16 @@ export function ConnectionProfileForm({
           className="h-12 rounded-lg bg-card"
           disabled={disabled}
         />
-        <p className="text-xs text-muted-foreground">
+        <p className="text-caption text-muted">
           Domain, IP, or host:port. Include http:// or https:// only if you want
           to force the scheme.
         </p>
       </div>
 
       {value.mode === 'proxy-basic' && (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div className="space-y-2">
-            <label htmlFor="proxy-username" className="text-sm font-medium">
+        <div className="grid grid-cols-1 gap-sm sm:grid-cols-2">
+          <div className="space-y-xs">
+            <label htmlFor="proxy-username" className="text-body-sm font-medium text-ink">
               Proxy username
             </label>
             <Input
@@ -110,8 +122,8 @@ export function ConnectionProfileForm({
               disabled={disabled}
             />
           </div>
-          <div className="space-y-2">
-            <label htmlFor="proxy-password" className="text-sm font-medium">
+          <div className="space-y-xs">
+            <label htmlFor="proxy-password" className="text-body-sm font-medium text-ink">
               Proxy password
             </label>
             <Input
@@ -127,9 +139,9 @@ export function ConnectionProfileForm({
       )}
 
       {value.mode === 'pangolin' && (
-        <div className="space-y-3 rounded-lg border border-border bg-card p-3">
-          <div className="space-y-2">
-            <label htmlFor="pangolin-token" className="text-sm font-medium">
+        <div className="space-y-sm rounded-lg border border-hairline bg-surface-card p-sm">
+          <div className="space-y-xs">
+            <label htmlFor="pangolin-token" className="text-body-sm font-medium text-ink">
               Pangolin access token
             </label>
             <Input
@@ -143,17 +155,17 @@ export function ConnectionProfileForm({
               onChange={(event) => update('pangolinToken', event.target.value)}
               disabled={disabled}
             />
-            <p className="text-xs text-muted-foreground">
+            <p className="text-caption text-muted">
               Use the format <code>tokenId.tokenSecret</code>.
             </p>
           </div>
 
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center justify-between gap-sm">
             <div>
-              <div className="text-sm font-medium">
+              <div className="text-body-sm font-medium text-ink">
                 Advanced token parameter
               </div>
-              <div className="text-xs text-muted-foreground">
+              <div className="text-caption text-muted">
                 Default is {DEFAULT_PANGOLIN_TOKEN_PARAM}; WebSockets use this
                 query parameter.
               </div>
@@ -170,10 +182,10 @@ export function ConnectionProfileForm({
           </div>
 
           {shouldShowAdvanced && (
-            <div className="space-y-2">
+            <div className="space-y-xs">
               <label
                 htmlFor="pangolin-token-param"
-                className="text-sm font-medium"
+                className="text-body-sm font-medium text-ink"
               >
                 Token query parameter
               </label>
@@ -194,10 +206,10 @@ export function ConnectionProfileForm({
         </div>
       )}
 
-      <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card p-3">
+      <div className="flex items-center justify-between gap-sm rounded-lg border border-hairline bg-surface-card p-sm">
         <div>
-          <div className="text-sm font-medium">Insecure/LAN Mode</div>
-          <div className="text-xs text-muted-foreground">
+          <div className="text-body-sm font-medium text-ink">Insecure/LAN Mode</div>
+          <div className="text-caption text-muted">
             {value.allowInsecure
               ? 'HTTP and LAN URLs allowed'
               : 'HTTPS required unless explicitly enabled'}

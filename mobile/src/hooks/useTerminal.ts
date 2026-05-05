@@ -6,6 +6,11 @@ import { FitAddon } from '@xterm/addon-fit';
 const MAX_RECONNECT_ATTEMPTS = 3;
 const RECONNECT_BASE_DELAY = 1000;
 
+function cssHslVar(name: string, fallback: string) {
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return value ? `hsl(${value})` : fallback;
+}
+
 interface UseTerminalOptions {
   getWebSocketUrl: (container: string) => string;
   container: string;
@@ -127,10 +132,10 @@ export function useTerminal({ getWebSocketUrl, container, onConnect, onDisconnec
       fontSize: 12,
       fontFamily: '"JetBrains Mono", Menlo, Monaco, "Courier New", monospace',
       theme: {
-        background: '#1a1b26',
-        foreground: '#a9b1d6',
-        cursor: '#c0caf5',
-        selectionBackground: '#33467c',
+        background: cssHslVar('--surface-dark', 'hsl(40 6% 9%)'),
+        foreground: cssHslVar('--on-dark', 'hsl(44 35% 97%)'),
+        cursor: cssHslVar('--primary', 'hsl(19 53% 58%)'),
+        selectionBackground: cssHslVar('--surface-dark-elevated', 'hsl(36 7% 13%)'),
       },
       allowProposedApi: true,
     });

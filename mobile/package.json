@@ -10,7 +10,7 @@
     "build:native": "npm run build && npm run generate-assets && npx cap sync",
     "build:android": "npm run build && npm run generate-assets && npx cap sync android",
     "build:ios": "npm run build && npm run generate-assets && npx cap sync ios",
-    "generate-assets": "capacitor-assets generate --iconBackgroundColor '#ffffff' --splashBackgroundColor '#ffffff'",
+    "generate-assets": "capacitor-assets generate --iconBackgroundColor '#cc785c' --splashBackgroundColor '#faf9f5'",
     "cap:sync": "npx cap sync",
     "cap:android": "npx cap open android",
     "cap:ios": "npx cap open ios",

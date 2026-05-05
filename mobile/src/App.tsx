@@ -35,7 +35,7 @@ function withRouteFallback(node: ReactNode, fallback: ReactNode = <RouteLoadingS
 
 function AuthenticatedRoutes() {
   return (
-    <div className="max-w-lg mx-auto min-h-screen bg-background safe-top">
+    <div className="mx-auto min-h-screen w-full max-w-lg overflow-x-hidden bg-canvas text-ink safe-top">
       <OfflineConnectionBanner />
       <Routes>
         <Route path="/dashboard" element={withRouteFallback(<DashboardPage />, <DashboardSkeleton showHeader />)} />

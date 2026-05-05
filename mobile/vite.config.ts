@@ -23,8 +23,8 @@ export default defineConfig(({ mode }) => ({
         description: "Mobile CrowdSec security management app",
         start_url: "/",
         display: "standalone",
-        background_color: "#f0e4d4",
-        theme_color: "#6d1f2f",
+        background_color: "#faf9f5",
+        theme_color: "#cc785c",
         orientation: "portrait",
         icons: [
           { src: "/pwa-192x192.png", sizes: "192x192", type: "image/png" },

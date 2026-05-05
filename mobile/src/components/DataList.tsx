@@ -19,12 +19,12 @@ export function DataList<T>({
   className,
 }: DataListProps<T>) {
   if (items.length === 0) {
-    return <p className="text-sm text-muted-foreground py-2">{emptyMessage}</p>;
+    return <p className="text-body-sm text-muted py-xs">{emptyMessage}</p>;
   }
 
   return (
     <ScrollArea className={cn(maxHeight, className)}>
-      <div className="space-y-2">
+      <div className="space-y-xs">
         {items.map((item, i) => (
           <div key={keyExtractor ? keyExtractor(item, i) : i}>{renderItem(item, i)}</div>
         ))}
