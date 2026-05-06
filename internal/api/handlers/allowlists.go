@@ -162,14 +162,28 @@ func CreateAllowlist(dockerClient *docker.Client, cfg *config.Config) gin.Handle
 	}
 }
 
-// InspectAllowlist inspects a specific allowlist
+// InspectAllowlist inspects a specific allowlist.
 func InspectAllowlist(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		dockerClient = resolveDockerClient(c, dockerClient)
+		handler := inspectAllowlistWithExecutor(allowlistInspectHandlerInput{
+			Executor: resolveDockerClient(c, dockerClient),
+			Config:   cfg,
+		})
+		handler(c)
+	}
+}
+
+type allowlistInspectHandlerInput struct {
+	Executor cscliExecutor
+	Config   *config.Config
+}
+
+func inspectAllowlistWithExecutor(input allowlistInspectHandlerInput) gin.HandlerFunc {
+	return func(c *gin.Context) {
 		name := c.Param("name")
 		logger.Info("Inspecting allowlist", "name", name)
 
-		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, []string{"cscli", "allowlists", "inspect", name, "-o", "json"})
+		output, err := input.Executor.ExecCommand(input.Config.CrowdsecContainerName, []string{"cscli", "allowlists", "inspect", name, "-o", "json"})
 		if err != nil {
 			logger.Error("Failed to inspect allowlist", "name", name, "error", err)
 			c.JSON(http.StatusInternalServerError, models.Response{
@@ -214,7 +228,7 @@ func InspectAllowlist(dockerClient *docker.Client, cfg *config.Config) gin.Handl
 		}
 
 		// Parse items array
-		var items []models.AllowlistEntry
+		items := make([]models.AllowlistEntry, 0)
 		jsonparser.ArrayEach(dataBytes, func(itemValue []byte, itemType jsonparser.ValueType, itemOffset int, itemErr error) {
 			var entry models.AllowlistEntry
 
