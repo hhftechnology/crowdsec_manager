@@ -86,7 +86,8 @@ func render() ([]byte, error) {
 		}
 		writeInterface(&buf, item.name, item.typ)
 	}
-	return buf.Bytes(), nil
+	out := bytes.TrimRight(buf.Bytes(), "\n")
+	return append(out, '\n'), nil
 }
 
 func writeInterface(buf *bytes.Buffer, name string, typ reflect.Type) {
