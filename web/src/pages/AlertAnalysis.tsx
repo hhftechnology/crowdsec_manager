@@ -1,9 +1,12 @@
 import { useState, useMemo, useCallback } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import api, { CrowdSecAlert } from '@/lib/api'
+import api from '@/lib/api'
+import type { CrowdSecAlert } from '@/lib/api'
 import { crowdsecAPI } from '@/lib/api/crowdsec'
 import type { Decision, AlertEvent } from '@/lib/api/types'
+import { getErrorDetails, getErrorMessage } from '@/lib/api/errors'
+import { invalidateDecisionsAndAlerts } from '@/lib/queryInvalidation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -604,12 +607,12 @@ export default function AlertAnalysis() {
       if (detailAlert?.id === deleteAlertId) {
         setDetailAlert(null)
       }
-      // Invalidate and refetch
-      queryClient.invalidateQueries({ queryKey: ['alerts-analysis'] })
+      await invalidateDecisionsAndAlerts(queryClient)
       queryClient.invalidateQueries({ queryKey: ['alert-inspect', deleteAlertId] })
     } catch (err) {
-      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed to delete alert'
-      toast.error(msg)
+      toast.error(getErrorMessage(err, 'Failed to delete alert'), {
+        description: getErrorDetails(err),
+      })
     } finally {
       setIsDeleting(false)
     }

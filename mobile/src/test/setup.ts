@@ -1,8 +1,13 @@
 import '@testing-library/jest-dom';
+import { cleanup } from '@testing-library/react';
 import { afterEach, vi } from 'vitest';
 
 afterEach(() => {
+  cleanup();
   vi.restoreAllMocks();
+  window.localStorage.clear();
+  document.body.removeAttribute('data-scroll-locked');
+  document.body.removeAttribute('style');
 });
 
 const storage = new Map<string, string>();
@@ -58,6 +63,35 @@ if (!globalThis.requestAnimationFrame) {
 if (!globalThis.cancelAnimationFrame) {
   globalThis.cancelAnimationFrame = () => {};
 }
+
+Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
+  writable: true,
+  value: () => ({
+    clearRect: () => {},
+    fillRect: () => {},
+    getImageData: () => ({ data: new Uint8ClampedArray(4) }),
+    putImageData: () => {},
+    createImageData: () => ({ data: new Uint8ClampedArray(4) }),
+    setTransform: () => {},
+    drawImage: () => {},
+    save: () => {},
+    restore: () => {},
+    beginPath: () => {},
+    moveTo: () => {},
+    lineTo: () => {},
+    closePath: () => {},
+    stroke: () => {},
+    translate: () => {},
+    scale: () => {},
+    rotate: () => {},
+    arc: () => {},
+    fill: () => {},
+    measureText: () => ({ width: 0 }),
+    transform: () => {},
+    rect: () => {},
+    clip: () => {},
+  }),
+});
 
 if (!globalThis.btoa) {
   globalThis.btoa = (value: string) =>

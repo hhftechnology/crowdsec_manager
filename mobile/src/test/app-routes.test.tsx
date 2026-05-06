@@ -6,13 +6,18 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 const mockUseApi = vi.hoisted(() => vi.fn());
 const dashboardDeferred = vi.hoisted(() => {
   let resolve!: () => void;
+  const state = { pending: true };
   const promise = new Promise<void>((res) => {
-    resolve = res;
+    resolve = () => {
+      state.pending = false;
+      res();
+    };
   });
 
   return {
     promise,
     resolve,
+    state,
   };
 });
 
@@ -25,12 +30,14 @@ vi.mock('@/pages/LoginPage', () => ({
   default: () => <div>Login screen</div>,
 }));
 
-vi.mock('@/pages/DashboardPage', async () => {
-  await dashboardDeferred.promise;
-  return {
-    default: () => <div>Dashboard route ready</div>,
-  };
-});
+vi.mock('@/pages/DashboardPage', () => ({
+  default: () => {
+    if (dashboardDeferred.state.pending) {
+      throw dashboardDeferred.promise;
+    }
+    return <div>Dashboard route ready</div>;
+  },
+}));
 
 vi.mock('@/pages/SecurityPage', () => ({
   default: () => <div>Security page</div>,

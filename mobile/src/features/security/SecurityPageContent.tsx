@@ -1,5 +1,4 @@
-import { useCallback, useState } from 'react';
-import { useMountEffect } from '@/hooks/useMountEffect';
+import { useCallback, useMemo, useState } from 'react';
 import { Search, Upload, ShieldBan, FileSearch, Shield, ShieldAlert, ShieldCheck, ShieldX, History, RotateCcw } from 'lucide-react';
 import { relativeTime } from '@/lib/utils';
 import { PageHeader } from '@/components/PageHeader';
@@ -19,6 +18,13 @@ import { AlertsListPanel } from '@/components/security/AlertsListPanel';
 import { ButtonPrimary, ButtonSecondary, CategoryTab, FieldLabel, Pill, Dot, type PillTone } from '@/components/design';
 import { showActionError, showActionSuccess } from '@/lib/actionToast';
 import type { AddDecisionRequest, CrowdsecAlert, Decision, DecisionHistoryRecord, IPSecurity, IPBlockedStatus, MetricsResponse } from '@/lib/api';
+import {
+  useAlertsQuery,
+  useDecisionHistoryQuery,
+  useDecisionMutations,
+  useDecisionsQuery,
+  useMetricsQuery,
+} from '@/features/security/hooks/useSecurityQueries';
 
 /* ────────────────────── Local Types ────────────────────── */
 
@@ -66,9 +72,6 @@ function decisionTone(type: string): PillTone {
 
 export default function SecurityPage() {
   const { api } = useApi();
-  const [loading, setLoading] = useState(true);
-  const [initialLoaded, setInitialLoaded] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('ip');
 
   const [ipInput, setIpInput] = useState('');
@@ -78,120 +81,65 @@ export default function SecurityPage() {
   const [unbanTarget, setUnbanTarget] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
 
-  const [decisions, setDecisions] = useState<Decision[]>([]);
-  const [decisionsTotal, setDecisionsTotal] = useState(0);
   const [decisionPage, setDecisionPage] = useState(1);
-  const [decisionAnalysis, setDecisionAnalysis] = useState<DecisionsAnalysisData | null>(null);
   const [decisionFilters, setDecisionFilters] = useState<DecisionFilterState>({});
   const [importFile, setImportFile] = useState<File | null>(null);
 
-  const [decisionHistory, setDecisionHistory] = useState<DecisionHistoryRecord[]>([]);
-  const [decisionHistoryTotal, setDecisionHistoryTotal] = useState(0);
   const [decisionHistoryPage, setDecisionHistoryPage] = useState(1);
   const [reapplyTarget, setReapplyTarget] = useState<DecisionHistoryRecord | null>(null);
 
-  const [alertsAnalysis, setAlertsAnalysis] = useState<AlertsAnalysisData | null>(null);
   const [alertInspectId, setAlertInspectId] = useState('');
   const [inspectedAlert, setInspectedAlert] = useState<CrowdsecAlert | null>(null);
   const [alertDeleteId, setAlertDeleteId] = useState<number | null>(null);
 
-  const [metrics, setMetrics] = useState<MetricsResponse | null>(null);
+  const decisionQueryFilters = useMemo(() => ({
+    ...decisionFilters,
+    limit: PAGE_SIZE,
+    offset: (decisionPage - 1) * PAGE_SIZE,
+  }), [decisionFilters, decisionPage]);
+  const decisionsQuery = useDecisionsQuery(decisionQueryFilters);
+  const alertsQuery = useAlertsQuery();
+  const metricsQuery = useMetricsQuery();
+  const historyQuery = useDecisionHistoryQuery(decisionHistoryPage, PAGE_SIZE);
+  const mutations = useDecisionMutations();
 
-  const buildDecisionAnalysis = useCallback((rows: Decision[], total: number): DecisionsAnalysisData => {
+  const decisions = useMemo(() => decisionsQuery.data?.decisions || [], [decisionsQuery.data?.decisions]);
+  const decisionsTotal = decisionsQuery.data?.total ?? decisionsQuery.data?.count ?? decisions.length;
+  const alertsAnalysis = (alertsQuery.data as AlertsAnalysisData | undefined) ?? null;
+  const metrics = (metricsQuery.data as MetricsResponse | undefined) ?? null;
+  const decisionHistory = historyQuery.data?.decisions || [];
+  const decisionHistoryTotal = historyQuery.data?.total ?? historyQuery.data?.count ?? decisionHistory.length;
+
+  const decisionAnalysis = useMemo<DecisionsAnalysisData>(() => {
     const by_type: Record<string, number> = {};
     const by_origin: Record<string, number> = {};
     const by_scope: Record<string, number> = {};
 
-    for (const decision of rows) {
+    for (const decision of decisions) {
       if (decision.type) by_type[decision.type] = (by_type[decision.type] ?? 0) + 1;
       if (decision.origin) by_origin[decision.origin] = (by_origin[decision.origin] ?? 0) + 1;
       if (decision.scope) by_scope[decision.scope] = (by_scope[decision.scope] ?? 0) + 1;
     }
 
-    return { total, by_type, by_origin, by_scope, recent: rows };
-  }, []);
-
-  const loadSecurityData = useCallback(async ({
-    nextDecisionFilters,
-    nextDecisionPage,
-    nextHistoryPage,
-  }: {
-    nextDecisionFilters?: DecisionFilterState;
-    nextDecisionPage?: number;
-    nextHistoryPage?: number;
-  } = {}) => {
-    if (!api) return;
-    setLoading(true);
-    setError(null);
-
-    try {
-      const resolvedDecisionFilters = nextDecisionFilters ?? decisionFilters;
-      const resolvedDecisionPage = nextDecisionPage ?? decisionPage;
-      const resolvedHistoryPage = nextHistoryPage ?? decisionHistoryPage;
-      const decisionOffset = (resolvedDecisionPage - 1) * PAGE_SIZE;
-      const historyOffset = (resolvedHistoryPage - 1) * PAGE_SIZE;
-      const [decisionsRes, alertsRes, metricsRes, historyRes] = await Promise.all([
-        api.crowdsec.decisionsAnalysis({
-          ...resolvedDecisionFilters,
-          limit: PAGE_SIZE,
-          offset: decisionOffset,
-        }),
-        api.crowdsec.alertsAnalysis(),
-        api.crowdsec.metrics(),
-        api.crowdsec.decisionHistory({ limit: PAGE_SIZE, offset: historyOffset }),
-      ]);
-
-      setDecisions(decisionsRes?.decisions || []);
-      setDecisionsTotal(decisionsRes?.total ?? decisionsRes?.count ?? decisionsRes?.decisions?.length ?? 0);
-      setDecisionAnalysis(
-        buildDecisionAnalysis(
-          decisionsRes?.decisions || [],
-          decisionsRes?.total ?? decisionsRes?.count ?? decisionsRes?.decisions?.length ?? 0,
-        ),
-      );
-      setAlertsAnalysis(alertsRes as AlertsAnalysisData | null);
-      setMetrics(metricsRes);
-      setDecisionHistory(historyRes?.decisions || []);
-      setDecisionHistoryTotal(historyRes?.total ?? historyRes?.count ?? historyRes?.decisions?.length ?? 0);
-
-      const nextDecisionTotal = decisionsRes?.total ?? 0;
-      const decisionPages = Math.max(1, Math.ceil(nextDecisionTotal / PAGE_SIZE));
-      if (resolvedDecisionPage > decisionPages) {
-        setDecisionPage(decisionPages);
-        void loadSecurityData({
-          nextDecisionFilters: resolvedDecisionFilters,
-          nextDecisionPage: decisionPages,
-          nextHistoryPage: resolvedHistoryPage,
-        });
-        return;
-      }
-
-      const nextHistoryTotal = historyRes?.total ?? 0;
-      const historyPages = Math.max(1, Math.ceil(nextHistoryTotal / PAGE_SIZE));
-      if (resolvedHistoryPage > historyPages) {
-        setDecisionHistoryPage(historyPages);
-        void loadSecurityData({
-          nextDecisionFilters: resolvedDecisionFilters,
-          nextDecisionPage: resolvedDecisionPage,
-          nextHistoryPage: historyPages,
-        });
-        return;
-      }
-      setInitialLoaded(true);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load security data');
-    } finally {
-      setLoading(false);
-    }
-  }, [api, buildDecisionAnalysis, decisionFilters, decisionHistoryPage, decisionPage]);
+    return { total: decisionsTotal, by_type, by_origin, by_scope, recent: decisions };
+  }, [decisions, decisionsTotal]);
 
   const fetchAll = useCallback(async () => {
-    await loadSecurityData();
-  }, [loadSecurityData]);
+    await Promise.all([
+      decisionsQuery.refetch(),
+      alertsQuery.refetch(),
+      metricsQuery.refetch(),
+      historyQuery.refetch(),
+    ]);
+  }, [alertsQuery, decisionsQuery, historyQuery, metricsQuery]);
 
-  useMountEffect(() => {
-    void loadSecurityData();
-  });
+  const loading = decisionsQuery.isLoading || alertsQuery.isLoading || metricsQuery.isLoading || historyQuery.isLoading;
+  const error =
+    decisionsQuery.error instanceof Error ? decisionsQuery.error.message :
+    alertsQuery.error instanceof Error ? alertsQuery.error.message :
+    metricsQuery.error instanceof Error ? metricsQuery.error.message :
+    historyQuery.error instanceof Error ? historyQuery.error.message :
+    null;
 
   const decisionCount = decisionsTotal;
   const alertCount = alertsAnalysis?.count ?? 0;
@@ -217,12 +165,10 @@ export default function SecurityPage() {
   };
 
   const addDecision = async (form: AddDecisionRequest) => {
-    if (!api) return;
     setActionLoading(true);
     try {
-      const res = await api.crowdsec.addDecision(form);
+      const res = await mutations.addDecision.mutateAsync(form);
       showActionSuccess('Decision added', res.message || 'CrowdSec accepted the decision');
-      await fetchAll();
     } catch (err) {
       showActionError('Failed to add decision', err);
     } finally {
@@ -231,12 +177,10 @@ export default function SecurityPage() {
   };
 
   const deleteDecisionByParams = async (params: { id?: string; value?: string }) => {
-    if (!api) return;
     setActionLoading(true);
     try {
-      const res = await api.crowdsec.deleteDecision(params);
+      const res = await mutations.deleteDecision.mutateAsync(params);
       showActionSuccess('Decision deleted', res.message || params.id || params.value || 'done');
-      await fetchAll();
     } catch (err) {
       showActionError('Failed to delete decision', err);
     } finally {
@@ -245,13 +189,12 @@ export default function SecurityPage() {
   };
 
   const importDecisions = async () => {
-    if (!api || !importFile) return;
+    if (!importFile) return;
     setActionLoading(true);
     try {
-      const res = await api.crowdsec.importDecisions(importFile);
+      const res = await mutations.importDecisions.mutateAsync(importFile);
       showActionSuccess('Decisions imported', res.message || importFile.name);
       setImportFile(null);
-      await fetchAll();
     } catch (err) {
       showActionError('Failed to import decisions', err);
     } finally {
@@ -276,14 +219,13 @@ export default function SecurityPage() {
   };
 
   const deleteAlert = async () => {
-    if (!api || !alertDeleteId) return;
+    if (!alertDeleteId) return;
     setActionLoading(true);
     try {
-      const res = await api.crowdsec.deleteAlert(alertDeleteId);
+      const res = await mutations.deleteAlert.mutateAsync(alertDeleteId);
       showActionSuccess('Alert deleted', res.message || `#${alertDeleteId}`);
       setAlertDeleteId(null);
       setInspectedAlert(null);
-      await fetchAll();
     } catch (err) {
       showActionError('Failed to delete alert', err);
     } finally {
@@ -308,17 +250,20 @@ export default function SecurityPage() {
   };
 
   const confirmReapplyDecision = async () => {
-    if (!api || !reapplyTarget) return;
+    if (!reapplyTarget) return;
     setActionLoading(true);
     try {
-      const res = await api.crowdsec.reapplyDecision({
+      const res = await mutations.reapplyDecision.mutateAsync({
         id: reapplyTarget.id,
         type: reapplyTarget.type,
-        duration: reapplyTarget.duration,
+        duration: reapplyTarget.duration || '0',
       });
-      showActionSuccess('Decision reapplied', res.message || reapplyTarget.value);
+      if (res.data?.already_active) {
+        showActionSuccess('Already active - no change', `Decision #${res.data.decision_id ?? reapplyTarget.id}`);
+      } else {
+        showActionSuccess('Decision reapplied', res.message || reapplyTarget.value);
+      }
       setReapplyTarget(null);
-      await fetchAll();
     } catch (err) {
       showActionError('Failed to reapply decision', err);
     } finally {
@@ -329,7 +274,6 @@ export default function SecurityPage() {
   const handleDecisionFilterChange = (filters: DecisionFilterState) => {
     setDecisionFilters(filters);
     setDecisionPage(1);
-    void loadSecurityData({ nextDecisionFilters: filters, nextDecisionPage: 1 });
   };
 
   return (
@@ -358,7 +302,7 @@ export default function SecurityPage() {
           </div>
 
           <QueryStateView
-            isLoading={loading && !initialLoaded}
+            isLoading={loading}
             error={error}
             onRetry={fetchAll}
             isEmpty={!decisions.length && !alertsAnalysis && !metrics}
@@ -437,12 +381,10 @@ export default function SecurityPage() {
                   onPrev={() => {
                     const nextPage = Math.max(1, decisionPage - 1);
                     setDecisionPage(nextPage);
-                    void loadSecurityData({ nextDecisionPage: nextPage });
                   }}
                   onNext={() => {
                     const nextPage = Math.min(decisionPageCount, decisionPage + 1);
                     setDecisionPage(nextPage);
-                    void loadSecurityData({ nextDecisionPage: nextPage });
                   }}
                 />
                 <DecisionsAnalysisPanel data={decisionAnalysis} />
@@ -464,12 +406,10 @@ export default function SecurityPage() {
                   onPrev={() => {
                     const nextPage = Math.max(1, decisionHistoryPage - 1);
                     setDecisionHistoryPage(nextPage);
-                    void loadSecurityData({ nextHistoryPage: nextPage });
                   }}
                   onNext={() => {
                     const nextPage = Math.min(decisionHistoryPageCount, decisionHistoryPage + 1);
                     setDecisionHistoryPage(nextPage);
-                    void loadSecurityData({ nextHistoryPage: nextPage });
                   }}
                 />
               </TabsContent>

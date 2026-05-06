@@ -11,6 +11,7 @@ type Response struct {
 	Message string      `json:"message,omitempty"`
 	Data    interface{} `json:"data,omitempty"`
 	Error   string      `json:"error,omitempty"`
+	Details string      `json:"details,omitempty"`
 }
 
 // Container represents a Docker container
@@ -639,7 +640,9 @@ type BulkReapplyDecisionsRequest struct {
 
 // BulkReapplyResult reports outcomes of a bulk re-apply operation.
 type BulkReapplyResult struct {
-	Succeeded int      `json:"succeeded"`
-	Failed    int      `json:"failed"`
-	Errors    []string `json:"errors,omitempty"`
+	Succeeded     int      `json:"succeeded"`
+	Failed        int      `json:"failed"`
+	AlreadyActive int      `json:"already_active,omitempty"`
+	DecisionIDs   []int64  `json:"decision_ids,omitempty"`
+	Errors        []string `json:"errors,omitempty"`
 }

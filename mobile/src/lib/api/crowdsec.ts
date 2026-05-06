@@ -11,6 +11,7 @@ import type {
   HistoryActivityResponse,
   MetricsResponse,
   ReapplyDecisionRequest,
+  BulkDeleteDecisionsResponse,
 } from './types';
 
 export function createCrowdsecApi(client: ApiClient) {
@@ -49,6 +50,9 @@ export function createCrowdsecApi(client: ApiClient) {
     },
     async deleteDecision(params: DeleteDecisionRequest) {
       return client.delete<{ output?: string }>('/api/crowdsec/decisions', { params });
+    },
+    async bulkDeleteDecisions(ids: number[]) {
+      return client.post<BulkDeleteDecisionsResponse>('/api/crowdsec/decisions/bulk-delete', { body: { ids } });
     },
     async importDecisions(file: File) {
       const formData = new FormData();
@@ -91,7 +95,7 @@ export function createCrowdsecApi(client: ApiClient) {
       };
     },
     async reapplyDecision(body: ReapplyDecisionRequest) {
-      return client.post<{ message?: string }>('/api/crowdsec/decisions/history/reapply', { body });
+      return client.post<{ already_active?: boolean; decision_id?: number; message?: string }>('/api/crowdsec/decisions/history/reapply', { body });
     },
     async decisionsSummary() {
       const payload = (await client.get<DecisionsResponse | Decision[]>('/api/crowdsec/decisions', { params: { summary: 'true' } })).data;

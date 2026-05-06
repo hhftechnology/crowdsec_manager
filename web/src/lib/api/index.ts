@@ -60,6 +60,9 @@ export type {
   RepeatedOffender,
   HistoryStats,
   ReapplyDecisionRequest,
+  BulkDeleteDecisionsRequest,
+  BulkDeleteDecisionsResponse,
+  BulkDeleteFailure,
   BulkReapplyDecisionsRequest,
   BulkReapplyResult,
 } from './types'

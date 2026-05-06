@@ -15,6 +15,7 @@ import {
   type ConnectionProfileDraft,
 } from '@/lib/connection';
 import { createApi, ApiError, type ApiService } from '@/lib/api';
+import { queryClient } from '@/lib/api/queryClient';
 import { normalizeAppError } from '@/lib/errors';
 
 interface ApiContextType {
@@ -170,6 +171,7 @@ export const ApiProvider: React.FC<{ children: React.ReactNode }> = ({
           );
           localStorage.removeItem(LEGACY_BASE_URL_KEY);
           localStorage.removeItem(LEGACY_INSECURE_KEY);
+          queryClient.clear();
           return true;
         } catch (candidateError) {
           lastError = candidateError;
@@ -197,6 +199,7 @@ export const ApiProvider: React.FC<{ children: React.ReactNode }> = ({
     localStorage.removeItem(LEGACY_INSECURE_KEY);
     setConnectionProfile(null);
     setError(null);
+    queryClient.clear();
   }, []);
 
   const value = useMemo<ApiContextType>(

@@ -3,6 +3,7 @@ import { useForm, Controller } from 'react-hook-form'
 import { toast } from 'sonner'
 import { Plus, Loader2 } from 'lucide-react'
 import api, { AddDecisionRequest } from '@/lib/api'
+import { getErrorDetails, getErrorMessage } from '@/lib/api/errors'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -22,35 +23,66 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { DurationField } from './DurationField'
 
 interface AddDecisionDialogProps {
   onSuccess: () => void
 }
 
+type SelectorMode = 'ip' | 'range' | 'scope'
+
+interface AddDecisionFormValues extends AddDecisionRequest {
+  selectorValue: string
+}
+
+const defaultValues: AddDecisionFormValues = {
+  type: 'ban',
+  scope: 'ip',
+  selectorValue: '',
+  duration: '4h',
+  reason: 'Manual decision via UI',
+  origin: 'cscli',
+}
+
 export function AddDecisionDialog({ onSuccess }: AddDecisionDialogProps) {
   const [open, setOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [selectorMode, setSelectorMode] = useState<SelectorMode>('ip')
 
-  const { control, register, handleSubmit, reset, setValue, formState: { errors } } = useForm<AddDecisionRequest>({
-    defaultValues: {
-      type: 'ban',
-      scope: 'ip',
-      duration: '4h',
-      reason: 'Manual decision via UI',
-    },
+  const { control, register, handleSubmit, reset, setValue, formState: { errors } } = useForm<AddDecisionFormValues>({
+    defaultValues,
   })
 
-  const onSubmit = async (data: AddDecisionRequest) => {
+  const onSubmit = async (data: AddDecisionFormValues) => {
+    const selectorValue = data.selectorValue.trim()
+    const payload: AddDecisionRequest = {
+      type: data.type,
+      duration: data.duration,
+      reason: data.reason || undefined,
+      origin: data.origin || undefined,
+    }
+
+    if (selectorMode === 'ip') {
+      payload.ip = selectorValue
+    } else if (selectorMode === 'range') {
+      payload.range = selectorValue
+    } else {
+      payload.scope = data.scope
+      payload.value = selectorValue
+    }
+
     setIsLoading(true)
     try {
-      await api.crowdsec.addDecision(data)
+      await api.crowdsec.addDecision(payload)
       toast.success('Decision added successfully')
       setOpen(false)
-      reset()
+      reset(defaultValues)
+      setSelectorMode('ip')
       onSuccess()
     } catch (error: unknown) {
-      const axiosError = error as { response?: { data?: { error?: string } } }
-      toast.error(axiosError.response?.data?.error || 'Failed to add decision')
+      toast.error(getErrorMessage(error, 'Failed to add decision'), {
+        description: getErrorDetails(error),
+      })
     } finally {
       setIsLoading(false)
     }
@@ -74,17 +106,31 @@ export function AddDecisionDialog({ onSuccess }: AddDecisionDialogProps) {
         
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="value">Value (IP, Range, etc.)</Label>
-            <Input 
-              id="value" 
-              placeholder="1.2.3.4" 
-              {...register('value', { required: 'Value is required' })} 
+            <Label htmlFor="selector-mode">Selector</Label>
+            <Select value={selectorMode} onValueChange={(value) => setSelectorMode(value as SelectorMode)}>
+              <SelectTrigger id="selector-mode">
+                <SelectValue placeholder="Select selector" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ip">IP</SelectItem>
+                <SelectItem value="range">Range</SelectItem>
+                <SelectItem value="scope">Scope + value</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="selectorValue">Value</Label>
+            <Input
+              id="selectorValue"
+              placeholder={selectorMode === 'range' ? '10.0.0.0/24' : '1.2.3.4'}
+              {...register('selectorValue', { required: 'Value is required' })}
             />
-            {errors.value && <p className="text-sm text-destructive">{errors.value.message}</p>}
+            {errors.selectorValue && <p className="text-sm text-destructive">{errors.selectorValue.message}</p>}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
+            <div className={selectorMode === 'scope' ? 'space-y-2' : 'hidden'}>
               <Label htmlFor="scope">Scope</Label>
               <Controller
                 name="scope"
@@ -98,6 +144,8 @@ export function AddDecisionDialog({ onSuccess }: AddDecisionDialogProps) {
                       <SelectItem value="ip">IP</SelectItem>
                       <SelectItem value="range">Range</SelectItem>
                       <SelectItem value="username">Username</SelectItem>
+                      <SelectItem value="country">Country</SelectItem>
+                      <SelectItem value="as">AS</SelectItem>
                     </SelectContent>
                   </Select>
                 )}
@@ -125,7 +173,6 @@ export function AddDecisionDialog({ onSuccess }: AddDecisionDialogProps) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="duration">Duration</Label>
             <div className="flex flex-wrap gap-1.5 pb-1">
               {[
                 { label: '1h', value: '1h' },
@@ -147,10 +194,21 @@ export function AddDecisionDialog({ onSuccess }: AddDecisionDialogProps) {
                 </Button>
               ))}
             </div>
+            <Controller
+              name="duration"
+              control={control}
+              render={({ field }) => (
+                <DurationField value={field.value || ''} onChange={field.onChange} />
+              )}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="origin">Origin</Label>
             <Input
-              id="duration"
-              placeholder="4h"
-              {...register('duration')}
+              id="origin"
+              placeholder="cscli"
+              {...register('origin')}
             />
           </div>
 

@@ -1,10 +1,13 @@
 import { useState, useMemo, useCallback } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams, Link } from 'react-router-dom'
 import { toast } from 'sonner'
-import api, { Decision } from '@/lib/api'
+import api from '@/lib/api'
+import type { Decision } from '@/lib/api'
 import type { RepeatedOffender } from '@/lib/api'
 import type { AlertSource } from '@/lib/api/types'
+import { getErrorDetails, getErrorMessage } from '@/lib/api/errors'
+import { invalidateDecisionsAndAlerts } from '@/lib/queryInvalidation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -122,6 +125,7 @@ function syncFiltersToParams(filters: DecisionFilters, setSearchParams: ReturnTy
 }
 
 export default function DecisionAnalysis() {
+  const queryClient = useQueryClient()
   const [searchParams, setSearchParams] = useSearchParams()
   // Initialise filters from URL on mount
   const [filters, setFilters] = useState<DecisionFilters>(() => parseFiltersFromParams(searchParams))
@@ -291,10 +295,11 @@ export default function DecisionAnalysis() {
     try {
       await api.crowdsec.deleteDecision({ id: deleteId.toString() })
       toast.success('Decision deleted successfully')
-      refetch()
+      await invalidateDecisionsAndAlerts(queryClient)
     } catch (err: unknown) {
-      const axiosError = err as { response?: { data?: { error?: string } } }
-      toast.error(axiosError.response?.data?.error || 'Failed to delete decision')
+      toast.error(getErrorMessage(err, 'Failed to delete decision'), {
+        description: getErrorDetails(err),
+      })
     } finally {
       setDeleteId(null)
     }
@@ -316,27 +321,30 @@ export default function DecisionAnalysis() {
       idsToDelete.push(...selectedIds)
     }
 
-    let deleted = 0
-    let failed = 0
-    for (const id of idsToDelete) {
-      try {
-        await api.crowdsec.deleteDecision({ id: id.toString() })
-        deleted++
-      } catch {
-        failed++
+    try {
+      const response = await api.crowdsec.bulkDeleteDecisions(idsToDelete)
+      const result = response.data.data
+      const deleted = result?.success_count ?? 0
+      const failed = result?.failure_count ?? 0
+
+      if (failed === 0) {
+        toast.success(`Deleted ${deleted} decision${deleted !== 1 ? 's' : ''} successfully`)
+      } else {
+        const failedDetails = result?.failed?.map((item) => `#${item.id}: ${item.error}`).join('\n')
+        toast.warning(`Deleted ${deleted}, failed ${failed}`, {
+          description: failedDetails,
+        })
       }
+      await invalidateDecisionsAndAlerts(queryClient)
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, 'Failed to bulk delete decisions'), {
+        description: getErrorDetails(err),
+      })
+    } finally {
+      setBulkDeleting(false)
+      setShowBulkDeleteConfirm(false)
+      setSelectedIds(new Set())
     }
-
-    setBulkDeleting(false)
-    setShowBulkDeleteConfirm(false)
-    setSelectedIds(new Set())
-
-    if (failed === 0) {
-      toast.success(`Deleted ${deleted} decision${deleted !== 1 ? 's' : ''} successfully`)
-    } else {
-      toast.warning(`Deleted ${deleted}, failed ${failed}`)
-    }
-    refetch()
   }
 
   // --- Filter handlers ---
@@ -537,8 +545,8 @@ export default function DecisionAnalysis() {
                   Delete Selected ({selectedIds.size})
                 </Button>
               )}
-              <AddDecisionDialog onSuccess={refetch} />
-              <ImportDecisionsDialog onSuccess={refetch} />
+              <AddDecisionDialog onSuccess={() => { void invalidateDecisionsAndAlerts(queryClient) }} />
+              <ImportDecisionsDialog onSuccess={() => { void invalidateDecisionsAndAlerts(queryClient) }} />
               <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isLoading}>
                 <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
                 Refresh

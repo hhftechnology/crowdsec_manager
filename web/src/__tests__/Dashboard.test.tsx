@@ -1,10 +1,31 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import * as rtl from '@testing-library/react'
+import { cleanup, render } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import Dashboard from '@/pages/Dashboard'
 import type { HistoryActivityResponse } from '@/lib/api/types'
+
+const { fireEvent, screen, waitFor, within } = rtl as unknown as {
+  fireEvent: {
+    mouseDown: (element: Element) => void
+    click: (element: Element) => void
+  }
+  screen: {
+    getByRole: (role: string, options?: { name?: string | RegExp }) => HTMLElement
+    findByRole: (role: string, options?: { name?: string | RegExp }) => Promise<HTMLElement>
+    getByText: (text: string | RegExp) => HTMLElement
+    findByText: (text: string | RegExp) => Promise<HTMLElement>
+    getAllByText: (text: string | RegExp) => HTMLElement[]
+    getByLabelText: (text: string | RegExp) => HTMLElement
+    getAllByTestId: (testId: string | RegExp) => HTMLElement[]
+  }
+  waitFor: (callback: () => void | Promise<void>) => Promise<void>
+  within: (element: Element) => {
+    getByText: (text: string | RegExp) => HTMLElement
+  }
+}
 
 const mockNavigate = vi.fn()
 

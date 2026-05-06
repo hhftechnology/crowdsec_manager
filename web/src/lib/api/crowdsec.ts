@@ -16,6 +16,7 @@ import type {
   AlertHistoryRecord,
   RepeatedOffender,
   ReapplyDecisionRequest,
+  BulkDeleteDecisionsResponse,
   BulkReapplyDecisionsRequest,
   BulkReapplyResult,
   HistoryStats,
@@ -83,6 +84,9 @@ export const crowdsecAPI = {
   deleteDecision: (params: DeleteDecisionRequest) =>
     apiClient.delete<ApiResponse>('/crowdsec/decisions', { params }),
 
+  bulkDeleteDecisions: (ids: number[]) =>
+    apiClient.post<ApiResponse<BulkDeleteDecisionsResponse>>('/crowdsec/decisions/bulk-delete', { ids }),
+
   importDecisions: (file: File) => {
     const formData = new FormData()
     formData.append('file', file)
@@ -106,7 +110,7 @@ export const crowdsecAPI = {
     apiClient.get<ApiResponse<HistoryActivityResponse>>('/crowdsec/history/activity', { params }),
 
   reapplyDecision: (data: ReapplyDecisionRequest) =>
-    apiClient.post<ApiResponse<{ message: string }>>('/crowdsec/decisions/history/reapply', data),
+    apiClient.post<ApiResponse<{ already_active: boolean; decision_id?: number }>>('/crowdsec/decisions/history/reapply', data),
 
   bulkReapplyDecisions: (data: BulkReapplyDecisionsRequest) =>
     apiClient.post<ApiResponse<BulkReapplyResult>>('/crowdsec/decisions/history/bulk-reapply', data),

@@ -249,7 +249,7 @@ export const Donut = ({
         strokeWidth="10"
         className={
           total === 0
-            ? "text-muted/40 dark:text-on-dark-soft/30"
+            ? "text-hairline dark:text-on-dark-soft/30"
             : "text-hairline-soft dark:text-on-dark-soft/20"
         }
       />

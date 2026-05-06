@@ -1,5 +1,5 @@
 import { Suspense, lazy, useState, type ReactNode } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Toaster } from '@/components/ui/toaster';
@@ -15,8 +15,8 @@ import { DashboardSkeleton } from '@/components/dashboard/DashboardSkeleton';
 
 import LoginPage from '@/pages/LoginPage';
 import NotFound from '@/pages/NotFound';
+import { queryClient } from '@/lib/api/queryClient';
 
-const queryClient = new QueryClient();
 const DashboardPage = lazy(() => import('@/pages/DashboardPage'));
 const SecurityPage = lazy(() => import('@/pages/SecurityPage'));
 const LogsPage = lazy(() => import('@/pages/LogsPage'));

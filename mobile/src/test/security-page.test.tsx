@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi } from 'vitest';
 import SecurityPage from '@/pages/SecurityPage';
 
@@ -28,11 +29,26 @@ function createApi() {
       reapplyDecision: vi.fn(),
       addDecision: vi.fn(),
       deleteDecision: vi.fn(),
+      bulkDeleteDecisions: vi.fn(),
       importDecisions: vi.fn(),
       inspectAlert: vi.fn(),
       deleteAlert: vi.fn(),
     },
   };
+}
+
+function renderSecurityPage() {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <SecurityPage />
+    </QueryClientProvider>,
+  );
 }
 
 describe('SecurityPage', () => {
@@ -59,7 +75,7 @@ describe('SecurityPage', () => {
     api.crowdsec.decisionHistory.mockResolvedValue({ decisions: [], count: 0, total: 0 });
     mockUseApi.mockReturnValue({ api });
 
-    render(<SecurityPage />);
+    renderSecurityPage();
 
     await waitFor(() => {
       expect(api.crowdsec.decisionsAnalysis).toHaveBeenCalledWith({ limit: 20, offset: 0 });
@@ -113,7 +129,7 @@ expect(decisionsTab.className).toContain('bg-surface-card');
     api.crowdsec.reapplyDecision.mockResolvedValue({ message: 'ok', data: { message: 'ok' } });
     mockUseApi.mockReturnValue({ api });
 
-    render(<SecurityPage />);
+    renderSecurityPage();
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'History' })).toBeInTheDocument();

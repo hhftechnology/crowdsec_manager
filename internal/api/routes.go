@@ -148,6 +148,7 @@ func RegisterServicesRoutes(router *gin.RouterGroup, dockerClient *docker.Client
 		crowdsec.POST("/decisions", handlers.AddDecision(dockerClient, cfg))
 		crowdsec.DELETE("/decisions", handlers.DeleteDecision(dockerClient, cfg))
 		crowdsec.POST("/decisions/import", handlers.ImportDecisions(dockerClient, cfg))
+		crowdsec.POST("/decisions/bulk-delete", handlers.BulkDeleteDecisions(dockerClient, cfg))
 		crowdsec.GET("/decisions/analysis", handlers.GetDecisionsAnalysis(dockerClient, cfg))
 		crowdsec.GET("/decisions/history", handlers.GetDecisionHistory())
 		crowdsec.GET("/decisions/repeated-offenders", handlers.GetRepeatedOffenders())

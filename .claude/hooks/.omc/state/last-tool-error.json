@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"cd /mnt/g/github/crowdsec_manager && go test -race -run 'TestBulkDelete' ./internal/api/handlers/ 2>&1\",\"description\":\"Run bulk delete tests - should be green now\"}",
+  "error": "Exit code 1\n--- FAIL: TestBulkDeleteDecisions_AllSucceed (0.00s)\npanic: runtime error: invalid memory address or nil pointer dereference [recovered]\n\tpanic: runtime error: invalid memory address or nil pointer dereference\n[signal SIGSEGV: segmentation violation code=0x1 addr=0x0 pc=0xc5186d]\n\ngoroutine 23 [running]:\ntesting.tRunner.func1.2({0xe486c0, 0x13d7110})\n\t/home/cloudpanel/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.23.0.linux-amd64/src/testing/testing.go:1632 +0x3fc\ntesting.tRunner.func1(...",
+  "timestamp": "2026-05-05T12:29:31.486Z",
+  "retry_count": 1
+}

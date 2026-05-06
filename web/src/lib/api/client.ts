@@ -39,7 +39,7 @@ apiClient.interceptors.response.use(
   (error) => {
     // Extract the `error` field from the API envelope when available
     const apiError: string | undefined =
-      error?.response?.data?.error
+      error?.response?.data?.error || error?.response?.data?.message
     if (apiError) {
       error.message = apiError
     }

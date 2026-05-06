@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import { RotateCcw, Loader2 } from 'lucide-react'
 import api from '@/lib/api'
 import type { DecisionHistoryRecord } from '@/lib/api'
+import { getErrorDetails, getErrorMessage } from '@/lib/api/errors'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -43,7 +44,7 @@ const DURATION_PRESETS = [
   { value: '24h', label: '24 hours' },
   { value: '7d', label: '7 days' },
   { value: '30d', label: '30 days' },
-  { value: 'permanent', label: 'Permanent' },
+  { value: '0', label: 'Permanent' },
   { value: 'custom', label: 'Custom…' },
 ]
 
@@ -77,19 +78,26 @@ export function ReapplyDecisionDialog({ record, open, onClose, onSuccess }: Reap
 
     setIsLoading(true)
     try {
-      await api.crowdsec.reapplyDecision({
+      const response = await api.crowdsec.reapplyDecision({
         id,
         type: data.type,
         duration,
         reason: data.reason || undefined,
       })
-      toast.success(`Decision reapplied: ${getRecordValue(record)} (${data.type}, ${duration})`)
+      if (response.data.data?.already_active) {
+        toast.info('Already active - no change', {
+          description: `Decision #${response.data.data.decision_id ?? id} is already active.`,
+        })
+      } else {
+        toast.success(`Decision reapplied: ${getRecordValue(record)} (${data.type}, ${duration === '0' ? 'permanent' : duration})`)
+      }
       reset()
       onSuccess()
       onClose()
     } catch (error: unknown) {
-      const axiosError = error as { response?: { data?: { error?: string } } }
-      toast.error(axiosError.response?.data?.error || 'Failed to reapply decision')
+      toast.error(getErrorMessage(error, 'Failed to reapply decision'), {
+        description: getErrorDetails(error),
+      })
     } finally {
       setIsLoading(false)
     }

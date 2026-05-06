@@ -144,7 +144,7 @@ export default function Dashboard() {
     refetchInterval: 30000,
   })
 
-  const { data: activityData, isLoading: activityLoading, dataUpdatedAt: activityUpdatedAt } = useQuery({
+  const { data: activityData, dataUpdatedAt: activityUpdatedAt } = useQuery({
     queryKey: ['history-activity', granularity],
     queryFn: async () => {
       const params = granularity === 'hour'
