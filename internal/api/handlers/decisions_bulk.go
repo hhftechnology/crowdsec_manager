@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"crowdsec-manager/internal/cache"
 	"crowdsec-manager/internal/config"
 	"crowdsec-manager/internal/logger"
 	"crowdsec-manager/internal/models"
@@ -16,10 +17,10 @@ import (
 // SuccessCount and FailureCount always sum to the number of requested IDs.
 // The response is always HTTP 200 — partial failures are reported in the body.
 type BulkDeleteResult struct {
-	SuccessCount int                  `json:"success_count"`
-	FailureCount int                  `json:"failure_count"`
-	Deleted      []int64              `json:"deleted"`
-	Failed       []BulkDeleteFailure  `json:"failed"`
+	SuccessCount int                 `json:"success_count"`
+	FailureCount int                 `json:"failure_count"`
+	Deleted      []int64             `json:"deleted"`
+	Failed       []BulkDeleteFailure `json:"failed"`
 }
 
 // BulkDeleteFailure holds the id and error message for one failed deletion.
@@ -41,7 +42,7 @@ type cscliExecutor interface {
 // POST /crowdsec/decisions/bulk-delete
 // Body: {"ids": [12, 34, 56]}
 // Response: always 200 with {success_count, failure_count, deleted, failed}
-func BulkDeleteDecisions(executor cscliExecutor, cfg *config.Config) gin.HandlerFunc {
+func BulkDeleteDecisions(executor cscliExecutor, cfg *config.Config, ttlCache ...*cache.TTLCache) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req struct {
 			IDs []int64 `json:"ids"`
@@ -98,6 +99,9 @@ func BulkDeleteDecisions(executor cscliExecutor, cfg *config.Config) gin.Handler
 			}
 		}
 
+		if result.SuccessCount > 0 {
+			invalidateCrowdSecDataCache(ttlCache...)
+		}
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
 			Message: fmt.Sprintf("Deleted %d of %d decisions", result.SuccessCount, len(req.IDs)),

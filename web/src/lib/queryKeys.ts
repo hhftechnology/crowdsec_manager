@@ -6,6 +6,7 @@ export const queryKeys = {
   health: ['health'] as const,
   decisions: ['decisions'] as const,
   decisionsAnalysis: ['decisions-analysis'] as const,
+  decisionHistoryAnalysis: ['decision-history-analysis'] as const,
   bouncers: ['bouncers'] as const,
   alerts: ['alerts'] as const,
   alertsAnalysis: ['alerts-analysis'] as const,

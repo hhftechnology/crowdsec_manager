@@ -73,7 +73,7 @@ import {
 import type { FilterField } from '@/components/common'
 import { AlertCard } from '@/components/alerts/AlertCard'
 import { ChartCard, AreaTimeline, BarDistribution, ThreatMap } from '@/components/charts'
-import { groupByField } from '@/lib/chart-utils'
+import { bucketByUtcDay, groupByField } from '@/lib/chart-utils'
 import { buildThreatMapPoints } from '@/lib/threat-map'
 import { useInfiniteScroll, useUrlFilters } from '@/hooks'
 import { useSearch } from '@/contexts/SearchContext'
@@ -502,6 +502,8 @@ export default function AlertAnalysis() {
       return response.data.data ?? null
     },
     refetchInterval: 30000,
+    staleTime: 30000,
+    placeholderData: (previousData) => previousData,
   })
 
   // ---- Client-side search filtering (includes country + AS) ----
@@ -549,12 +551,7 @@ export default function AlertAnalysis() {
 
   const alertTimeData = useMemo(() => {
     if (!alertsData?.alerts) return []
-    const buckets: Record<string, number> = {}
-    for (const a of alertsData.alerts as CrowdSecAlert[]) {
-      const date = new Date(a.start_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-      buckets[date] = (buckets[date] || 0) + 1
-    }
-    return Object.entries(buckets).map(([date, count]) => ({ date, value: count }))
+    return bucketByUtcDay(alertsData.alerts as CrowdSecAlert[], 'start_at')
   }, [alertsData])
 
   const scenarioData = useMemo(() => {

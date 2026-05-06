@@ -125,6 +125,35 @@ export function groupByField<T>(
 }
 
 /**
+ * Bucket records by UTC calendar day and return chart-ready points sorted
+ * chronologically from oldest to newest.
+ */
+export function bucketByUtcDay<T>(
+  data: T[],
+  dateField: keyof T,
+): { date: string; value: number; ts: string }[] {
+  const buckets = new Map<string, number>()
+
+  for (const item of data) {
+    const raw = item[dateField] as string | number | Date | undefined | null
+    if (!raw) continue
+    const date = new Date(raw)
+    if (Number.isNaN(date.getTime())) continue
+
+    const ts = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())).toISOString()
+    buckets.set(ts, (buckets.get(ts) ?? 0) + 1)
+  }
+
+  return Array.from(buckets.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([ts, value]) => ({
+      ts,
+      date: new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }),
+      value,
+    }))
+}
+
+/**
  * Format a date string for chart axis labels, adapting to the time interval.
  *
  * - `1h`  -> "14:00"

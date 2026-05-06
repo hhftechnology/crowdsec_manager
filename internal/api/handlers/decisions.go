@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"crowdsec-manager/internal/cache"
 	"crowdsec-manager/internal/config"
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
@@ -25,7 +26,7 @@ type AddDecisionRequest struct {
 }
 
 // AddDecision adds a new decision via cscli
-func AddDecision(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
+func AddDecision(dockerClient *docker.Client, cfg *config.Config, ttlCache ...*cache.TTLCache) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		dockerClient = resolveDockerClient(c, dockerClient)
 		var req AddDecisionRequest
@@ -85,6 +86,7 @@ func AddDecision(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFun
 			return
 		}
 
+		invalidateCrowdSecDataCache(ttlCache...)
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
 			Message: "Decision added successfully",
@@ -94,7 +96,7 @@ func AddDecision(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFun
 }
 
 // DeleteDecision deletes a decision via cscli
-func DeleteDecision(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
+func DeleteDecision(dockerClient *docker.Client, cfg *config.Config, ttlCache ...*cache.TTLCache) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		dockerClient = resolveDockerClient(c, dockerClient)
 
@@ -172,6 +174,7 @@ func DeleteDecision(dockerClient *docker.Client, cfg *config.Config) gin.Handler
 			}
 		}
 
+		invalidateCrowdSecDataCache(ttlCache...)
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
 			Message: "Decision(s) deleted successfully",

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"time"
 
 	"crowdsec-manager/internal/cache"
 	"crowdsec-manager/internal/config"
@@ -19,9 +18,20 @@ import (
 )
 
 // GetDecisionsAnalysis retrieves CrowdSec decisions with advanced filtering
-func GetDecisionsAnalysis(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
+func GetDecisionsAnalysis(dockerClient *docker.Client, cfg *config.Config, ttlCache ...*cache.TTLCache) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		dockerClient = resolveDockerClient(c, dockerClient)
+		cacheKey := crowdSecAnalysisCacheKey(c, "decisions")
+		if cacheStore := optionalCache(ttlCache); cacheStore != nil {
+			if cached, ok := cacheStore.Get(cacheKey); ok {
+				c.JSON(http.StatusOK, models.Response{
+					Success: true,
+					Data:    cached,
+				})
+				return
+			}
+		}
+
 		logger.Info("Getting CrowdSec decisions analysis via cscli")
 
 		defaultLimit := config.EffectiveLimit(cfg.DecisionListLimit, constants.MaxListLimit)
@@ -73,9 +83,13 @@ func GetDecisionsAnalysis(dockerClient *docker.Client, cfg *config.Config) gin.H
 
 		// Check if output is empty or null
 		if output == "null" || output == "" || output == "[]" {
+			result := gin.H{"decisions": []models.Decision{}, "count": 0, "total": 0, "limit": limit, "offset": offset}
+			if cacheStore := optionalCache(ttlCache); cacheStore != nil {
+				cacheStore.Set(cacheKey, result, analysisCacheTTL)
+			}
 			c.JSON(http.StatusOK, models.Response{
 				Success: true,
-				Data:    gin.H{"decisions": []models.Decision{}, "count": 0, "total": 0, "limit": limit, "offset": offset},
+				Data:    result,
 			})
 			return
 		}
@@ -146,16 +160,20 @@ func GetDecisionsAnalysis(dockerClient *docker.Client, cfg *config.Config) gin.H
 
 		total := len(decisions)
 		pagedDecisions := paginateDecisions(decisions, limit, offset)
+		result := gin.H{
+			"decisions": pagedDecisions,
+			"count":     len(pagedDecisions),
+			"total":     total,
+			"limit":     limit,
+			"offset":    offset,
+		}
+		if cacheStore := optionalCache(ttlCache); cacheStore != nil {
+			cacheStore.Set(cacheKey, result, analysisCacheTTL)
+		}
 
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
-			Data: gin.H{
-				"decisions": pagedDecisions,
-				"count":     len(pagedDecisions),
-				"total":     total,
-				"limit":     limit,
-				"offset":    offset,
-			},
+			Data:    result,
 		})
 	}
 }
@@ -165,10 +183,9 @@ func GetAlertsAnalysis(dockerClient *docker.Client, cfg *config.Config, ttlCache
 	return func(c *gin.Context) {
 		dockerClient = resolveDockerClient(c, dockerClient)
 
-		// Cache key includes the "since" param to differentiate dashboard vs analysis queries
-		cacheKey := "alerts-analysis-" + c.Query("since")
-		if len(ttlCache) > 0 && ttlCache[0] != nil {
-			if cached, ok := ttlCache[0].Get(cacheKey); ok {
+		cacheKey := crowdSecAnalysisCacheKey(c, "alerts")
+		if cacheStore := optionalCache(ttlCache); cacheStore != nil {
+			if cached, ok := cacheStore.Get(cacheKey); ok {
 				c.JSON(http.StatusOK, models.Response{
 					Success: true,
 					Data:    cached,
@@ -233,9 +250,13 @@ func GetAlertsAnalysis(dockerClient *docker.Client, cfg *config.Config, ttlCache
 		dataBytes, parseErr := parseCLIJSONToBytes(output)
 		if parseErr != nil {
 			if output == "null" || output == "" {
+				result := gin.H{"alerts": []interface{}{}, "count": 0}
+				if cacheStore := optionalCache(ttlCache); cacheStore != nil {
+					cacheStore.Set(cacheKey, result, analysisCacheTTL)
+				}
 				c.JSON(http.StatusOK, models.Response{
 					Success: true,
-					Data:    gin.H{"alerts": []interface{}{}, "count": 0},
+					Data:    result,
 				})
 				return
 			}
@@ -254,9 +275,13 @@ func GetAlertsAnalysis(dockerClient *docker.Client, cfg *config.Config, ttlCache
 				alerts = []interface{}{singleAlert}
 			} else {
 				if output == "null" || output == "" {
+					result := gin.H{"alerts": []interface{}{}, "count": 0}
+					if cacheStore := optionalCache(ttlCache); cacheStore != nil {
+						cacheStore.Set(cacheKey, result, analysisCacheTTL)
+					}
 					c.JSON(http.StatusOK, models.Response{
 						Success: true,
-						Data:    gin.H{"alerts": []interface{}{}, "count": 0},
+						Data:    result,
 					})
 					return
 				}
@@ -292,8 +317,8 @@ func GetAlertsAnalysis(dockerClient *docker.Client, cfg *config.Config, ttlCache
 		logger.Info("Alerts analysis retrieved successfully", "count", len(alerts))
 
 		result := gin.H{"alerts": alerts, "count": len(alerts)}
-		if len(ttlCache) > 0 && ttlCache[0] != nil {
-			ttlCache[0].Set(cacheKey, result, 30*time.Second)
+		if cacheStore := optionalCache(ttlCache); cacheStore != nil {
+			cacheStore.Set(cacheKey, result, analysisCacheTTL)
 		}
 
 		c.JSON(http.StatusOK, models.Response{

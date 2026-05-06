@@ -117,6 +117,44 @@ func GetDecisionHistory() gin.HandlerFunc {
 	}
 }
 
+// GetDecisionHistoryAnalysis returns persisted decision aggregates for charts.
+func GetDecisionHistoryAnalysis() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if historyService == nil {
+			c.JSON(http.StatusOK, models.Response{
+				Success: true,
+				Data: models.DecisionHistoryAnalysisResponse{
+					Ready:         false,
+					OverTime:      []models.HistoryChartPoint{},
+					DecisionTypes: []models.HistoryBreakdownItem{},
+					TopIPs:        []models.HistoryBreakdownItem{},
+				},
+			})
+			return
+		}
+
+		filter := models.DecisionHistoryFilter{
+			Value:    c.Query("value"),
+			Scenario: c.Query("scenario"),
+			Since:    c.Query("since"),
+			Until:    c.Query("until"),
+			Type:     c.Query("type"),
+			Scope:    c.Query("scope"),
+			Origin:   c.Query("origin"),
+			IP:       c.Query("ip"),
+			Range:    c.Query("range"),
+		}
+
+		analysis, err := historyService.GetDecisionHistoryAnalysis(c.Request.Context(), filter)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, models.Response{Success: false, Error: "failed to load decision history analysis: " + err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, models.Response{Success: true, Data: analysis})
+	}
+}
+
 // GetAlertHistory returns persisted alert history entries.
 func GetAlertHistory() gin.HandlerFunc {
 	return func(c *gin.Context) {

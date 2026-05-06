@@ -168,6 +168,25 @@ export interface DecisionHistoryResponse {
   total: number
 }
 
+export interface HistoryChartPoint {
+  ts: string
+  value: number
+}
+
+export interface HistoryBreakdownItem {
+  name: string
+  value: number
+}
+
+export interface DecisionHistoryAnalysisResponse {
+  ready: boolean
+  count: number
+  latest_snapshot_at: string | null
+  over_time: HistoryChartPoint[]
+  decision_types: HistoryBreakdownItem[]
+  top_ips: HistoryBreakdownItem[]
+}
+
 export interface AlertHistoryRecord {
   id: number
   dedupe_key: string
@@ -246,4 +265,3 @@ export interface HistoryActivityResponse {
   generated_at: string
   latest_snapshot_at: string | null
 }
-

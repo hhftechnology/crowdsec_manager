@@ -547,6 +547,12 @@ type DecisionHistoryFilter struct {
 	Value    string
 	Scenario string
 	Since    string
+	Until    string
+	Type     string
+	Scope    string
+	Origin   string
+	IP       string
+	Range    string
 	Limit    int
 	Offset   int
 }
@@ -580,6 +586,28 @@ type DecisionHistoryRecord struct {
 	LastSeenAt     string `json:"last_seen_at"`
 	StaleAt        string `json:"stale_at,omitempty"`
 	LastSnapshotAt string `json:"last_snapshot_at"`
+}
+
+// HistoryChartPoint is a timestamped value for history-backed charts.
+type HistoryChartPoint struct {
+	Timestamp string `json:"ts"`
+	Value     int    `json:"value"`
+}
+
+// HistoryBreakdownItem is a name/value aggregate for history-backed charts.
+type HistoryBreakdownItem struct {
+	Name  string `json:"name"`
+	Value int    `json:"value"`
+}
+
+// DecisionHistoryAnalysisResponse contains history-backed decision chart data.
+type DecisionHistoryAnalysisResponse struct {
+	Ready            bool                   `json:"ready"`
+	Count            int                    `json:"count"`
+	LatestSnapshotAt *string                `json:"latest_snapshot_at"`
+	OverTime         []HistoryChartPoint    `json:"over_time"`
+	DecisionTypes    []HistoryBreakdownItem `json:"decision_types"`
+	TopIPs           []HistoryBreakdownItem `json:"top_ips"`
 }
 
 // AlertHistoryRecord is a persisted alert snapshot entry.

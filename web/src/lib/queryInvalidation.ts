@@ -6,6 +6,7 @@ const decisionAndAlertKeys = [
   ['alerts-analysis'],
   ['alerts-geo-enrichment'],
   ['decision-history'],
+  ['decision-history-analysis'],
   ['alert-history'],
   ['repeated-offenders'],
   ['history-activity'],

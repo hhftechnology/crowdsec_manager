@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import api, { Container as ContainerType, Decision, CrowdSecAlert } from '@/lib/api'
-import type { HistoryActivityResponse } from '@/lib/api/types'
+import type { DecisionHistoryAnalysisResponse, HistoryActivityResponse, HistoryChartPoint, RepeatedOffender } from '@/lib/api/types'
 import { PageHeader, QueryError, ScenarioName, CountryFlag } from '@/components/common'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -19,7 +19,7 @@ import {
   Radio,
 } from 'lucide-react'
 import { StatCard, ChartCard, AreaTimeline, PieBreakdown, BarDistribution, ThreatMap } from '@/components/charts'
-import { groupByField, CHART_COLORS } from '@/lib/chart-utils'
+import { bucketByUtcDay, groupByField, CHART_COLORS } from '@/lib/chart-utils'
 import { buildThreatMapPoints } from '@/lib/threat-map'
 import {
   BarChart,
@@ -95,6 +95,28 @@ function formatHistoryActivityBuckets(activity: HistoryActivityResponse | null |
   })
 }
 
+function formatHistoryChartPoints(points: HistoryChartPoint[] | undefined): { date: string; value: number; ts: string }[] {
+  if (!points?.length) return []
+  return points
+    .slice()
+    .sort((a, b) => a.ts.localeCompare(b.ts))
+    .map((point) => ({
+      ts: point.ts,
+      date: new Date(point.ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }),
+      value: point.value,
+    }))
+}
+
+function formatRepeatedOffenders(offenders: RepeatedOffender[]): { name: string; value: number }[] {
+  const ipOffenders = offenders.filter((offender) => offender.scope.toLowerCase() === 'ip')
+  const source = ipOffenders.length > 0 ? ipOffenders : offenders
+  return source
+    .slice()
+    .sort((a, b) => b.hit_count - a.hit_count || a.value.localeCompare(b.value))
+    .slice(0, 10)
+    .map((offender) => ({ name: offender.value, value: offender.hit_count }))
+}
+
 export default function Dashboard() {
   const navigate = useNavigate()
   const [granularity, setGranularity] = useState<Granularity>('day')
@@ -126,6 +148,28 @@ export default function Dashboard() {
     refetchInterval: 60000,
   })
 
+  const { data: decisionHistoryAnalysis, dataUpdatedAt: decisionHistoryUpdatedAt } = useQuery<DecisionHistoryAnalysisResponse | null>({
+    queryKey: ['decision-history-analysis', 'dashboard'],
+    queryFn: async () => {
+      const response = await api.crowdsec.getDecisionHistoryAnalysis({ since: '7d' })
+      return response.data.data ?? null
+    },
+    refetchInterval: 30000,
+    staleTime: 30000,
+    placeholderData: (previousData) => previousData,
+  })
+
+  const { data: repeatedOffendersData, dataUpdatedAt: repeatedOffendersUpdatedAt } = useQuery({
+    queryKey: ['repeated-offenders'],
+    queryFn: async () => {
+      const response = await api.crowdsec.getRepeatedOffenders()
+      return response.data.data
+    },
+    refetchInterval: 60000,
+    staleTime: 30000,
+    placeholderData: (previousData) => previousData,
+  })
+
   const { data: bouncersData, isLoading: bouncersLoading, dataUpdatedAt: bouncersUpdatedAt } = useQuery({
     queryKey: ['bouncers'],
     queryFn: async () => {
@@ -142,6 +186,8 @@ export default function Dashboard() {
       return response.data.data
     },
     refetchInterval: 30000,
+    staleTime: 30000,
+    placeholderData: (previousData) => previousData,
   })
 
   const { data: activityData, dataUpdatedAt: activityUpdatedAt } = useQuery({
@@ -166,10 +212,10 @@ export default function Dashboard() {
   })
 
   const lastUpdated = useMemo(() => {
-    const timestamps = [healthUpdatedAt, decisionsUpdatedAt, bouncersUpdatedAt, alertsUpdatedAt, activityUpdatedAt, activity7dUpdatedAt].filter(Boolean)
+    const timestamps = [healthUpdatedAt, decisionsUpdatedAt, bouncersUpdatedAt, alertsUpdatedAt, activityUpdatedAt, activity7dUpdatedAt, decisionHistoryUpdatedAt, repeatedOffendersUpdatedAt].filter(Boolean)
     if (timestamps.length === 0) return null
     return new Date(Math.max(...timestamps))
-  }, [healthUpdatedAt, decisionsUpdatedAt, bouncersUpdatedAt, alertsUpdatedAt, activityUpdatedAt, activity7dUpdatedAt])
+  }, [healthUpdatedAt, decisionsUpdatedAt, bouncersUpdatedAt, alertsUpdatedAt, activityUpdatedAt, activity7dUpdatedAt, decisionHistoryUpdatedAt, repeatedOffendersUpdatedAt])
 
   const lastUpdatedLabel = lastUpdated ? `Updated ${lastUpdated.toLocaleTimeString()}` : 'Not refreshed yet'
 
@@ -209,28 +255,26 @@ export default function Dashboard() {
   }, [activity7dData])
 
   const decisionTypeData = useMemo(() => {
+    if (decisionHistoryAnalysis?.ready) return decisionHistoryAnalysis.decision_types ?? []
     if (decisions.length === 0) return []
     return groupByField(decisions, 'type', 5)
-  }, [decisions])
+  }, [decisionHistoryAnalysis, decisions])
 
   const topBlockedIPs = useMemo(() => {
+    if (decisionHistoryAnalysis?.ready) {
+      return formatRepeatedOffenders(repeatedOffendersData?.offenders ?? [])
+    }
     if (decisions.length === 0) return []
     return groupByField(decisions, 'value', 10)
-  }, [decisions])
+  }, [decisionHistoryAnalysis, repeatedOffendersData, decisions])
 
   const decisionsOverTime = useMemo(() => {
-    if (decisions.length === 0) return []
-    const buckets: Record<string, number> = {}
-    for (const d of decisions) {
-      const date = d.created_at
-        ? new Date(d.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-        : 'Unknown'
-      buckets[date] = (buckets[date] || 0) + 1
+    if (decisionHistoryAnalysis?.ready) {
+      return formatHistoryChartPoints(decisionHistoryAnalysis.over_time)
     }
-    return Object.entries(buckets)
-      .map(([date, count]) => ({ date, value: count }))
-      .slice(-7)
-  }, [decisions])
+    if (decisions.length === 0) return []
+    return bucketByUtcDay(decisions, 'created_at').slice(-7)
+  }, [decisionHistoryAnalysis, decisions])
 
   const combinedActivityData = useMemo<ActivityBucket[]>(
     () => formatHistoryActivityBuckets(activityData),
@@ -257,10 +301,10 @@ export default function Dashboard() {
   const threatMapData = useMemo(() => buildThreatMapPoints(alerts), [alerts])
 
   const lastUpdatedAt = useMemo(() => {
-    const timestamps = [healthUpdatedAt, decisionsUpdatedAt, bouncersUpdatedAt, alertsUpdatedAt, activityUpdatedAt, activity7dUpdatedAt].filter(Boolean)
+    const timestamps = [healthUpdatedAt, decisionsUpdatedAt, bouncersUpdatedAt, alertsUpdatedAt, activityUpdatedAt, activity7dUpdatedAt, decisionHistoryUpdatedAt, repeatedOffendersUpdatedAt].filter(Boolean)
     if (timestamps.length === 0) return null
     return Math.max(...timestamps)
-  }, [healthUpdatedAt, decisionsUpdatedAt, bouncersUpdatedAt, alertsUpdatedAt, activityUpdatedAt, activity7dUpdatedAt])
+  }, [healthUpdatedAt, decisionsUpdatedAt, bouncersUpdatedAt, alertsUpdatedAt, activityUpdatedAt, activity7dUpdatedAt, decisionHistoryUpdatedAt, repeatedOffendersUpdatedAt])
 
   const activityTitle = granularity === 'hour'
     ? 'Activity History (24h)'

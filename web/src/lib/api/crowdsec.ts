@@ -21,6 +21,7 @@ import type {
   BulkReapplyResult,
   HistoryStats,
   HistoryActivityResponse,
+  DecisionHistoryAnalysisResponse,
 } from './types'
 
 export const crowdsecAPI = {
@@ -44,6 +45,9 @@ export const crowdsecAPI = {
 
   getDecisionHistory: (params?: { stale?: boolean; value?: string; scenario?: string; since?: string; limit?: number; offset?: number }) =>
     apiClient.get<ApiResponse<{ decisions: DecisionHistoryRecord[]; count: number; total: number }>>('/crowdsec/decisions/history', { params }),
+
+  getDecisionHistoryAnalysis: (filters?: DecisionFilters) =>
+    apiClient.get<ApiResponse<DecisionHistoryAnalysisResponse>>('/crowdsec/decisions/history/analysis', { params: filters }),
 
   getRepeatedOffenders: () =>
     apiClient.get<ApiResponse<{ offenders: RepeatedOffender[]; count: number }>>('/crowdsec/decisions/repeated-offenders'),

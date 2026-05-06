@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strconv"
 
+	"crowdsec-manager/internal/cache"
 	"crowdsec-manager/internal/config"
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
@@ -19,7 +20,7 @@ import (
 var numericIDPattern = regexp.MustCompile(`^\d+$`)
 
 // DeleteAlert removes a single alert by ID
-func DeleteAlert(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
+func DeleteAlert(dockerClient *docker.Client, cfg *config.Config, ttlCache ...*cache.TTLCache) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		dockerClient = resolveDockerClient(c, dockerClient)
 
@@ -64,6 +65,7 @@ func DeleteAlert(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFun
 		}
 
 		logger.Info("Alert deleted", "alertID", alertID, "output", output)
+		invalidateCrowdSecDataCache(ttlCache...)
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
 			Message: fmt.Sprintf("Alert %s deleted successfully", alertID),
