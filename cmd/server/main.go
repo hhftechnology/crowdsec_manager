@@ -24,6 +24,7 @@ import (
 	"crowdsec-manager/internal/cron"
 	"crowdsec-manager/internal/database"
 	"crowdsec-manager/internal/docker"
+	"crowdsec-manager/internal/geoip"
 	"crowdsec-manager/internal/history"
 	"crowdsec-manager/internal/logger"
 	"crowdsec-manager/internal/messaging"
@@ -67,6 +68,12 @@ func main() {
 
 	// Default client for backward compatibility with existing handler signatures
 	dockerClient := multiHost.DefaultClient()
+
+	// Optional GeoIP resolver for log dashboards. Failing to open returns a
+	// no-op resolver so the rest of the app keeps working.
+	geoResolver, geoErr := geoip.Open(cfg.GeoIPDBPath)
+	geoip.LogStartupStatus(cfg.GeoIPDBPath, geoErr)
+	defer geoResolver.Close()
 
 	dataDir := cfg.ConfigDir
 
@@ -144,7 +151,7 @@ func main() {
 		api.RegisterAllowlistRoutes(apiGroup, dockerClient, cfg)
 		api.RegisterScenarioRoutes(apiGroup, dockerClient, cfg.ConfigDir, cfg)
 		api.RegisterCaptchaRoutes(apiGroup, dockerClient, db, cfg)
-		api.RegisterLogRoutes(apiGroup, dockerClient, db, cfg)
+		api.RegisterLogRoutes(apiGroup, dockerClient, db, cfg, geoResolver)
 		api.RegisterBackupRoutes(apiGroup, backupManager, dockerClient)
 		api.RegisterUpdateRoutes(apiGroup, dockerClient, cfg)
 		api.RegisterCronRoutes(apiGroup, cronScheduler)

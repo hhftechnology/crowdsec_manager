@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import LogsPage from '@/pages/LogsPage';
 
 const mockUseApi = vi.fn();
@@ -20,9 +21,18 @@ function createLogsApi() {
         error_entries: [],
       }),
       structured: vi.fn().mockResolvedValue({ entries: [] }),
+      dashboardTraefik: vi.fn().mockResolvedValue(null),
+      dashboardCrowdSec: vi.fn().mockResolvedValue(null),
       streamUrl: vi.fn().mockReturnValue('ws://localhost/logs'),
     },
   };
+}
+
+function renderWithClient(node: React.ReactNode) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } },
+  });
+  return render(<QueryClientProvider client={client}>{node}</QueryClientProvider>);
 }
 
 describe('LogsPage module', () => {
@@ -35,7 +45,7 @@ describe('LogsPage module', () => {
     const api = createLogsApi();
     mockUseApi.mockReturnValue({ api });
 
-    const { container } = render(<LogsPage />);
+    const { container } = renderWithClient(<LogsPage />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Traefik' }));
 

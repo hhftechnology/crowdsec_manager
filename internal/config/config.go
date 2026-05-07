@@ -35,6 +35,10 @@ type Config struct {
 	TraefikErrorLog      string
 	CrowdSecAcquisFile   string
 
+	// GeoIP (MaxMind GeoLite2 City .mmdb). Optional; when missing the
+	// dashboard endpoints still respond but country/coords are blank.
+	GeoIPDBPath string
+
 	// CrowdSec container-internal paths and URLs
 	CrowdSecWhitelistPath    string
 	CrowdSecProfilesPath     string
@@ -103,6 +107,7 @@ func Load() (*Config, error) {
 		TraefikAccessLog:         getEnv("TRAEFIK_ACCESS_LOG", "/var/log/traefik/access.log"),
 		TraefikErrorLog:          getEnv("TRAEFIK_ERROR_LOG", "/var/log/traefik/traefik.log"),
 		CrowdSecAcquisFile:       getEnv("CROWDSEC_ACQUIS_FILE", "/etc/crowdsec/acquis.yaml"),
+		GeoIPDBPath:              getEnv("GEOIP_DB_PATH", "/app/geoip/GeoLite2-City.mmdb"),
 		CrowdSecWhitelistPath:    getEnv("CROWDSEC_WHITELIST_PATH", "/etc/crowdsec/parsers/s02-enrich/mywhitelists.yaml"),
 		CrowdSecProfilesPath:     getEnv("CROWDSEC_PROFILES_PATH", "/etc/crowdsec/profiles.yaml"),
 		CrowdSecNotificationsDir: getEnv("CROWDSEC_NOTIFICATIONS_DIR", "/etc/crowdsec/notifications"),

@@ -9,6 +9,7 @@ import (
 	"crowdsec-manager/internal/cron"
 	"crowdsec-manager/internal/database"
 	"crowdsec-manager/internal/docker"
+	"crowdsec-manager/internal/geoip"
 	"crowdsec-manager/internal/messaging"
 
 	"github.com/gin-gonic/gin"
@@ -89,12 +90,13 @@ func RegisterCaptchaRoutes(router *gin.RouterGroup, dockerClient *docker.Client,
 }
 
 // RegisterLogRoutes configures endpoints for viewing container logs and analyzing Traefik access logs
-func RegisterLogRoutes(router *gin.RouterGroup, dockerClient *docker.Client, db *database.Database, cfg *config.Config) {
+func RegisterLogRoutes(router *gin.RouterGroup, dockerClient *docker.Client, db *database.Database, cfg *config.Config, geo *geoip.Resolver) {
 	logs := router.Group("/logs")
 	{
 		logs.GET("/crowdsec", handlers.GetCrowdSecLogs(dockerClient, cfg))
 		logs.GET("/traefik", handlers.GetTraefikLogs(dockerClient, db, cfg))
 		logs.GET("/traefik/advanced", handlers.AnalyzeTraefikLogsAdvanced(dockerClient, cfg))
+		logs.GET("/:service/dashboard", handlers.AnalyzeServiceDashboard(dockerClient, db, cfg, geo))
 		logs.GET("/:service", handlers.GetServiceLogs(dockerClient))
 		logs.GET("/stream/:service", handlers.StreamLogs(dockerClient))
 		logs.GET("/structured/:service", handlers.GetStructuredLogs(dockerClient, cfg))

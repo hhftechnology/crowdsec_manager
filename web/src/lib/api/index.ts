@@ -78,6 +78,19 @@ export { allowlistAPI } from './allowlist'
 export { scenariosAPI } from './scenarios'
 export { captchaAPI } from './captcha'
 export { logsAPI, structuredLogsAPI } from './logs'
+export { dashboardAPI, DASHBOARD_RANGES } from './dashboard'
+export type {
+  DashboardRange,
+  TraefikDashboard,
+  TraefikBucket,
+  TraefikRecentError,
+  CrowdSecDashboard,
+  CrowdSecBucket,
+  CrowdSecActivity,
+  AcquisitionStat,
+  IPStat,
+  NameValue,
+} from './dashboard'
 export { backupAPI } from './backup'
 export { cronAPI } from './cron'
 export { servicesAPI } from './services'
