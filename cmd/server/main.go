@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/gin-contrib/cors"
+	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
 
 	"crowdsec-manager/internal/api"
@@ -130,6 +131,19 @@ func main() {
 		MaxAge:           12 * time.Hour,
 	}))
 
+	// Compress API responses. Large alert/decision payloads (2-3 MB JSON) were
+	// being truncated by WriteTimeout for remote clients on slow links; gzip
+	// brings them down ~5-10x. SSE and WebSocket endpoints are excluded so
+	// streaming and connection upgrade are not buffered.
+	router.Use(gzip.Gzip(
+		gzip.DefaultCompression,
+		gzip.WithExcludedPathsRegexs([]string{
+			`^/api/events/`,       // SSE and WebSocket events
+			`^/api/terminal/`,     // WebSocket terminal
+			`^/api/logs/stream/`,  // WebSocket log stream
+		}),
+	))
+
 	// Basic health check endpoint for container orchestration
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
@@ -202,7 +216,7 @@ func main() {
 		Addr:         fmt.Sprintf(":%d", cfg.Port),
 		Handler:      router,
 		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
+		WriteTimeout: 60 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
 
