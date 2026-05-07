@@ -320,7 +320,15 @@ export default function Logs() {
               {isLoading && !isStreaming ? (
                 <div className="h-96 bg-muted animate-pulse rounded" />
               ) : (
-                <LogViewer logs={filteredLines} autoScroll />
+                <LogViewer
+                  logs={filteredLines}
+                  autoScroll
+                  emptyMessage={
+                    isStreaming
+                      ? `Stream connected — waiting for new ${selectedService} log lines. If nothing appears, the container may not be writing to stdout for this service.`
+                      : 'No logs to display'
+                  }
+                />
               )}
             </CardContent>
           </Card>

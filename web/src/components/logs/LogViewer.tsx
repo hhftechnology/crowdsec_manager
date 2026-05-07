@@ -10,6 +10,8 @@ interface LogViewerProps {
   maxLines?: number
   autoScroll?: boolean
   className?: string
+  /** Override the empty-state copy (e.g. "Stream connected — waiting…"). */
+  emptyMessage?: string
 }
 
 function LogViewer({
@@ -17,6 +19,7 @@ function LogViewer({
   maxLines = 1000,
   autoScroll = true,
   className,
+  emptyMessage = 'No logs to display',
 }: LogViewerProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const [isAutoScrollEnabled, setIsAutoScrollEnabled] = useState(autoScroll)
@@ -96,7 +99,7 @@ function LogViewer({
       <ScrollArea className="h-[60vh] w-full">
         <div ref={scrollRef} className="h-full overflow-auto p-3">
           {displayedLogs.length === 0 ? (
-            <p className="text-center text-sm text-zinc-500">No logs to display</p>
+            <p className="text-center text-sm text-zinc-500">{emptyMessage}</p>
           ) : (
             <pre className="font-mono text-xs leading-relaxed text-zinc-300 whitespace-pre-wrap break-all">
               {displayedLogs.map((line, i) => (

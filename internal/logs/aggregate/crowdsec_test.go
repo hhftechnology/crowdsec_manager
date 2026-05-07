@@ -120,6 +120,73 @@ func TestBucketCrowdSec_AggregatesScenariosDecisionsErrors(t *testing.T) {
 	}
 }
 
+func TestBucketCrowdSec_ExtractsScenarioFromMessageText(t *testing.T) {
+	// Real-world CrowdSec lines from a docker container — scenario, ip, type
+	// and origin are inside the msg= text rather than as key=value pairs.
+	logs := strings.Join([]string{
+		`time="2026-05-07T10:20:19Z" level=info msg="Ip 20.9.31.235 performed 'crowdsecurity/http-probing' (11 events over 386.892261ms) at 2026-05-07 10:20:19 +0000 UTC"`,
+		`time="2026-05-07T10:20:19Z" level=info msg="(localhost/crowdsec) crowdsecurity/http-probing by ip 20.9.31.235 (US/8075) : 4h captcha on Ip 20.9.31.235" module=db`,
+		`time="2026-05-07T10:20:21Z" level=info msg="(localhost/crowdsec) crowdsecurity/http-crawl-non_statics by ip 20.9.31.235 (US/8075) : 4h captcha on Ip 20.9.31.235" module=db`,
+		`time="2026-05-07T10:20:23Z" level=info msg="(localhost/crowdsec) crowdsecurity/http-backdoors-attempts by ip 20.9.31.235 (US/8075) : 4h ban on Ip 20.9.31.235" module=db`,
+	}, "\n")
+	entries := parseCrowdSec(t, logs)
+	now := time.Date(2026, 5, 7, 11, 0, 0, 0, time.UTC)
+	d := BucketCrowdSec(entries, now.Add(-time.Hour), now, models.Range1h, fakeGeo{})
+
+	if d.Alerts == 0 {
+		t.Fatalf("expected alert detected from 'Ip ... performed' message; got %+v", d)
+	}
+	if d.Decisions < 3 {
+		t.Fatalf("expected at least 3 decisions from db msgs; got %d", d.Decisions)
+	}
+
+	scenarios := map[string]int{}
+	for _, kv := range d.TopScenarios {
+		scenarios[kv.Name] = kv.Value
+	}
+	if scenarios["crowdsecurity/http-probing"] == 0 {
+		t.Fatalf("expected http-probing scenario, got %+v", scenarios)
+	}
+
+	types := map[string]int{}
+	for _, kv := range d.TopDecisionTypes {
+		types[kv.Name] = kv.Value
+	}
+	if types["captcha"] == 0 || types["ban"] == 0 {
+		t.Fatalf("expected captcha and ban decisions; got %+v", types)
+	}
+
+	if len(d.TopSourceIPs) == 0 || d.TopSourceIPs[0].IP != "20.9.31.235" {
+		t.Fatalf("expected 20.9.31.235 as top source IP; got %+v", d.TopSourceIPs)
+	}
+
+	origins := map[string]int{}
+	for _, kv := range d.TopOrigins {
+		origins[kv.Name] = kv.Value
+	}
+	if origins["crowdsec"] == 0 {
+		t.Fatalf("expected crowdsec origin from '(localhost/crowdsec)'; got %+v", origins)
+	}
+}
+
+func TestBucketCrowdSec_LapiNoiseDoesNotProduceFalseDecisions(t *testing.T) {
+	// LAPI access lines should not be miscounted as decisions/alerts.
+	logs := strings.Join([]string{
+		`time="2026-05-07T10:13:09Z" level=info msg="127.0.0.1 - [Thu, 07 May 2026 10:13:09 UTC] \"POST /v1/watchers/login HTTP/1.1 200 63ms \"crowdsec/v1.7.7\" \"" module=lapi`,
+		`time="2026-05-07T10:13:11Z" level=info msg="172.20.0.48 - [Thu, 07 May 2026 10:13:11 UTC] \"GET /v1/decisions?ip=1.2.3.4 HTTP/1.1 200 26ms \"Crowdsec-Bouncer-Traefik-Plugin/1.X.X\" \"" module=lapi`,
+	}, "\n")
+	entries := parseCrowdSec(t, logs)
+	now := time.Date(2026, 5, 7, 11, 0, 0, 0, time.UTC)
+	d := BucketCrowdSec(entries, now.Add(-time.Hour), now, models.Range1h, fakeGeo{})
+
+	if d.Alerts != 0 || d.Decisions != 0 {
+		t.Fatalf("LAPI lines should not be counted as alerts/decisions; got alerts=%d decisions=%d", d.Alerts, d.Decisions)
+	}
+	if d.TotalEvents != 2 {
+		t.Fatalf("expected 2 events, got %d", d.TotalEvents)
+	}
+}
+
 func TestBucketCrowdSec_FiltersByCutoff(t *testing.T) {
 	logs := strings.Join([]string{
 		`time="2026-05-07T09:00:00Z" level=info msg="old" scenario="x" source_ip=1.1.1.1 type=ban`, // before cutoff

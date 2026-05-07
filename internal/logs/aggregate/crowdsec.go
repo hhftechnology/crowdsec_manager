@@ -1,6 +1,7 @@
 package aggregate
 
 import (
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -8,6 +9,18 @@ import (
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/models"
 )
+
+// CrowdSec produces structured-looking log lines but the interesting
+// fields (scenario, source IP, decision type, origin) sit inside the
+// human-readable msg= rather than as key=value pairs. These regexes
+// recover them so the dashboard isn't all zeros against a real engine.
+
+// alertRe matches "Ip 1.2.3.4 performed 'scenario_name' (...)".
+var alertRe = regexp.MustCompile(`(?i)\bIp\s+(\S+)\s+performed\s+'([^']+)'`)
+
+// decisionRe matches "(localhost/crowdsec) scenario_name by ip 1.2.3.4 (US/8075) : 4h captcha on Ip 1.2.3.4".
+// Captures: origin, scenario, ip, country/asn payload, decision type.
+var decisionRe = regexp.MustCompile(`(?i)\(([^/]+)/([^)]+)\)\s+(\S+)\s+by\s+ip\s+(\S+)\s+\(([^)]+)\)\s*:\s*\S+\s+(\w+)\s+on`)
 
 const (
 	maxTopScenarios     = 10
@@ -58,23 +71,49 @@ func BucketCrowdSec(entries []docker.StructuredLogEntry, since, now time.Time, r
 		}
 
 		scenario := e.Fields["scenario"]
+		decisionType := e.Fields["type"]
+		origin := e.Fields["origin"]
+		sourceIP := firstNonEmpty(e.Fields["source_ip"], e.Fields["ip"])
+
+		// Most CrowdSec engine lines carry these as msg= text, not
+		// key=value. Recover them with regex so the dashboard reflects
+		// real activity. msg-extracted decisions also imply a scenario.
+		if m := alertRe.FindStringSubmatch(e.Message); m != nil {
+			if sourceIP == "" {
+				sourceIP = m[1]
+			}
+			if scenario == "" {
+				scenario = m[2]
+			}
+		}
+		if m := decisionRe.FindStringSubmatch(e.Message); m != nil {
+			if origin == "" {
+				origin = m[2] // "crowdsec" from "(localhost/crowdsec)"
+			}
+			if scenario == "" {
+				scenario = m[3]
+			}
+			if sourceIP == "" {
+				sourceIP = m[4]
+			}
+			if decisionType == "" {
+				decisionType = strings.ToLower(m[6])
+			}
+		}
+
 		if scenario != "" {
 			scenarioCounts[scenario]++
 			alerts++
 			b.Alerts++
 		}
-		decisionType := e.Fields["type"]
 		if decisionType != "" {
 			typeCounts[decisionType]++
 			decisions++
 			b.Decisions++
 		}
-		origin := e.Fields["origin"]
 		if origin != "" {
 			originCounts[origin]++
 		}
-
-		sourceIP := firstNonEmpty(e.Fields["source_ip"], e.Fields["ip"])
 		if sourceIP != "" {
 			sourceIPCounts[sourceIP]++
 		}

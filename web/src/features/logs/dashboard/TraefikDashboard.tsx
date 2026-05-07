@@ -204,7 +204,7 @@ function RecentErrorsFeed({ rows }: { rows: TraefikDashboardData['recent_errors'
     return <EmptyState message="No errors in this window — nice!" />
   }
   return (
-    <ul className="divide-y rounded-md border">
+    <ul className="max-h-80 divide-y overflow-y-auto rounded-md border">
       {rows.slice(0, 50).map((row, idx) => (
         <li key={`${row.t}-${idx}`} className="grid grid-cols-12 gap-2 px-3 py-2 text-sm">
           <span className="col-span-3 font-mono text-xs text-muted-foreground">{row.t.slice(11, 19)}</span>
