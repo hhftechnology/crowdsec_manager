@@ -97,6 +97,85 @@ describe('API service route usage', () => {
     );
   });
 
+  it('normalizes decision summary type counts from the backend summary shape', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          success: true,
+          data: {
+            count: 5,
+            types: { Captcha: 4, ban: 1 },
+            scenarios: { 'crowdsecurity/http-probing': 3 },
+          },
+        }),
+        {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        },
+      ),
+    );
+
+    const result = await api.crowdsec.decisionsSummary();
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'https://api.example.com/api/crowdsec/decisions?summary=true',
+      expect.objectContaining({ method: 'GET' }),
+    );
+    expect(result).toEqual({
+      count: 5,
+      types: { captcha: 4, ban: 1 },
+      scenarios: { 'crowdsecurity/http-probing': 3 },
+    });
+  });
+
+  it('accepts legacy by_type decision summary counts', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ success: true, data: { count: 2, by_type: { Captcha: 2 } } }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    const result = await api.crowdsec.decisionsSummary();
+
+    expect(result).toEqual({
+      count: 2,
+      types: { captcha: 2 },
+      scenarios: {},
+    });
+  });
+
+  it('computes decision summary counts from raw decision rows', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          success: true,
+          data: [
+            { id: 1, type: 'CAPTCHA', scenario: 'crowdsecurity/http-probing' },
+            { id: 2, type: 'ban', scenario: 'crowdsecurity/ssh-bf' },
+            { id: 3, type: 'captcha', scenario: 'crowdsecurity/http-probing' },
+            { id: 4 },
+          ],
+        }),
+        {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        },
+      ),
+    );
+
+    const result = await api.crowdsec.decisionsSummary();
+
+    expect(result).toEqual({
+      count: 4,
+      types: { captcha: 2, ban: 1 },
+      scenarios: {
+        'crowdsecurity/http-probing': 2,
+        'crowdsecurity/ssh-bf': 1,
+      },
+    });
+  });
+
   it('uses decision history and reapply routes', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(
@@ -128,6 +207,38 @@ describe('API service route usage', () => {
         body: JSON.stringify({ id: 7, type: 'ban', duration: '24h' }),
       }),
     );
+  });
+
+  it('normalizes allowlist inspect null items to an empty list', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ success: true, data: { name: 'my_allowlist', description: 'trusted', items: null } }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    const result = await api.allowlist.inspect('my_allowlist');
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'https://api.example.com/api/allowlist/inspect/my_allowlist',
+      expect.objectContaining({ method: 'GET' }),
+    );
+    expect(result.items).toEqual([]);
+    expect(result.count).toBe(0);
+  });
+
+  it('uses allowlist item length when inspect count is missing', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ success: true, data: { name: 'my_allowlist', description: 'trusted', items: [{ value: '203.0.113.10' }] } }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    const result = await api.allowlist.inspect('my_allowlist');
+
+    expect(result.items).toEqual([{ value: '203.0.113.10' }]);
+    expect(result.count).toBe(1);
   });
 
   it('parses grouped hub payloads from raw JSON', () => {

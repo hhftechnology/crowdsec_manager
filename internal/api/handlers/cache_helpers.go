@@ -12,12 +12,12 @@ import (
 )
 
 const (
-	crowdSecAnalysisCachePrefix        = "crowdsec:analysis:"
-	alertLastNonEmptyCachePrefix       = "crowdsec:analysis:last-non-empty:"
-	decisionListCachePrefix            = "decisions"
-	analysisCacheTTL                   = 30 * time.Second
-	emptyAnalysisCacheTTL              = 5 * time.Second
-	alertLastNonEmptyAnalysisCacheTTL  = 2 * time.Minute
+	crowdSecAnalysisCachePrefix       = "crowdsec:analysis:"
+	alertLastNonEmptyCachePrefix      = "crowdsec:analysis:last-non-empty:"
+	decisionListCachePrefix           = "decisions"
+	analysisCacheTTL                  = 30 * time.Second
+	emptyAnalysisCacheTTL             = 5 * time.Second
+	alertLastNonEmptyAnalysisCacheTTL = 2 * time.Minute
 )
 
 func optionalCache(ttlCache []*cache.TTLCache) *cache.TTLCache {

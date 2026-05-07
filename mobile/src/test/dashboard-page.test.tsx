@@ -145,11 +145,10 @@ describe('DashboardPage', () => {
       ],
     });
     api.crowdsec.decisionsSummary.mockResolvedValue({
-      count: 4,
-      by_type: {
-        ban: 2,
-        captcha: 1,
-        whitelist: 1,
+      count: 5,
+      types: {
+        captcha: 4,
+        ban: 1,
       },
     });
     api.crowdsec.historyActivity.mockResolvedValue({ buckets: [] });
@@ -167,8 +166,51 @@ describe('DashboardPage', () => {
     expect(within(overviewCard as HTMLElement).getByText('Bans')).toBeInTheDocument();
     expect(within(overviewCard as HTMLElement).getByText('Captchas')).toBeInTheDocument();
     expect(within(overviewCard as HTMLElement).getByText('Whitelisted')).toBeInTheDocument();
+    const bansRow = within(overviewCard as HTMLElement).getByText('Bans').closest('div');
+    const captchasRow = within(overviewCard as HTMLElement).getByText('Captchas').closest('div');
+    expect(within(bansRow as HTMLElement).getByText('1')).toBeInTheDocument();
+    expect(within(captchasRow as HTMLElement).getByText('4')).toBeInTheDocument();
     expect(within(overviewCard as HTMLElement).getByText('crowdsecurity/http-probing')).toBeInTheDocument();
     expect(within(overviewCard as HTMLElement).getByText('crowdsecurity/http-bad-user-agent')).toBeInTheDocument();
+  });
+
+  it('shows count-only decision summaries as other decisions instead of bans', async () => {
+    mockUseApi.mockReset();
+    const api = createBaseApi();
+    api.health.getStack.mockResolvedValue({
+      containers: [{ id: 'abc', name: 'crowdsec', running: true, status: 'running' }],
+      allRunning: true,
+      timestamp: '2026-03-20T12:00:00Z',
+    });
+    api.health.getCrowdsec.mockResolvedValue({
+      status: 'healthy',
+      checks: {},
+      timestamp: '2026-03-20T12:00:00Z',
+    });
+    api.health.getComplete.mockResolvedValue({
+      bouncers: [],
+      decisions: [],
+      timestamp: '2026-03-20T12:00:00Z',
+    } as unknown as DiagnosticResult);
+    api.ip.getPublicIP.mockResolvedValue({ ip: '1.2.3.4' });
+    api.crowdsec.alertsAnalysis.mockResolvedValue({ count: 0, alerts: [] });
+    api.crowdsec.decisionsSummary.mockResolvedValue({ count: 3 });
+    api.crowdsec.historyActivity.mockResolvedValue({ buckets: [] });
+    mockUseApi.mockReturnValue({ api });
+
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('security overview')).toBeInTheDocument();
+    });
+
+    const overviewCard = screen.getByText('security overview').closest('.rounded-lg');
+    const bansRow = within(overviewCard as HTMLElement).getByText('Bans').closest('div');
+    const captchasRow = within(overviewCard as HTMLElement).getByText('Captchas').closest('div');
+    const otherRow = within(overviewCard as HTMLElement).getByText('Other').closest('div');
+    expect(within(bansRow as HTMLElement).getByText('0')).toBeInTheDocument();
+    expect(within(captchasRow as HTMLElement).getByText('0')).toBeInTheDocument();
+    expect(within(otherRow as HTMLElement).getByText('3')).toBeInTheDocument();
   });
 
   it('shows retryable inline error when critical requests fail', async () => {

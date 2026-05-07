@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import api from '@/lib/api'
@@ -98,6 +98,19 @@ interface AlertFilters {
   includeAll?: boolean
 }
 
+type AlertsAnalysisData = {
+  alerts: CrowdSecAlert[]
+  count: number
+}
+
+type LastNonEmptyAlerts = {
+  key: string
+  data: AlertsAnalysisData
+  updatedAt: number
+}
+
+const ALERT_TRANSIENT_EMPTY_GRACE_MS = 2 * 60 * 1000
+
 const FILTER_KEYS = [
   'id', 'since', 'until', 'ip', 'range',
   'scope', 'value', 'scenario', 'type', 'origin', 'country', 'includeAll',
@@ -146,6 +159,18 @@ function escapeCsvField(field: string | number | undefined | null): string {
 function truncate(str: string | undefined | null, max: number): string {
   if (!str) return '-'
   return str.length > max ? str.slice(0, max) + '...' : str
+}
+
+function stableAlertFilterKey(filters: AlertFilters): string {
+  return JSON.stringify(
+    Object.entries(filters)
+      .filter(([, value]) => value !== undefined && value !== '' && value !== false)
+      .sort(([a], [b]) => a.localeCompare(b)),
+  )
+}
+
+function hasAlerts(data: AlertsAnalysisData | null | undefined): data is AlertsAnalysisData {
+  return Array.isArray(data?.alerts) && data.alerts.length > 0
 }
 
 /** Format an event's meta array into a readable key-value display. */
@@ -492,19 +517,46 @@ export default function AlertAnalysis() {
   const [deleteAlertId, setDeleteAlertId] = useState<number | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const { query, setQuery } = useSearch()
+  const activeFilterKey = useMemo(() => stableAlertFilterKey(activeFilters), [activeFilters])
+  const lastNonEmptyAlertsRef = useRef<LastNonEmptyAlerts | null>(null)
 
   // ---- Data fetching ----
 
-  const { data: alertsData, isLoading, isError, error, refetch } = useQuery({
-    queryKey: ['alerts-analysis', activeFilters],
+  const { data: rawAlertsData, isLoading, isFetching, isError, error, refetch } = useQuery<AlertsAnalysisData | null>({
+    queryKey: ['alerts-analysis', activeFilterKey],
     queryFn: async () => {
       const response = await api.crowdsec.getAlertsAnalysis(activeFilters)
       return response.data.data ?? null
     },
     refetchInterval: 30000,
     staleTime: 30000,
-    placeholderData: (previousData) => previousData,
+    placeholderData: (previousData, previousQuery) =>
+      previousQuery?.queryKey?.[1] === activeFilterKey ? previousData : undefined,
   })
+
+  useEffect(() => {
+    if (!hasAlerts(rawAlertsData)) return
+    lastNonEmptyAlertsRef.current = {
+      key: activeFilterKey,
+      data: rawAlertsData,
+      updatedAt: Date.now(),
+    }
+  }, [activeFilterKey, rawAlertsData])
+
+  const alertsData = useMemo(() => {
+    if (hasAlerts(rawAlertsData)) return rawAlertsData
+    const lastNonEmpty = lastNonEmptyAlertsRef.current
+    if (
+      lastNonEmpty &&
+      lastNonEmpty.key === activeFilterKey &&
+      Date.now() - lastNonEmpty.updatedAt <= ALERT_TRANSIENT_EMPTY_GRACE_MS
+    ) {
+      return lastNonEmpty.data
+    }
+    return rawAlertsData ?? null
+  }, [activeFilterKey, rawAlertsData])
+
+  const suppressEmptyState = isFetching && !isLoading && !hasAlerts(rawAlertsData)
 
   // ---- Client-side search filtering (includes country + AS) ----
 
@@ -754,8 +806,8 @@ export default function AlertAnalysis() {
                   <span className="ml-1 text-muted-foreground">x</span>
                 </Button>
               )}
-              <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isLoading}>
-                <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+              <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
+                <RefreshCw className={`h-4 w-4 mr-2 ${isFetching ? 'animate-spin' : ''}`} />
                 Refresh
               </Button>
               <Button variant="outline" size="sm" onClick={handleExport}>
@@ -933,6 +985,8 @@ export default function AlertAnalysis() {
                 )}
               </TabsContent>
             </Tabs>
+          ) : suppressEmptyState ? (
+            <PageLoader message="Refreshing alerts..." />
           ) : (
             <EmptyState
               icon={AlertCircle}

@@ -325,6 +325,9 @@ export default function AllowlistsPage() {
 }
 
 function AllowlistDetailPanel({ inspected }: { inspected: AllowlistInspectResponse }) {
+  const items = Array.isArray(inspected.items) ? inspected.items : [];
+  const count = typeof inspected.count === 'number' ? inspected.count : items.length;
+
   return (
     <div className="rounded-lg border border-hairline bg-canvas p-md space-y-sm">
       <div className="flex items-start justify-between gap-sm">
@@ -332,7 +335,7 @@ function AllowlistDetailPanel({ inspected }: { inspected: AllowlistInspectRespon
           <h3 className="font-display text-title-md text-ink">{inspected.name}</h3>
           {inspected.description && <p className="text-caption text-muted">{inspected.description}</p>}
         </div>
-        <Pill tone="cream">{inspected.count} entries</Pill>
+        <Pill tone="cream">{count} entries</Pill>
       </div>
 
       {inspected.created_at && (
@@ -344,10 +347,10 @@ function AllowlistDetailPanel({ inspected }: { inspected: AllowlistInspectRespon
 
       <Separator />
 
-      {inspected.items.length > 0 ? (
+      {items.length > 0 ? (
         <ScrollArea className="max-h-[40vh]">
           <div className="space-y-xs">
-            {inspected.items.map((entry: AllowlistEntry, i: number) => (
+            {items.map((entry: AllowlistEntry, i: number) => (
               <div
                 key={entry.value + i}
                 className="rounded-md bg-surface-card p-sm flex items-center justify-between gap-sm"

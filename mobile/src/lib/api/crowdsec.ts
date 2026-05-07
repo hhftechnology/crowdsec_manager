@@ -14,6 +14,70 @@ import type {
   BulkDeleteDecisionsResponse,
 } from './types';
 
+export interface DecisionsSummary {
+  count: number;
+  types: Record<string, number>;
+  scenarios: Record<string, number>;
+}
+
+interface DecisionsSummaryPayload {
+  decisions?: Decision[];
+  count?: number;
+  total?: number;
+  types?: Record<string, unknown>;
+  by_type?: Record<string, unknown>;
+  scenarios?: Record<string, unknown>;
+}
+
+function normalizeCountMap(input: unknown, lowerCaseKeys = true): Record<string, number> {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return {};
+
+  const out: Record<string, number> = {};
+  for (const [rawKey, rawValue] of Object.entries(input)) {
+    const trimmedKey = rawKey.trim();
+    if (!trimmedKey) continue;
+
+    const key = lowerCaseKeys ? trimmedKey.toLowerCase() : trimmedKey;
+    const value = typeof rawValue === 'number' ? rawValue : Number(rawValue);
+    if (!Number.isFinite(value) || value <= 0) continue;
+
+    out[key] = (out[key] ?? 0) + value;
+  }
+
+  return out;
+}
+
+function summarizeDecisionRows(decisions: Decision[]): DecisionsSummary {
+  const types: Record<string, number> = {};
+  const scenarios: Record<string, number> = {};
+
+  for (const decision of decisions) {
+    const type = decision.type?.trim().toLowerCase();
+    if (type) types[type] = (types[type] ?? 0) + 1;
+
+    const scenario = decision.scenario?.trim();
+    if (scenario) scenarios[scenario] = (scenarios[scenario] ?? 0) + 1;
+  }
+
+  return { count: decisions.length, types, scenarios };
+}
+
+function normalizeDecisionsSummary(payload: DecisionsSummaryPayload | null | undefined): DecisionsSummary {
+  if (!payload) return { count: 0, types: {}, scenarios: {} };
+
+  const decisions = Array.isArray(payload.decisions) ? payload.decisions : [];
+  const fallback = summarizeDecisionRows(decisions);
+  const types = normalizeCountMap(payload.types);
+  const legacyTypes = normalizeCountMap(payload.by_type);
+  const scenarios = normalizeCountMap(payload.scenarios, false);
+
+  return {
+    count: payload.count ?? payload.total ?? fallback.count,
+    types: Object.keys(types).length > 0 ? types : Object.keys(legacyTypes).length > 0 ? legacyTypes : fallback.types,
+    scenarios: Object.keys(scenarios).length > 0 ? scenarios : fallback.scenarios,
+  };
+}
+
 export function createCrowdsecApi(client: ApiClient) {
   return {
     async decisions(params?: Record<string, string | number | boolean | undefined>) {
@@ -97,10 +161,12 @@ export function createCrowdsecApi(client: ApiClient) {
     async reapplyDecision(body: ReapplyDecisionRequest) {
       return client.post<{ already_active?: boolean; decision_id?: number; message?: string }>('/api/crowdsec/decisions/history/reapply', { body });
     },
-    async decisionsSummary() {
-      const payload = (await client.get<DecisionsResponse | Decision[]>('/api/crowdsec/decisions', { params: { summary: 'true' } })).data;
-      if (Array.isArray(payload)) return { count: payload.length };
-      return { count: payload.count ?? (payload.decisions?.length ?? 0) };
+    async decisionsSummary(): Promise<DecisionsSummary> {
+      const payload = (
+        await client.get<DecisionsSummaryPayload | Decision[]>('/api/crowdsec/decisions', { params: { summary: 'true' } })
+      ).data;
+      if (Array.isArray(payload)) return summarizeDecisionRows(payload);
+      return normalizeDecisionsSummary(payload);
     },
     async historyActivity(params: { window: '24h' | '7d'; bucket: 'hour' | 'day' }) {
       return (await client.get<HistoryActivityResponse>('/api/crowdsec/history/activity', { params })).data;

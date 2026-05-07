@@ -28,6 +28,7 @@ func TestCrowdSecAnalysisCacheKeyStableAndHostAware(t *testing.T) {
 func TestInvalidateCrowdSecDataCache(t *testing.T) {
 	ttlCache := cache.New()
 	ttlCache.Set("crowdsec:analysis:alerts:host=default:query=since=7d", "alerts", time.Minute)
+	ttlCache.Set("crowdsec:analysis:last-non-empty:alerts:host=default:query=since=7d", "stale-alerts", time.Minute)
 	ttlCache.Set("crowdsec:analysis:decisions:host=default:query=type=ban", "decisions", time.Minute)
 	ttlCache.Set("decisions-summary", "summary", time.Minute)
 	ttlCache.Set("metrics", "metrics", time.Minute)
@@ -36,6 +37,9 @@ func TestInvalidateCrowdSecDataCache(t *testing.T) {
 
 	if _, ok := ttlCache.Get("crowdsec:analysis:alerts:host=default:query=since=7d"); ok {
 		t.Fatalf("expected alerts analysis cache to be invalidated")
+	}
+	if _, ok := ttlCache.Get("crowdsec:analysis:last-non-empty:alerts:host=default:query=since=7d"); ok {
+		t.Fatalf("expected last non-empty alerts analysis cache to be invalidated")
 	}
 	if _, ok := ttlCache.Get("crowdsec:analysis:decisions:host=default:query=type=ban"); ok {
 		t.Fatalf("expected decisions analysis cache to be invalidated")

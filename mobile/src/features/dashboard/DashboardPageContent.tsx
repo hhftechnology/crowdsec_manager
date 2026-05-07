@@ -19,6 +19,37 @@ import type {
   AlertsResponse,
 } from '@/lib/api';
 
+const allowlistDecisionTypes = ['whitelist', 'allow', 'allowlist'];
+
+interface DashboardDecisionSummary {
+  count?: number;
+  types?: Record<string, number>;
+  by_type?: Record<string, number>;
+}
+
+function normalizeDecisionTypeCounts(input: Record<string, number> | undefined): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const [rawKey, value] of Object.entries(input ?? {})) {
+    const key = rawKey.trim().toLowerCase();
+    if (!key || !Number.isFinite(value) || value <= 0) continue;
+    out[key] = (out[key] ?? 0) + value;
+  }
+  return out;
+}
+
+function countDecisionRows(decisions: Array<{ type?: string | null }>): Record<string, number> {
+  const types: Record<string, number> = {};
+  for (const decision of decisions) {
+    const type = decision.type?.trim().toLowerCase();
+    if (type) types[type] = (types[type] ?? 0) + 1;
+  }
+  return types;
+}
+
+function sumDecisionTypes(types: Record<string, number>, names: string[]): number {
+  return names.reduce((sum, name) => sum + (types[name] ?? 0), 0);
+}
+
 export default function DashboardPage() {
   const { api } = useApi();
   const [loading, setLoading] = useState(true);
@@ -61,17 +92,12 @@ export default function DashboardPage() {
     if (completeRes.status === 'fulfilled') setComplete(completeRes.value);
 
     if (decisionsSummaryRes.status === 'fulfilled' && decisionsSummaryRes.value) {
-      setDecisionsTotal(decisionsSummaryRes.value.count);
-      const types = (decisionsSummaryRes.value as { by_type?: Record<string, number> }).by_type ?? {};
-      setDecisionTypes(types);
+      const summary = decisionsSummaryRes.value as DashboardDecisionSummary;
+      setDecisionsTotal(summary.count ?? 0);
+      setDecisionTypes(normalizeDecisionTypeCounts(summary.types ?? summary.by_type));
     } else if (completeRes.status === 'fulfilled' && Array.isArray(completeRes.value.decisions)) {
       setDecisionsTotal(completeRes.value.decisions.length);
-      const types: Record<string, number> = {};
-      for (const d of completeRes.value.decisions) {
-        const t = (d.type ?? 'ban').toLowerCase();
-        types[t] = (types[t] ?? 0) + 1;
-      }
-      setDecisionTypes(types);
+      setDecisionTypes(countDecisionRows(completeRes.value.decisions));
     } else {
       setDecisionsTotal(0);
       setDecisionTypes({});
@@ -125,9 +151,17 @@ export default function DashboardPage() {
 
   const knownBans = decisionTypes['ban'] ?? 0;
   const captchas = decisionTypes['captcha'] ?? 0;
-  const whitelisted = decisionTypes['whitelist'] ?? decisionTypes['allow'] ?? 0;
+  const whitelisted = sumDecisionTypes(decisionTypes, allowlistDecisionTypes);
   const categorized = knownBans + captchas + whitelisted;
-  const bans = categorized === 0 && decisionsTotal > 0 ? decisionsTotal : knownBans;
+  const otherDecisions = Math.max(decisionsTotal - categorized, 0);
+  const decisionSegments: Array<{ value: number; color: 'primary' | 'accent-amber' | 'accent-teal' | 'warning' }> = [
+    { value: knownBans, color: 'primary' },
+    { value: captchas, color: 'accent-amber' },
+    { value: whitelisted, color: 'accent-teal' },
+  ];
+  if (otherDecisions > 0) {
+    decisionSegments.push({ value: otherDecisions, color: 'warning' });
+  }
 
   const trafficBars = activityBuckets.length
     ? activityBuckets.slice(-16).map((b) => (b.decisions ?? 0) + (b.alerts ?? 0))
@@ -228,16 +262,13 @@ export default function DashboardPage() {
               <div className="mt-md grid grid-cols-[auto_1fr] gap-md items-center">
                 <Donut
                   size={96}
-                  segments={[
-                    { value: bans, color: 'primary' },
-                    { value: captchas, color: 'accent-amber' },
-                    { value: whitelisted, color: 'accent-teal' },
-                  ]}
+                  segments={decisionSegments}
                 />
                 <div className="space-y-sm">
-                  <LegendRow color="primary" label="Bans" value={bans} />
+                  <LegendRow color="primary" label="Bans" value={knownBans} />
                   <LegendRow color="accent-amber" label="Captchas" value={captchas} />
                   <LegendRow color="accent-teal" label="Whitelisted" value={whitelisted} />
+                  {otherDecisions > 0 && <LegendRow color="warning" label="Other" value={otherDecisions} />}
                 </div>
               </div>
               {topScenarioEntries.length > 0 && (
@@ -329,11 +360,12 @@ function StatBlock({
   );
 }
 
-function LegendRow({ color, label, value }: { color: 'primary' | 'accent-amber' | 'accent-teal'; label: string; value: number }) {
+function LegendRow({ color, label, value }: { color: 'primary' | 'accent-amber' | 'accent-teal' | 'warning'; label: string; value: number }) {
   const colorClass = {
     primary: 'bg-primary',
     'accent-amber': 'bg-accent-amber',
     'accent-teal': 'bg-accent-teal',
+    warning: 'bg-warning',
   }[color];
 
   return (
