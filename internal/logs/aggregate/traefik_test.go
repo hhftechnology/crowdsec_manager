@@ -154,6 +154,38 @@ func TestBucketTraefik_JSONFormatPopulatesExtras(t *testing.T) {
 	}
 }
 
+func TestBucketTraefik_SlowestEndpointsExcludesStreaming(t *testing.T) {
+	// A long-lived WebSocket stream (5 min) and a regular REST call (800 ms).
+	// The stream's duration is connection lifetime, not latency, and must not
+	// appear in SlowestEndpoints.
+	logs := strings.Join([]string{
+		`{"ClientHost":"1.2.3.4","DownstreamStatus":101,"RequestMethod":"GET","RequestHost":"example.com","RequestPath":"/api/logs/stream/traefik","Duration":300000000000,"StartUTC":"2026-05-07T11:50:00Z"}`,
+		`{"ClientHost":"5.6.7.8","DownstreamStatus":200,"RequestMethod":"GET","RequestHost":"example.com","RequestPath":"/api/health","Duration":800000000,"StartUTC":"2026-05-07T11:55:00Z"}`,
+		`{"ClientHost":"9.9.9.9","DownstreamStatus":200,"RequestMethod":"GET","RequestHost":"example.com","RequestPath":"/api/events/sse","Duration":120000000000,"StartUTC":"2026-05-07T11:56:00Z"}`,
+		`{"ClientHost":"9.9.9.9","DownstreamStatus":101,"RequestMethod":"GET","RequestHost":"example.com","RequestPath":"/api/terminal/abc","Duration":60000000000,"StartUTC":"2026-05-07T11:57:00Z"}`,
+	}, "\n")
+	now := time.Date(2026, 5, 7, 12, 0, 0, 0, time.UTC)
+	d := BucketTraefikRaw(logs, now.Add(-time.Hour), now, models.Range1h, fakeGeo{})
+
+	if d.Format != "json" {
+		t.Fatalf("expected json format, got %q", d.Format)
+	}
+	if d.TotalRequests != 4 {
+		t.Fatalf("streaming requests must still count toward totals; got %d", d.TotalRequests)
+	}
+	if len(d.SlowestEndpoints) != 1 {
+		t.Fatalf("expected exactly one non-streaming endpoint; got %+v", d.SlowestEndpoints)
+	}
+	if d.SlowestEndpoints[0].Name != "/api/health" {
+		t.Fatalf("expected /api/health as the only slowest endpoint; got %+v", d.SlowestEndpoints)
+	}
+	for _, kv := range d.SlowestEndpoints {
+		if isStreamingPath(kv.Name) {
+			t.Fatalf("streaming path %q must not appear in SlowestEndpoints", kv.Name)
+		}
+	}
+}
+
 func TestBucketTraefik_GranularityChoice(t *testing.T) {
 	// 24h range should bucket by hour, not minute.
 	now := time.Date(2026, 5, 7, 12, 0, 0, 0, time.UTC)

@@ -238,7 +238,9 @@ func aggregateTraefikJSON(rows []traefikJSON, since, now time.Time, rng models.D
 
 		durationMs := int(row.Duration / int64(time.Millisecond))
 		path := row.RequestPath
-		if path != "" {
+		// Skip long-lived streaming endpoints: row.Duration is connection
+		// lifetime, not response latency, so they always dominate the chart.
+		if path != "" && !isStreamingPath(path) {
 			if cur, ok := endpointMaxMs[path]; !ok || durationMs > cur {
 				endpointMaxMs[path] = durationMs
 			}
@@ -405,6 +407,16 @@ func sortedRecentErrors(rows []models.TraefikRecentError, limit int) []models.Tr
 		rows = rows[:limit]
 	}
 	return rows
+}
+
+// isStreamingPath reports whether a Traefik request path is a long-lived
+// stream (WebSocket / SSE) where row.Duration measures connection lifetime
+// rather than response latency. Mirrors the gzip-exclusion list in
+// cmd/server/main.go — keep them in sync.
+func isStreamingPath(p string) bool {
+	return strings.HasPrefix(p, "/api/logs/stream/") ||
+		strings.HasPrefix(p, "/api/events/") ||
+		strings.HasPrefix(p, "/api/terminal/")
 }
 
 // extractCLFMethod pulls METHOD from a CLF request line e.g. `GET /a HTTP/1.1`.

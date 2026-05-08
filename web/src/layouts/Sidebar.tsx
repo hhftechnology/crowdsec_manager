@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/tooltip"
 import { Badge } from "@/components/ui/badge"
 import { navigation } from '@/layouts/navigation'
+import { UpdateAvailableCard } from '@/components/sidebar/UpdateAvailableCard'
 
 interface SidebarProps {
   isCollapsed: boolean
@@ -111,6 +112,11 @@ export default function Sidebar({ isCollapsed, onNavigate }: SidebarProps) {
 
       {/* Footer with Copyright */}
       <div className="px-3 py-2 shrink-0">
+        {!isCollapsed && (
+          <div className="mb-3">
+            <UpdateAvailableCard collapsed={isCollapsed} />
+          </div>
+        )}
         <Separator className="mb-3 bg-sidebar-border" />
         <div className={cn("flex items-center", isCollapsed ? "justify-center" : "justify-between gap-2")}>
           {!isCollapsed && (
