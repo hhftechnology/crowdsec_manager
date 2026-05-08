@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/tooltip"
 import { Badge } from "@/components/ui/badge"
 import { navigation } from '@/layouts/navigation'
-import { UpdateAvailableCard } from '@/components/sidebar/UpdateAvailableCard'
+import { ManagerUpdateCard } from '@/components/sidebar/ManagerUpdateCard'
 
 interface SidebarProps {
   isCollapsed: boolean
@@ -114,7 +114,7 @@ export default function Sidebar({ isCollapsed, onNavigate }: SidebarProps) {
       <div className="px-3 py-2 shrink-0">
         {!isCollapsed && (
           <div className="mb-3">
-            <UpdateAvailableCard collapsed={isCollapsed} />
+            <ManagerUpdateCard collapsed={isCollapsed} />
           </div>
         )}
         <Separator className="mb-3 bg-sidebar-border" />
