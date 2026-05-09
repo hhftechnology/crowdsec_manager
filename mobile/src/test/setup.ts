@@ -23,18 +23,30 @@ vi.mock('@capacitor/app', () => ({
   },
 }));
 
-const capacitorPrefsStore = new Map<string, string>();
-vi.mock('@capacitor/preferences', () => ({
-  Preferences: {
-    get: vi.fn(async ({ key }: { key: string }) => ({
-      value: capacitorPrefsStore.has(key) ? capacitorPrefsStore.get(key)! : null,
-    })),
+const capacitorSecureStore = new Map<string, string>();
+vi.mock('capacitor-secure-storage-plugin', () => ({
+  SecureStoragePlugin: {
+    // get() rejects when missing on the real plugin — mirror that here so the
+    // wrapper's catch-and-null translation gets exercised.
+    get: vi.fn(async ({ key }: { key: string }) => {
+      if (!capacitorSecureStore.has(key)) {
+        throw new Error(`Item with key "${key}" not found.`);
+      }
+      return { value: capacitorSecureStore.get(key)! };
+    }),
     set: vi.fn(async ({ key, value }: { key: string; value: string }) => {
-      capacitorPrefsStore.set(key, value);
+      capacitorSecureStore.set(key, value);
+      return { value: true };
     }),
     remove: vi.fn(async ({ key }: { key: string }) => {
-      capacitorPrefsStore.delete(key);
+      const existed = capacitorSecureStore.delete(key);
+      return { value: existed };
     }),
+    clear: vi.fn(async () => {
+      capacitorSecureStore.clear();
+      return { value: true };
+    }),
+    keys: vi.fn(async () => ({ value: Array.from(capacitorSecureStore.keys()) })),
   },
 }));
 
@@ -52,7 +64,7 @@ afterEach(async () => {
     id: 'com.crowdsec.manager.mobile',
     build: '1',
   });
-  capacitorPrefsStore.clear();
+  capacitorSecureStore.clear();
   window.localStorage.clear();
   document.body.removeAttribute('data-scroll-locked');
   document.body.removeAttribute('style');
