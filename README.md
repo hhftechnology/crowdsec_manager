@@ -13,9 +13,6 @@ A web-based management interface for CrowdSec — decisions, alerts, allowlists,
 ## Mobile App
 
 <div align="center">
-
-
-
 <table>
   <tr>
     <td align="center">
@@ -99,7 +96,7 @@ Native iOS and Android app. Supports **Pangolin** (token-based remote access) an
 
 ## Release
 
-- Version: `2.3.4`
+- Version: `2.4.0`
 - Pangolin image: `hhftechnology/crowdsec-manager:latest` — full stack with Traefik, Pangolin, Gerbil
 - Independent image: `hhftechnology/crowdsec-manager:independent` — CrowdSec only, no Traefik
 - Image size (linux/amd64): <!-- IMAGE_SIZE_START -->44MB<!-- IMAGE_SIZE_END -->
@@ -128,6 +125,8 @@ Native iOS and Android app. Supports **Pangolin** (token-based remote access) an
       - /root/docker-compose.yml:/app/docker-compose.yml # pangolin compose yml
       - ./crowdsec-manager/backups:/app/backups
       - ./crowdsec-manager/data:/app/data
+      # Optional GeoIP database for enriched dashboard location data
+      - ./geoip/GeoLite2-City.mmdb:/app/geoip/GeoLite2-City.mmdb:ro
     depends_on:
       crowdsec:
         condition: service_healthy
