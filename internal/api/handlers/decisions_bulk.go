@@ -13,8 +13,10 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+const maxBulkDeleteDecisionIDs = 100
+
 // BulkDeleteResult reports the outcome of a bulk delete operation.
-// SuccessCount and FailureCount always sum to the number of requested IDs.
+// SuccessCount and FailureCount always sum to the number of unique requested IDs.
 // The response is always HTTP 200 — partial failures are reported in the body.
 type BulkDeleteResult struct {
 	SuccessCount int                 `json:"success_count"`
@@ -61,14 +63,22 @@ func BulkDeleteDecisions(executor cscliExecutor, cfg *config.Config, ttlCache ..
 			})
 			return
 		}
+		ids := uniqueDecisionIDs(req.IDs)
+		if len(ids) > maxBulkDeleteDecisionIDs {
+			c.JSON(http.StatusBadRequest, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("maximum %d ids per request", maxBulkDeleteDecisionIDs),
+			})
+			return
+		}
 
 		result := BulkDeleteResult{
-			Deleted: make([]int64, 0, len(req.IDs)),
+			Deleted: make([]int64, 0, len(ids)),
 			Failed:  make([]BulkDeleteFailure, 0),
 		}
 		ctx := c.Request.Context()
 
-		for _, id := range req.IDs {
+		for _, id := range ids {
 			idStr := strconv.FormatInt(id, 10)
 			cmd := []string{"cscli", "decisions", "delete", "--id", idStr}
 			logger.Info("Bulk deleting decision", "id", id)
@@ -104,8 +114,21 @@ func BulkDeleteDecisions(executor cscliExecutor, cfg *config.Config, ttlCache ..
 		}
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
-			Message: fmt.Sprintf("Deleted %d of %d decisions", result.SuccessCount, len(req.IDs)),
+			Message: fmt.Sprintf("Deleted %d of %d decisions", result.SuccessCount, len(ids)),
 			Data:    result,
 		})
 	}
+}
+
+func uniqueDecisionIDs(ids []int64) []int64 {
+	seen := make(map[int64]struct{}, len(ids))
+	unique := make([]int64, 0, len(ids))
+	for _, id := range ids {
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		unique = append(unique, id)
+	}
+	return unique
 }

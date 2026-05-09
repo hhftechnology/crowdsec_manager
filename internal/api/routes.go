@@ -90,13 +90,17 @@ func RegisterCaptchaRoutes(router *gin.RouterGroup, dockerClient *docker.Client,
 }
 
 // RegisterLogRoutes configures endpoints for viewing container logs and analyzing Traefik access logs
-func RegisterLogRoutes(router *gin.RouterGroup, dockerClient *docker.Client, db *database.Database, cfg *config.Config, geo *geoip.Resolver) {
+func RegisterLogRoutes(router *gin.RouterGroup, dockerClient *docker.Client, db *database.Database, cfg *config.Config, geo *geoip.Resolver, ttlCache ...*cache.TTLCache) {
+	var c *cache.TTLCache
+	if len(ttlCache) > 0 {
+		c = ttlCache[0]
+	}
 	logs := router.Group("/logs")
 	{
 		logs.GET("/crowdsec", handlers.GetCrowdSecLogs(dockerClient, cfg))
 		logs.GET("/traefik", handlers.GetTraefikLogs(dockerClient, db, cfg))
 		logs.GET("/traefik/advanced", handlers.AnalyzeTraefikLogsAdvanced(dockerClient, cfg))
-		logs.GET("/:service/dashboard", handlers.AnalyzeServiceDashboard(dockerClient, db, cfg, geo))
+		logs.GET("/:service/dashboard", handlers.AnalyzeServiceDashboard(dockerClient, db, cfg, geo, c))
 		logs.GET("/:service", handlers.GetServiceLogs(dockerClient))
 		logs.GET("/stream/:service", handlers.StreamLogs(dockerClient))
 		logs.GET("/structured/:service", handlers.GetStructuredLogs(dockerClient, cfg))

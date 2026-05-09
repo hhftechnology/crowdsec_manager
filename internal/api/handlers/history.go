@@ -299,7 +299,13 @@ func ReapplyDecision(dockerClient *docker.Client, cfg *config.Config) gin.Handle
 			return
 		}
 
-		cmd := buildReapplyCmd(record.Scope, record.Value, req.Type, normalizedDuration, req.Reason)
+		cmd := buildReapplyCmd(reapplyDecisionCommandInput{
+			Scope:        record.Scope,
+			Value:        record.Value,
+			DecisionType: req.Type,
+			Duration:     normalizedDuration,
+			Reason:       req.Reason,
+		})
 		logger.Info("Reapplying decision from history", "id", req.ID, "value", record.Value, "type", req.Type)
 
 		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, cmd)
@@ -394,7 +400,13 @@ func BulkReapplyDecisions(dockerClient *docker.Client, cfg *config.Config) gin.H
 				continue
 			}
 
-			cmd := buildReapplyCmd(record.Scope, record.Value, req.Type, normalizedDuration, req.Reason)
+			cmd := buildReapplyCmd(reapplyDecisionCommandInput{
+				Scope:        record.Scope,
+				Value:        record.Value,
+				DecisionType: req.Type,
+				Duration:     normalizedDuration,
+				Reason:       req.Reason,
+			})
 			output, execErr := dockerClient.ExecCommand(cfg.CrowdsecContainerName, cmd)
 			if execErr != nil {
 				result.Failed++
@@ -416,20 +428,28 @@ func BulkReapplyDecisions(dockerClient *docker.Client, cfg *config.Config) gin.H
 	}
 }
 
+type reapplyDecisionCommandInput struct {
+	Scope        string
+	Value        string
+	DecisionType string
+	Duration     string
+	Reason       string
+}
+
 // buildReapplyCmd constructs the cscli decisions add command for reapplication.
 // Uses --ip for Ip scope, --scope/--value otherwise.
-func buildReapplyCmd(scope, value, decisionType, duration, reason string) []string {
-	cmd := []string{"cscli", "decisions", "add", "--type", decisionType}
-	if strings.EqualFold(scope, "Ip") || scope == "" {
-		cmd = append(cmd, "--ip", value)
+func buildReapplyCmd(input reapplyDecisionCommandInput) []string {
+	cmd := []string{"cscli", "decisions", "add", "--type", input.DecisionType}
+	if strings.EqualFold(input.Scope, "Ip") || input.Scope == "" {
+		cmd = append(cmd, "--ip", input.Value)
 	} else {
-		cmd = append(cmd, "--scope", scope, "--value", value)
+		cmd = append(cmd, "--scope", input.Scope, "--value", input.Value)
 	}
-	if duration != "" {
-		cmd = append(cmd, "--duration", duration)
+	if input.Duration != "" {
+		cmd = append(cmd, "--duration", input.Duration)
 	}
-	if reason != "" {
-		cmd = append(cmd, "--reason", reason)
+	if input.Reason != "" {
+		cmd = append(cmd, "--reason", input.Reason)
 	}
 	return cmd
 }
@@ -506,7 +526,13 @@ func ReapplyDecisionWithExecutorAndRecord(executor cscliExecutor, cfg *config.Co
 			return
 		}
 
-		cmd := buildReapplyCmd(record.Scope, record.Value, req.Type, normalizedDuration, req.Reason)
+		cmd := buildReapplyCmd(reapplyDecisionCommandInput{
+			Scope:        record.Scope,
+			Value:        record.Value,
+			DecisionType: req.Type,
+			Duration:     normalizedDuration,
+			Reason:       req.Reason,
+		})
 		output, err := executor.ExecCommand(cfg.CrowdsecContainerName, cmd)
 		if err != nil {
 			details := output

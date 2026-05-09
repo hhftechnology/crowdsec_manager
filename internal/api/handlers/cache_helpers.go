@@ -15,7 +15,9 @@ const (
 	crowdSecAnalysisCachePrefix       = "crowdsec:analysis:"
 	alertLastNonEmptyCachePrefix      = "crowdsec:analysis:last-non-empty:"
 	decisionListCachePrefix           = "decisions"
+	serviceDashboardCachePrefix       = "logs:dashboard:"
 	analysisCacheTTL                  = 30 * time.Second
+	serviceDashboardCacheTTL          = 30 * time.Second
 	emptyAnalysisCacheTTL             = 5 * time.Second
 	alertLastNonEmptyAnalysisCacheTTL = 2 * time.Minute
 )
@@ -33,6 +35,10 @@ func crowdSecAnalysisCacheKey(c *gin.Context, endpoint string) string {
 
 func alertLastNonEmptyAnalysisCacheKey(c *gin.Context) string {
 	return alertLastNonEmptyCachePrefix + crowdSecAnalysisCacheSuffix(c, "alerts")
+}
+
+func serviceDashboardCacheKey(c *gin.Context, service string) string {
+	return serviceDashboardCachePrefix + service + ":host=" + selectedDockerHost(c) + ":query=" + stableQuery(c.Request.URL.Query())
 }
 
 func crowdSecAnalysisCacheSuffix(c *gin.Context, endpoint string) string {

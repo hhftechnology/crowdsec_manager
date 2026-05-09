@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -97,6 +98,51 @@ func TestBulkDeleteDecisions_AllSucceed(t *testing.T) {
 		if !containsSequence(calls[i].Cmd, "--id", id) {
 			t.Errorf("call %d: expected --id %s in cmd %v", i, id, calls[i].Cmd)
 		}
+	}
+}
+
+func TestBulkDeleteDecisions_DeduplicatesIDs(t *testing.T) {
+	fake := &fakeDockerClient{stubOut: "Decision deleted", stubErr: nil}
+	w := bulkDeleteWithFake(t, fake, `{"ids":[12,12,34,12]}`)
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d — body: %s", w.Code, w.Body.String())
+	}
+	_, result := decodeBulkResponse(t, w)
+	if result.SuccessCount != 2 {
+		t.Errorf("expected success_count=2 for unique ids, got %d", result.SuccessCount)
+	}
+	if result.FailureCount != 0 {
+		t.Errorf("expected failure_count=0, got %d", result.FailureCount)
+	}
+	if len(result.Deleted) != 2 || result.Deleted[0] != 12 || result.Deleted[1] != 34 {
+		t.Errorf("expected deleted ids [12 34], got %v", result.Deleted)
+	}
+
+	calls := fake.recordedCalls()
+	if len(calls) != 2 {
+		t.Fatalf("expected 2 ExecCommand calls, got %d", len(calls))
+	}
+	for i, id := range []string{"12", "34"} {
+		if !containsSequence(calls[i].Cmd, "--id", id) {
+			t.Errorf("call %d: expected --id %s in cmd %v", i, id, calls[i].Cmd)
+		}
+	}
+}
+
+func TestBulkDeleteDecisions_RejectsMoreThanMaximumUniqueIDs(t *testing.T) {
+	ids := make([]string, maxBulkDeleteDecisionIDs+1)
+	for i := range ids {
+		ids[i] = strconv.Itoa(i + 1)
+	}
+	body := `{"ids":[` + strings.Join(ids, ",") + `]}`
+
+	fake := &fakeDockerClient{}
+	w := bulkDeleteWithFake(t, fake, body)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d — body: %s", w.Code, w.Body.String())
+	}
+	if len(fake.recordedCalls()) != 0 {
+		t.Errorf("expected no ExecCommand calls, got %d", len(fake.recordedCalls()))
 	}
 }
 

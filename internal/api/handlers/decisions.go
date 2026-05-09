@@ -47,7 +47,8 @@ func AddDecision(dockerClient *docker.Client, cfg *config.Config, ttlCache ...*c
 			return
 		}
 
-		// Normalize duration: "permanent", "", "0" → "" (omit flag); "30d" → "720h"; invalid → 400.
+		// Normalize duration: "" omits the flag for cscli's default; explicit
+		// permanent aliases become "0"; "30d" becomes "720h"; invalid returns 400.
 		normalized, ok := NormalizeDuration(req.Duration)
 		if !ok {
 			c.JSON(http.StatusBadRequest, models.Response{
@@ -57,17 +58,7 @@ func AddDecision(dockerClient *docker.Client, cfg *config.Config, ttlCache ...*c
 			return
 		}
 
-		cmd := []string{"cscli", "decisions", "add"}
-		cmd, _ = appendCLIFlags(cmd, []CLIFlag{
-			{"--ip", req.IP},
-			{"--range", req.Range},
-			{"--duration", normalized},
-			{"--type", req.Type},
-			{"--scope", req.Scope},
-			{"--value", req.Value},
-			{"--reason", req.Reason},
-			{"--origin", req.Origin},
-		})
+		cmd := buildAddDecisionCommand(req, normalized)
 
 		logger.Info("Adding decision", "command", cmd)
 
@@ -93,6 +84,20 @@ func AddDecision(dockerClient *docker.Client, cfg *config.Config, ttlCache ...*c
 			Data:    gin.H{"output": output},
 		})
 	}
+}
+
+func buildAddDecisionCommand(req AddDecisionRequest, normalizedDuration string) []string {
+	cmd := []string{"cscli", "decisions", "add"}
+	cmd, _ = appendCLIFlags(cmd, []CLIFlag{
+		{"--ip", req.IP},
+		{"--range", req.Range},
+		{"--duration", normalizedDuration},
+		{"--type", req.Type},
+		{"--scope", req.Scope},
+		{"--value", req.Value},
+		{"--reason", req.Reason},
+	})
+	return cmd
 }
 
 // DeleteDecision deletes a decision via cscli

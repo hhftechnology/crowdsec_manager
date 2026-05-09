@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"crowdsec-manager/internal/cache"
 	"crowdsec-manager/internal/config"
 	"crowdsec-manager/internal/database"
 	"crowdsec-manager/internal/docker"
@@ -15,6 +16,26 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+type dashboardLogReader interface {
+	ExecCommand(containerName string, cmd []string) (string, error)
+	GetContainerLogs(containerName string, tail string) (string, error)
+}
+
+type serviceDashboardHandlerInput struct {
+	Reader   dashboardLogReader
+	Database *database.Database
+	Config   *config.Config
+	Geo      *geoip.Resolver
+	Cache    *cache.TTLCache
+}
+
+type traefikLogReadInput struct {
+	Reader   dashboardLogReader
+	Database *database.Database
+	Config   *config.Config
+	Tail     string
+}
 
 // rangeTailMap maps each preset to a max-tail size that bounds memory.
 // Anything older than the timestamp cutoff is filtered downstream.
@@ -65,10 +86,22 @@ func (a geoAdapter) Lookup(ip string) (aggregate.Location, bool) {
 
 // AnalyzeServiceDashboard returns a service-shaped dashboard payload.
 // Supports :service in {traefik, crowdsec}.
-func AnalyzeServiceDashboard(dockerClient *docker.Client, db *database.Database, cfg *config.Config, geo *geoip.Resolver) gin.HandlerFunc {
-	adapter := geoAdapter{r: geo}
+func AnalyzeServiceDashboard(dockerClient *docker.Client, db *database.Database, cfg *config.Config, geo *geoip.Resolver, ttlCache ...*cache.TTLCache) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		dockerClient = resolveDockerClient(c, dockerClient)
+		handler := analyzeServiceDashboardWithReader(serviceDashboardHandlerInput{
+			Reader:   resolveDockerClient(c, dockerClient),
+			Database: db,
+			Config:   cfg,
+			Geo:      geo,
+			Cache:    optionalCache(ttlCache),
+		})
+		handler(c)
+	}
+}
+
+func analyzeServiceDashboardWithReader(input serviceDashboardHandlerInput) gin.HandlerFunc {
+	adapter := geoAdapter{r: input.Geo}
+	return func(c *gin.Context) {
 		service := c.Param("service")
 
 		rngRaw := c.DefaultQuery("range", string(models.Range1h))
@@ -81,13 +114,34 @@ func AnalyzeServiceDashboard(dockerClient *docker.Client, db *database.Database,
 			return
 		}
 
+		if service != "traefik" && service != "crowdsec" {
+			c.JSON(http.StatusBadRequest, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("unsupported service %q (expected traefik or crowdsec)", service),
+			})
+			return
+		}
+
 		tail := rangeTailMap[rng]
+		cacheKey := serviceDashboardCacheKey(c, service)
+		if input.Cache != nil {
+			if cached, ok := input.Cache.Get(cacheKey); ok {
+				c.JSON(http.StatusOK, models.Response{Success: true, Data: cached})
+				return
+			}
+		}
+
 		now := time.Now().UTC()
 		since := now.Add(-rangeDuration(rng))
 
 		switch service {
 		case "traefik":
-			rawLogs, err := readTraefikLogs(dockerClient, db, cfg, tail)
+			rawLogs, err := readTraefikLogs(traefikLogReadInput{
+				Reader:   input.Reader,
+				Database: input.Database,
+				Config:   input.Config,
+				Tail:     tail,
+			})
 			if err != nil {
 				logger.Warn("failed to read traefik logs for dashboard", "error", err)
 				c.JSON(http.StatusInternalServerError, models.Response{
@@ -97,11 +151,14 @@ func AnalyzeServiceDashboard(dockerClient *docker.Client, db *database.Database,
 				return
 			}
 			data := aggregate.BucketTraefikRaw(rawLogs, since, now, rng, adapter)
+			if input.Cache != nil {
+				input.Cache.Set(cacheKey, data, serviceDashboardCacheTTL)
+			}
 			c.JSON(http.StatusOK, models.Response{Success: true, Data: data})
 
 		case "crowdsec":
 			parser := docker.NewLogParser()
-			rawLogs, err := dockerClient.GetContainerLogs(cfg.CrowdsecContainerName, tail)
+			rawLogs, err := input.Reader.GetContainerLogs(input.Config.CrowdsecContainerName, tail)
 			if err != nil {
 				logger.Warn("failed to read crowdsec logs for dashboard", "error", err)
 				c.JSON(http.StatusInternalServerError, models.Response{
@@ -112,13 +169,11 @@ func AnalyzeServiceDashboard(dockerClient *docker.Client, db *database.Database,
 			}
 			entries := parser.Parse(rawLogs, "crowdsec")
 			data := aggregate.BucketCrowdSec(entries, since, now, rng, adapter)
+			if input.Cache != nil {
+				input.Cache.Set(cacheKey, data, serviceDashboardCacheTTL)
+			}
 			c.JSON(http.StatusOK, models.Response{Success: true, Data: data})
 
-		default:
-			c.JSON(http.StatusBadRequest, models.Response{
-				Success: false,
-				Error:   fmt.Sprintf("unsupported service %q (expected traefik or crowdsec)", service),
-			})
 		}
 	}
 }
@@ -126,18 +181,21 @@ func AnalyzeServiceDashboard(dockerClient *docker.Client, db *database.Database,
 // readTraefikLogs prefers the access log file inside the Traefik container
 // (which carries CLF or JSON depending on configuration); falls back to
 // container logs the same way GetTraefikLogs does today.
-func readTraefikLogs(dockerClient *docker.Client, db *database.Database, cfg *config.Config, tail string) (string, error) {
-	settings, _ := db.GetSettings()
-	logPath := settings.TraefikAccessLog
+func readTraefikLogs(input traefikLogReadInput) (string, error) {
+	logPath := ""
+	if input.Database != nil {
+		settings, _ := input.Database.GetSettings()
+		logPath = settings.TraefikAccessLog
+	}
 	if logPath == "" {
-		logPath = cfg.TraefikAccessLog
+		logPath = input.Config.TraefikAccessLog
 	}
 	if logPath != "" {
-		if logs, err := dockerClient.ExecCommand(cfg.TraefikContainerName, []string{"tail", "-n", tail, logPath}); err == nil {
+		if logs, err := input.Reader.ExecCommand(input.Config.TraefikContainerName, []string{"tail", "-n", input.Tail, logPath}); err == nil {
 			return logs, nil
 		} else {
 			logger.Debug("traefik access log file unreadable; falling back to container logs", "error", err)
 		}
 	}
-	return dockerClient.GetContainerLogs(cfg.TraefikContainerName, tail)
+	return input.Reader.GetContainerLogs(input.Config.TraefikContainerName, input.Tail)
 }

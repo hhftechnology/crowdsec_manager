@@ -138,7 +138,28 @@ func TestAddDecision_IPAndRange_MutuallyExclusive(t *testing.T) {
 	}
 }
 
-func TestAddDecision_PermanentDuration_OmitsFlag(t *testing.T) {
+func TestAddDecision_EmptyDuration_OmitsFlag(t *testing.T) {
+	fake := &fakeDockerClient{stubOut: "Decision added", stubErr: nil}
+	w := addDecisionWithFake(t, fake, `{"ip":"1.2.3.4"}`)
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d — body: %s", w.Code, w.Body.String())
+	}
+	calls := fake.recordedCalls()
+	if len(calls) != 1 {
+		t.Fatalf("expected 1 ExecCommand call, got %d", len(calls))
+	}
+	cmd := calls[0].Cmd
+	if !containsSequence(cmd, "--ip", "1.2.3.4") {
+		t.Errorf("expected --ip 1.2.3.4 in cmd %v", cmd)
+	}
+	for _, arg := range cmd {
+		if arg == "--duration" {
+			t.Errorf("--duration should be omitted when duration is empty, but cmd is %v", cmd)
+		}
+	}
+}
+
+func TestAddDecision_PermanentDuration_AddsZeroDuration(t *testing.T) {
 	fake := &fakeDockerClient{stubOut: "Decision added", stubErr: nil}
 	w := addDecisionWithFake(t, fake, `{"ip":"1.2.3.4","duration":"permanent"}`)
 	if w.Code != http.StatusOK {
@@ -153,10 +174,24 @@ func TestAddDecision_PermanentDuration_OmitsFlag(t *testing.T) {
 	if !containsSequence(cmd, "--ip", "1.2.3.4") {
 		t.Errorf("expected --ip 1.2.3.4 in cmd %v", cmd)
 	}
-	// --duration must NOT be present
-	for _, arg := range cmd {
-		if arg == "--duration" {
-			t.Errorf("--duration should be omitted for 'permanent', but cmd is %v", cmd)
+	if !containsSequence(cmd, "--duration", "0") {
+		t.Errorf("expected --duration 0 for permanent duration, got cmd %v", cmd)
+	}
+}
+
+func TestAddDecision_OriginIgnoredForAddCommand(t *testing.T) {
+	fake := &fakeDockerClient{stubOut: "Decision added", stubErr: nil}
+	w := addDecisionWithFake(t, fake, `{"ip":"1.2.3.4","duration":"4h","origin":"cscli"}`)
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d — body: %s", w.Code, w.Body.String())
+	}
+	calls := fake.recordedCalls()
+	if len(calls) != 1 {
+		t.Fatalf("expected 1 ExecCommand call, got %d", len(calls))
+	}
+	for _, arg := range calls[0].Cmd {
+		if arg == "--origin" {
+			t.Errorf("--origin is not supported by cscli decisions add; cmd is %v", calls[0].Cmd)
 		}
 	}
 }
@@ -275,17 +310,7 @@ func AddDecisionFake(executor interface {
 			return
 		}
 
-		cmd := []string{"cscli", "decisions", "add"}
-		cmd, _ = appendCLIFlags(cmd, []CLIFlag{
-			{"--ip", req.IP},
-			{"--range", req.Range},
-			{"--duration", normalized},
-			{"--type", req.Type},
-			{"--scope", req.Scope},
-			{"--value", req.Value},
-			{"--reason", req.Reason},
-			{"--origin", req.Origin},
-		})
+		cmd := buildAddDecisionCommand(req, normalized)
 
 		output, err := executor.ExecCommand(cfg.CrowdsecContainerName, cmd)
 		if err != nil {

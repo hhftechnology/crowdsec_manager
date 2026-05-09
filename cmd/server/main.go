@@ -138,9 +138,9 @@ func main() {
 	router.Use(gzip.Gzip(
 		gzip.DefaultCompression,
 		gzip.WithExcludedPathsRegexs([]string{
-			`^/api/events/`,       // SSE and WebSocket events
-			`^/api/terminal/`,     // WebSocket terminal
-			`^/api/logs/stream/`,  // WebSocket log stream
+			`^/api/events/`,      // SSE and WebSocket events
+			`^/api/terminal/`,    // WebSocket terminal
+			`^/api/logs/stream/`, // WebSocket log stream
 		}),
 	))
 
@@ -159,17 +159,18 @@ func main() {
 	apiGroup.Use(middleware.DockerHostSelector(multiHost))
 
 	{
+		ttlCache := cache.New()
+
 		api.RegisterHealthRoutes(apiGroup, dockerClient, db, cfg)
 		api.RegisterIPRoutes(apiGroup, dockerClient, cfg)
 		api.RegisterWhitelistRoutes(apiGroup, dockerClient, cfg)
 		api.RegisterAllowlistRoutes(apiGroup, dockerClient, cfg)
 		api.RegisterScenarioRoutes(apiGroup, dockerClient, cfg.ConfigDir, cfg)
 		api.RegisterCaptchaRoutes(apiGroup, dockerClient, db, cfg)
-		api.RegisterLogRoutes(apiGroup, dockerClient, db, cfg, geoResolver)
+		api.RegisterLogRoutes(apiGroup, dockerClient, db, cfg, geoResolver, ttlCache)
 		api.RegisterBackupRoutes(apiGroup, backupManager, dockerClient)
 		api.RegisterUpdateRoutes(apiGroup, dockerClient, cfg)
 		api.RegisterCronRoutes(apiGroup, cronScheduler)
-		ttlCache := cache.New()
 		api.RegisterServicesRoutes(apiGroup, dockerClient, db, cfg, ttlCache)
 		api.RegisterNotificationRoutes(apiGroup, dockerClient, db, cfg)
 		api.RegisterProfileRoutes(apiGroup, db, cfg, dockerClient)

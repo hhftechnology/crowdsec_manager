@@ -18,11 +18,12 @@ var (
 	ErrIncompleteSelector = errors.New("scope and value must be provided together")
 )
 
-// permanentDurations are user-supplied values we treat as "no expiry" — we
-// silently drop the cscli --duration flag so cscli applies its default
-// (permanent for cscli decisions add).
+const permanentDecisionDuration = "0"
+
+// permanentDurations are explicit user-supplied values we treat as "no expiry".
+// They are passed to cscli as --duration 0. Empty input is handled separately
+// so cscli can apply its documented default duration.
 var permanentDurations = map[string]struct{}{
-	"":          {},
 	"0":         {},
 	"0s":        {},
 	"permanent": {},
@@ -36,7 +37,7 @@ var permanentDurations = map[string]struct{}{
 var daysWeeksPattern = regexp.MustCompile(`^(\d+)([dw])$`)
 
 // NormalizeDuration takes a user-supplied duration string and returns:
-//   - ("", true) when the --duration flag should be omitted (permanent)
+//   - ("", true) when the --duration flag should be omitted (cscli default)
 //   - (canonicalDuration, true) when the duration is valid and should be passed
 //   - ("", false) when the input is invalid
 //
@@ -44,8 +45,11 @@ var daysWeeksPattern = regexp.MustCompile(`^(\d+)([dw])$`)
 // time.ParseDuration) does not natively support those units.
 func NormalizeDuration(input string) (string, bool) {
 	trimmed := strings.TrimSpace(strings.ToLower(input))
-	if _, ok := permanentDurations[trimmed]; ok {
+	if trimmed == "" {
 		return "", true
+	}
+	if _, ok := permanentDurations[trimmed]; ok {
+		return permanentDecisionDuration, true
 	}
 
 	if m := daysWeeksPattern.FindStringSubmatch(trimmed); m != nil {

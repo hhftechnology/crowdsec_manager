@@ -12,15 +12,17 @@ func TestNormalizeDuration(t *testing.T) {
 		wantValue string
 		wantOK    bool
 	}{
-		// Permanent / omitted flag cases — all collapse to "" + ok.
+		// Omitted flag case: let cscli apply its documented default.
 		{"empty string", "", "", true},
-		{"plain zero", "0", "", true},
-		{"zero seconds", "0s", "", true},
-		{"literal permanent", "permanent", "", true},
-		{"literal Permanent (capitalised)", "Permanent", "", true},
-		{"literal never", "never", "", true},
-		{"literal forever", "forever", "", true},
-		{"whitespace permanent", "  permanent  ", "", true},
+
+		// Explicit permanent cases canonicalize to cscli's no-expiry duration.
+		{"plain zero", "0", "0", true},
+		{"zero seconds", "0s", "0", true},
+		{"literal permanent", "permanent", "0", true},
+		{"literal Permanent (capitalised)", "Permanent", "0", true},
+		{"literal never", "never", "0", true},
+		{"literal forever", "forever", "0", true},
+		{"whitespace permanent", "  permanent  ", "0", true},
 
 		// Valid Go-style durations passthrough as-is.
 		{"hours", "4h", "4h", true},

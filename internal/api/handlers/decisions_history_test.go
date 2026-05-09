@@ -129,8 +129,8 @@ func TestReapplyDecisionFake_NotActive_Proceeds(t *testing.T) {
 	// Second call: cscli decisions add → should be called
 	fake := &fakeDockerClient{
 		perCall: []fakeStub{
-			{out: "null", err: nil},              // list call → not active
-			{out: "Decision added", err: nil},     // add call
+			{out: "null", err: nil},           // list call → not active
+			{out: "Decision added", err: nil}, // add call
 		},
 	}
 
@@ -166,6 +166,32 @@ func TestReapplyDecisionFake_NotActive_Proceeds(t *testing.T) {
 	}
 	if dataMap["already_active"] != false {
 		t.Errorf("expected already_active=false, got %v", dataMap["already_active"])
+	}
+}
+
+func TestReapplyDecisionFake_PermanentDurationAddsZeroDuration(t *testing.T) {
+	fake := &fakeDockerClient{
+		perCall: []fakeStub{
+			{out: "null", err: nil},
+			{out: "Decision added", err: nil},
+		},
+	}
+
+	record := &models.DecisionHistoryRecord{
+		ID: 3, Scope: "Ip", Value: "9.10.11.13",
+	}
+	w := reapplyDecisionWithFakeRecord(t, fake, record, `{"id":3,"type":"ban","duration":"permanent"}`)
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d — body: %s", w.Code, w.Body.String())
+	}
+
+	calls := fake.recordedCalls()
+	if len(calls) != 2 {
+		t.Fatalf("expected 2 ExecCommand calls (list + add), got %d: %v", len(calls), calls)
+	}
+	addCmd := calls[1].Cmd
+	if !containsSequence(addCmd, "--duration", "0") {
+		t.Errorf("expected --duration 0 in reapply add cmd %v", addCmd)
 	}
 }
 
