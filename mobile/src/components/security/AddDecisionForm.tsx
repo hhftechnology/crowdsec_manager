@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
 import {
   Select,
   SelectContent,
@@ -16,57 +17,70 @@ interface AddDecisionFormProps {
   loading: boolean;
 }
 
-const DURATION_PRESETS = [
-  { value: '1h', label: '1 hour' },
-  { value: '4h', label: '4 hours' },
-  { value: '24h', label: '24 hours' },
-  { value: '7d', label: '7 days' },
-  { value: '30d', label: '30 days' },
-  { value: '-1', label: 'Permanent' },
-  { value: 'custom', label: 'Custom...' },
-] as const;
+type SelectorMode = 'ip' | 'range' | 'scope';
 
 const defaultForm: AddDecisionRequest = {
-  value: '',
   type: 'ban',
   scope: 'ip',
   duration: '4h',
   reason: 'manual mobile action',
+  origin: 'cscli',
 };
+
+const durationPresets = ['1h', '4h', '24h', '7d', '30d'] as const;
 
 export function AddDecisionForm({ onSubmit, loading }: AddDecisionFormProps) {
   const [form, setForm] = useState<AddDecisionRequest>(defaultForm);
-  const [durationMode, setDurationMode] = useState<string>('4h');
-
-  const handleDurationChange = (preset: string) => {
-    setDurationMode(preset);
-    if (preset !== 'custom') {
-      setForm((prev) => ({ ...prev, duration: preset }));
-    } else {
-      setForm((prev) => ({ ...prev, duration: '' }));
-    }
-  };
+  const [selectorMode, setSelectorMode] = useState<SelectorMode>('ip');
+  const [selectorValue, setSelectorValue] = useState('');
+  const permanent = form.duration === '0';
 
   const handleSubmit = async () => {
-    await onSubmit(form);
+    const value = selectorValue.trim();
+    const payload: AddDecisionRequest = {
+      type: form.type,
+      duration: form.duration,
+      reason: form.reason || undefined,
+      origin: form.origin || undefined,
+    };
+
+    if (selectorMode === 'ip') {
+      payload.ip = value;
+    } else if (selectorMode === 'range') {
+      payload.range = value;
+    } else {
+      payload.scope = form.scope || 'ip';
+      payload.value = value;
+    }
+
+    await onSubmit(payload);
     setForm(defaultForm);
-    setDurationMode('4h');
+    setSelectorMode('ip');
+    setSelectorValue('');
   };
 
   return (
-    <section className="rounded-xl border border-border bg-card p-4 space-y-3">
-      <h3 className="text-sm font-semibold">Add Decision</h3>
+    <section className="rounded-lg border border-hairline bg-surface-card p-md space-y-sm">
+      <h3 className="text-title-sm font-semibold text-ink">Add Decision</h3>
 
-      <div className="space-y-2">
-        <Input
-          placeholder="Value (IP/CIDR)"
-          value={form.value || ''}
-          onChange={(e) => setForm((prev) => ({ ...prev, value: e.target.value }))}
-        />
+      <div className="space-y-xs">
+        <div className="grid grid-cols-2 gap-xs">
+          <div className="space-y-xxs">
+            <label className="text-caption text-muted">Selector</label>
+            <Select value={selectorMode} onValueChange={(val) => setSelectorMode(val as SelectorMode)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Selector" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ip">IP</SelectItem>
+                <SelectItem value="range">Range</SelectItem>
+                <SelectItem value="scope">Scope + value</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
-        <div className="grid grid-cols-2 gap-2">
-          <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Type</label>
+          <div className="space-y-xxs">
+            <label className="text-caption text-muted">Type</label>
             <Select
               value={form.type || 'ban'}
               onValueChange={(val) => setForm((prev) => ({ ...prev, type: val }))}
@@ -80,9 +94,17 @@ export function AddDecisionForm({ onSubmit, loading }: AddDecisionFormProps) {
               </SelectContent>
             </Select>
           </div>
+        </div>
 
-          <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Scope</label>
+        <Input
+          placeholder={selectorMode === 'range' ? '10.0.0.0/24' : '1.2.3.4'}
+          value={selectorValue}
+          onChange={(e) => setSelectorValue(e.target.value)}
+        />
+
+        {selectorMode === 'scope' && (
+          <div className="space-y-xxs">
+            <label className="text-caption text-muted">Scope</label>
             <Select
               value={form.scope || 'ip'}
               onValueChange={(val) => setForm((prev) => ({ ...prev, scope: val }))}
@@ -95,34 +117,54 @@ export function AddDecisionForm({ onSubmit, loading }: AddDecisionFormProps) {
                 <SelectItem value="range">Range</SelectItem>
                 <SelectItem value="country">Country</SelectItem>
                 <SelectItem value="as">AS</SelectItem>
+                <SelectItem value="username">Username</SelectItem>
               </SelectContent>
             </Select>
           </div>
-        </div>
+        )}
 
-        <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">Duration</label>
-          <Select value={durationMode} onValueChange={handleDurationChange}>
-            <SelectTrigger>
-              <SelectValue placeholder="Duration" />
-            </SelectTrigger>
-            <SelectContent>
-              {DURATION_PRESETS.map((preset) => (
-                <SelectItem key={preset.value} value={preset.value}>
-                  {preset.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {durationMode === 'custom' && (
-            <Input
-              placeholder="e.g. 12h, 3d, 2w"
-              value={form.duration || ''}
-              onChange={(e) => setForm((prev) => ({ ...prev, duration: e.target.value }))}
-              className="mt-1"
-            />
+        <div className="space-y-xxs">
+          <div className="flex items-center justify-between gap-sm">
+            <label className="text-caption text-muted">Duration</label>
+            <div className="flex items-center gap-xs">
+              <span className="text-caption text-muted">Permanent</span>
+              <Switch
+                checked={permanent}
+                onCheckedChange={(checked) =>
+                  setForm((prev) => ({ ...prev, duration: checked ? '0' : '4h' }))
+                }
+              />
+            </div>
+          </div>
+          {!permanent && (
+            <>
+              <div className="flex flex-wrap gap-xxs">
+                {durationPresets.map((preset) => (
+                  <Button
+                    key={preset}
+                    type="button"
+                    variant={form.duration === preset ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setForm((prev) => ({ ...prev, duration: preset }))}
+                  >
+                    {preset}
+                  </Button>
+                ))}
+              </div>
+              <Input
+                placeholder="e.g. 12h, 3d, 2w"
+                value={form.duration || ''}
+                onChange={(e) => setForm((prev) => ({ ...prev, duration: e.target.value }))}
+              />
+            </>
           )}
         </div>
+
+        <Input
+          placeholder="Origin"
+          value={form.origin || ''}
+          onChange={(e) => setForm((prev) => ({ ...prev, origin: e.target.value }))}
+        />
 
         <Textarea
           placeholder="Reason"
@@ -131,7 +173,7 @@ export function AddDecisionForm({ onSubmit, loading }: AddDecisionFormProps) {
         />
       </div>
 
-      <Button onClick={handleSubmit} disabled={loading || !form.value}>
+      <Button onClick={handleSubmit} disabled={loading || !selectorValue.trim()}>
         Add decision
       </Button>
     </section>

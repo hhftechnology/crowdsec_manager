@@ -1,10 +1,13 @@
 import { useState, useMemo, useCallback } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams, Link } from 'react-router-dom'
 import { toast } from 'sonner'
-import api, { Decision } from '@/lib/api'
+import api from '@/lib/api'
+import type { Decision } from '@/lib/api'
 import type { RepeatedOffender } from '@/lib/api'
-import type { AlertSource } from '@/lib/api/types'
+import type { AlertSource, DecisionHistoryAnalysisResponse, HistoryChartPoint } from '@/lib/api/types'
+import { getErrorDetails, getErrorMessage } from '@/lib/api/errors'
+import { invalidateDecisionsAndAlerts } from '@/lib/queryInvalidation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -28,7 +31,7 @@ import {
 } from '@/components/common'
 import type { FilterField } from '@/components/common'
 import { ChartCard, AreaTimeline, PieBreakdown, BarDistribution } from '@/components/charts'
-import { groupByField } from '@/lib/chart-utils'
+import { bucketByUtcDay, groupByField } from '@/lib/chart-utils'
 import { useInfiniteScroll, useRepeatedOffenderToast } from '@/hooks'
 import { useSSE } from '@/hooks/useSSE'
 import { useSearch } from '@/contexts/SearchContext'
@@ -121,7 +124,20 @@ function syncFiltersToParams(filters: DecisionFilters, setSearchParams: ReturnTy
   setSearchParams(params, { replace: true })
 }
 
+function formatHistoryChartPoints(points: HistoryChartPoint[] | undefined): { date: string; value: number; ts: string }[] {
+  if (!points?.length) return []
+  return points
+    .slice()
+    .sort((a, b) => a.ts.localeCompare(b.ts))
+    .map((point) => ({
+      ts: point.ts,
+      date: new Date(point.ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }),
+      value: point.value,
+    }))
+}
+
 export default function DecisionAnalysis() {
+  const queryClient = useQueryClient()
   const [searchParams, setSearchParams] = useSearchParams()
   // Initialise filters from URL on mount
   const [filters, setFilters] = useState<DecisionFilters>(() => parseFiltersFromParams(searchParams))
@@ -146,6 +162,19 @@ export default function DecisionAnalysis() {
       return response.data.data
     },
     refetchInterval: 30000,
+    staleTime: 30000,
+    placeholderData: (previousData) => previousData,
+  })
+
+  const { data: decisionHistoryAnalysis } = useQuery<DecisionHistoryAnalysisResponse | null>({
+    queryKey: ['decision-history-analysis', activeFilters],
+    queryFn: async () => {
+      const response = await api.crowdsec.getDecisionHistoryAnalysis(activeFilters)
+      return response.data.data ?? null
+    },
+    refetchInterval: 30000,
+    staleTime: 30000,
+    placeholderData: (previousData) => previousData,
   })
 
   // Fetch alerts to enrich decisions with geo/AS data
@@ -166,6 +195,8 @@ export default function DecisionAnalysis() {
       return response.data.data
     },
     refetchInterval: 60000,
+    staleTime: 30000,
+    placeholderData: (previousData) => previousData,
   })
 
   const { data: repeatedOffendersData } = useQuery({
@@ -175,6 +206,8 @@ export default function DecisionAnalysis() {
       return response.data.data
     },
     refetchInterval: 60000,
+    staleTime: 30000,
+    placeholderData: (previousData) => previousData,
   })
 
   const allOffenders = repeatedOffendersData?.offenders ?? []
@@ -197,24 +230,24 @@ export default function DecisionAnalysis() {
   // --- Chart data ---
 
   const decisionTimeData = useMemo(() => {
-    if (!decisionsData?.decisions) return []
-    const buckets: Record<string, number> = {}
-    for (const d of decisionsData.decisions) {
-      const date = new Date(d.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-      buckets[date] = (buckets[date] || 0) + 1
+    if (decisionHistoryAnalysis?.ready) {
+      return formatHistoryChartPoints(decisionHistoryAnalysis.over_time)
     }
-    return Object.entries(buckets).map(([date, count]) => ({ date, value: count }))
-  }, [decisionsData])
+    if (!decisionsData?.decisions) return []
+    return bucketByUtcDay(decisionsData.decisions, 'created_at')
+  }, [decisionHistoryAnalysis, decisionsData])
 
   const decisionTypeData = useMemo(() => {
+    if (decisionHistoryAnalysis?.ready) return decisionHistoryAnalysis.decision_types ?? []
     if (!decisionsData?.decisions) return []
     return groupByField(decisionsData.decisions, 'type', 5)
-  }, [decisionsData])
+  }, [decisionHistoryAnalysis, decisionsData])
 
   const topIPsData = useMemo(() => {
+    if (decisionHistoryAnalysis?.ready) return (decisionHistoryAnalysis.top_ips ?? []).slice(0, 8)
     if (!decisionsData?.decisions) return []
     return groupByField(decisionsData.decisions, 'value', 8)
-  }, [decisionsData])
+  }, [decisionHistoryAnalysis, decisionsData])
 
   // --- Client-side filtering (search + expired) ---
 
@@ -291,10 +324,11 @@ export default function DecisionAnalysis() {
     try {
       await api.crowdsec.deleteDecision({ id: deleteId.toString() })
       toast.success('Decision deleted successfully')
-      refetch()
+      await invalidateDecisionsAndAlerts(queryClient)
     } catch (err: unknown) {
-      const axiosError = err as { response?: { data?: { error?: string } } }
-      toast.error(axiosError.response?.data?.error || 'Failed to delete decision')
+      toast.error(getErrorMessage(err, 'Failed to delete decision'), {
+        description: getErrorDetails(err),
+      })
     } finally {
       setDeleteId(null)
     }
@@ -316,27 +350,30 @@ export default function DecisionAnalysis() {
       idsToDelete.push(...selectedIds)
     }
 
-    let deleted = 0
-    let failed = 0
-    for (const id of idsToDelete) {
-      try {
-        await api.crowdsec.deleteDecision({ id: id.toString() })
-        deleted++
-      } catch {
-        failed++
+    try {
+      const response = await api.crowdsec.bulkDeleteDecisions(idsToDelete)
+      const result = response.data.data
+      const deleted = result?.success_count ?? 0
+      const failed = result?.failure_count ?? 0
+
+      if (failed === 0) {
+        toast.success(`Deleted ${deleted} decision${deleted !== 1 ? 's' : ''} successfully`)
+      } else {
+        const failedDetails = result?.failed?.map((item) => `#${item.id}: ${item.error}`).join('\n')
+        toast.warning(`Deleted ${deleted}, failed ${failed}`, {
+          description: failedDetails,
+        })
       }
+      await invalidateDecisionsAndAlerts(queryClient)
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, 'Failed to bulk delete decisions'), {
+        description: getErrorDetails(err),
+      })
+    } finally {
+      setBulkDeleting(false)
+      setShowBulkDeleteConfirm(false)
+      setSelectedIds(new Set())
     }
-
-    setBulkDeleting(false)
-    setShowBulkDeleteConfirm(false)
-    setSelectedIds(new Set())
-
-    if (failed === 0) {
-      toast.success(`Deleted ${deleted} decision${deleted !== 1 ? 's' : ''} successfully`)
-    } else {
-      toast.warning(`Deleted ${deleted}, failed ${failed}`)
-    }
-    refetch()
   }
 
   // --- Filter handlers ---
@@ -388,6 +425,7 @@ export default function DecisionAnalysis() {
   }
 
   const totalCount = decisionsData?.count ?? 0
+  const hasDecisionChartData = decisionTimeData.length > 0 || decisionTypeData.length > 0 || topIPsData.length > 0
 
   return (
     <div className="space-y-6">
@@ -402,7 +440,7 @@ export default function DecisionAnalysis() {
 
       {isError && <QueryError error={error} onRetry={refetch} />}
 
-      {decisionsData?.decisions && decisionsData.decisions.length > 0 && (
+      {hasDecisionChartData && (
         <div className="grid gap-4 grid-cols-1 lg:grid-cols-3">
           <ChartCard title="Decisions Over Time" description="Decision creation timeline">
             <AreaTimeline
@@ -537,8 +575,8 @@ export default function DecisionAnalysis() {
                   Delete Selected ({selectedIds.size})
                 </Button>
               )}
-              <AddDecisionDialog onSuccess={refetch} />
-              <ImportDecisionsDialog onSuccess={refetch} />
+              <AddDecisionDialog onSuccess={() => { void invalidateDecisionsAndAlerts(queryClient) }} />
+              <ImportDecisionsDialog onSuccess={() => { void invalidateDecisionsAndAlerts(queryClient) }} />
               <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isLoading}>
                 <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
                 Refresh

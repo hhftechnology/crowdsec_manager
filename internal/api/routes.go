@@ -9,6 +9,7 @@ import (
 	"crowdsec-manager/internal/cron"
 	"crowdsec-manager/internal/database"
 	"crowdsec-manager/internal/docker"
+	"crowdsec-manager/internal/geoip"
 	"crowdsec-manager/internal/messaging"
 
 	"github.com/gin-gonic/gin"
@@ -89,12 +90,17 @@ func RegisterCaptchaRoutes(router *gin.RouterGroup, dockerClient *docker.Client,
 }
 
 // RegisterLogRoutes configures endpoints for viewing container logs and analyzing Traefik access logs
-func RegisterLogRoutes(router *gin.RouterGroup, dockerClient *docker.Client, db *database.Database, cfg *config.Config) {
+func RegisterLogRoutes(router *gin.RouterGroup, dockerClient *docker.Client, db *database.Database, cfg *config.Config, geo *geoip.Resolver, ttlCache ...*cache.TTLCache) {
+	var c *cache.TTLCache
+	if len(ttlCache) > 0 {
+		c = ttlCache[0]
+	}
 	logs := router.Group("/logs")
 	{
 		logs.GET("/crowdsec", handlers.GetCrowdSecLogs(dockerClient, cfg))
 		logs.GET("/traefik", handlers.GetTraefikLogs(dockerClient, db, cfg))
 		logs.GET("/traefik/advanced", handlers.AnalyzeTraefikLogsAdvanced(dockerClient, cfg))
+		logs.GET("/:service/dashboard", handlers.AnalyzeServiceDashboard(dockerClient, db, cfg, geo, c))
 		logs.GET("/:service", handlers.GetServiceLogs(dockerClient))
 		logs.GET("/stream/:service", handlers.StreamLogs(dockerClient))
 		logs.GET("/structured/:service", handlers.GetStructuredLogs(dockerClient, cfg))
@@ -145,20 +151,22 @@ func RegisterServicesRoutes(router *gin.RouterGroup, dockerClient *docker.Client
 		crowdsec.POST("/bouncers", handlers.AddBouncer(dockerClient, cfg))
 		crowdsec.DELETE("/bouncers/:name", handlers.DeleteBouncer(dockerClient, cfg))
 		crowdsec.GET("/decisions", handlers.GetDecisions(dockerClient, cfg, c))
-		crowdsec.POST("/decisions", handlers.AddDecision(dockerClient, cfg))
-		crowdsec.DELETE("/decisions", handlers.DeleteDecision(dockerClient, cfg))
-		crowdsec.POST("/decisions/import", handlers.ImportDecisions(dockerClient, cfg))
-		crowdsec.GET("/decisions/analysis", handlers.GetDecisionsAnalysis(dockerClient, cfg))
+		crowdsec.POST("/decisions", handlers.AddDecision(dockerClient, cfg, c))
+		crowdsec.DELETE("/decisions", handlers.DeleteDecision(dockerClient, cfg, c))
+		crowdsec.POST("/decisions/import", handlers.ImportDecisions(dockerClient, cfg, c))
+		crowdsec.POST("/decisions/bulk-delete", handlers.BulkDeleteDecisions(dockerClient, cfg, c))
+		crowdsec.GET("/decisions/analysis", handlers.GetDecisionsAnalysis(dockerClient, cfg, c))
+		crowdsec.GET("/decisions/history/analysis", handlers.GetDecisionHistoryAnalysis())
 		crowdsec.GET("/decisions/history", handlers.GetDecisionHistory())
 		crowdsec.GET("/decisions/repeated-offenders", handlers.GetRepeatedOffenders())
-			crowdsec.POST("/decisions/history/reapply", handlers.ReapplyDecision(dockerClient, cfg))
-			crowdsec.POST("/decisions/history/bulk-reapply", handlers.BulkReapplyDecisions(dockerClient, cfg))
-			crowdsec.GET("/history/stats", handlers.GetHistoryStats())
-			crowdsec.GET("/history/activity", handlers.GetHistoryActivity())
-			crowdsec.GET("/alerts/analysis", handlers.GetAlertsAnalysis(dockerClient, cfg, c))
-			crowdsec.GET("/alerts/history", handlers.GetAlertHistory())
+		crowdsec.POST("/decisions/history/reapply", handlers.ReapplyDecision(dockerClient, cfg))
+		crowdsec.POST("/decisions/history/bulk-reapply", handlers.BulkReapplyDecisions(dockerClient, cfg))
+		crowdsec.GET("/history/stats", handlers.GetHistoryStats())
+		crowdsec.GET("/history/activity", handlers.GetHistoryActivity())
+		crowdsec.GET("/alerts/analysis", handlers.GetAlertsAnalysis(dockerClient, cfg, c))
+		crowdsec.GET("/alerts/history", handlers.GetAlertHistory())
 		crowdsec.GET("/alerts/:id", handlers.InspectAlert(dockerClient, cfg))
-		crowdsec.DELETE("/alerts/:id", handlers.DeleteAlert(dockerClient, cfg))
+		crowdsec.DELETE("/alerts/:id", handlers.DeleteAlert(dockerClient, cfg, c))
 		crowdsec.GET("/history/config", handlers.GetHistoryConfig())
 		crowdsec.PUT("/history/config", handlers.UpdateHistoryConfig())
 		crowdsec.GET("/metrics", handlers.GetMetrics(dockerClient, cfg, c))

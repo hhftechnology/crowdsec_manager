@@ -25,7 +25,7 @@ export function DecisionFilters({ onFiltersChange }: DecisionFiltersProps) {
   };
 
   return (
-    <div className="flex gap-2">
+    <div className="flex gap-xs">
       <div className="flex-1">
         <Select
           value={type}
@@ -34,7 +34,7 @@ export function DecisionFilters({ onFiltersChange }: DecisionFiltersProps) {
             emitChange({ type: val, scope, origin });
           }}
         >
-          <SelectTrigger className="h-8 text-xs">
+          <SelectTrigger className="h-8 text-caption">
             <SelectValue placeholder="Type" />
           </SelectTrigger>
           <SelectContent>
@@ -53,7 +53,7 @@ export function DecisionFilters({ onFiltersChange }: DecisionFiltersProps) {
             emitChange({ type, scope: val, origin });
           }}
         >
-          <SelectTrigger className="h-8 text-xs">
+          <SelectTrigger className="h-8 text-caption">
             <SelectValue placeholder="Scope" />
           </SelectTrigger>
           <SelectContent>
@@ -72,7 +72,7 @@ export function DecisionFilters({ onFiltersChange }: DecisionFiltersProps) {
             emitChange({ type, scope, origin: val });
           }}
         >
-          <SelectTrigger className="h-8 text-xs">
+          <SelectTrigger className="h-8 text-caption">
             <SelectValue placeholder="Origin" />
           </SelectTrigger>
           <SelectContent>

@@ -3,6 +3,7 @@ import axios from 'axios'
 type APIErrorResponse = {
   error?: string
   message?: string
+  details?: string
 }
 
 export const ErrorContexts = {
@@ -132,4 +133,10 @@ export function getErrorMessage(error: unknown, fallback: string, context?: Erro
   }
   if (rawMessage) return rawMessage
   return fallback
+}
+
+export function getErrorDetails(error: unknown): string | undefined {
+  if (!axios.isAxiosError(error)) return undefined
+  const responseData = error.response?.data as APIErrorResponse | undefined
+  return responseData?.details
 }

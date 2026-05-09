@@ -1,6 +1,21 @@
 import { ApiClient } from './client';
 import type { Allowlist, AllowlistInspectResponse } from './types';
 
+function normalizeAllowlistInspect(
+  name: string,
+  payload: AllowlistInspectResponse | null,
+): AllowlistInspectResponse {
+  const items = Array.isArray(payload?.items) ? payload.items : [];
+  return {
+    name: payload?.name ?? name,
+    description: payload?.description ?? '',
+    created_at: payload?.created_at,
+    updated_at: payload?.updated_at,
+    items,
+    count: typeof payload?.count === 'number' ? payload.count : items.length,
+  };
+}
+
 export function createAllowlistApi(client: ApiClient) {
   return {
     async list() {
@@ -15,7 +30,8 @@ export function createAllowlistApi(client: ApiClient) {
       return client.post<Allowlist>('/api/allowlist/create', { body: input });
     },
     async inspect(name: string) {
-      return (await client.get<AllowlistInspectResponse>(`/api/allowlist/inspect/${encodeURIComponent(name)}`)).data;
+      const payload = (await client.get<AllowlistInspectResponse | null>(`/api/allowlist/inspect/${encodeURIComponent(name)}`)).data;
+      return normalizeAllowlistInspect(name, payload);
     },
     async addEntries(input: { allowlist_name: string; values: string[]; expiration?: string; description?: string }) {
       return client.post<null>('/api/allowlist/add', { body: input });

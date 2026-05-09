@@ -1,128 +1,92 @@
 import { useState } from 'react';
-import { Shield, Globe, Github, MessageCircle, Users, ExternalLink, ChevronLeft } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { ExternalLink } from 'lucide-react';
 import { useMountEffect } from '@/hooks/useMountEffect';
 import { App as CapApp } from '@capacitor/app';
-import { PageHeader } from '@/components/PageHeader';
-import { Button } from '@/components/ui/button';
-import { Separator } from '@/components/ui/separator';
+import { TopBar } from '@/components/TopBar';
+import { Pill, Spike } from '@/components/design';
 
 const links = [
-  { label: 'Website', href: 'https://hhf.technology', icon: Globe },
-  { label: 'GitHub', href: 'https://github.com/HHFTechnology', icon: Github },
-  { label: 'Discord', href: 'https://discord.gg/HDCt9MjyMJ', icon: MessageCircle },
-  { label: 'Forum', href: 'https://forum.hhf.technology', icon: Users },
+  { label: 'Docs', href: 'https://hhf.technology' },
+  { label: 'GitHub', href: 'https://github.com/HHFTechnology' },
+  { label: 'Discourse', href: 'https://forum.hhf.technology' },
 ];
 
-const socialLinks = [
+const social = [
   { label: 'X / Twitter', href: 'https://x.com/hhftechnology' },
-  { label: 'Reddit', href: 'https://reddit.com/u/hhftechtips' },
+  { label: 'Reddit', href: 'https://reddit.com/r/hhftechnology' },
+  { label: 'Discord', href: 'https://discord.gg/HDCt9MjyMJ' },
 ];
 
 export default function AboutPage() {
-  const navigate = useNavigate();
-  const [appInfo, setAppInfo] = useState({ version: '1.0.0', build: '1' });
+  const [appInfo, setAppInfo] = useState({ version: '', build: '' });
 
   useMountEffect(() => {
     CapApp.getInfo()
       .then((info) => setAppInfo({ version: info.version, build: info.build }))
-      .catch(() => { /* PWA fallback — keep defaults */ });
+      .catch(() => {
+        /* PWA fallback */
+      });
   });
 
   return (
-    <div className="pb-nav">
-      <PageHeader
-        title="About"
-        action={
-          <Button variant="ghost" size="sm" onClick={() => navigate(-1)} className="gap-1">
-            <ChevronLeft className="h-4 w-4" />
-            Back
-          </Button>
-        }
-      />
+    <div className="pb-nav bg-canvas">
+      <TopBar title="About" />
 
-      <div className="px-4 space-y-4">
-        {/* App branding */}
-        <section className="rounded-xl border border-border bg-card p-6 flex flex-col items-center text-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl gradient-maroon mb-4 shadow-lg">
-            <Shield className="h-8 w-8 text-white" />
+      <div className="px-md py-md space-y-md">
+        <section className="rounded-lg bg-surface-card p-lg">
+          <Spike className="w-6 h-6 text-ink" />
+          <h2 className="mt-md font-display text-display-md text-ink">CrowdSec Manager</h2>
+          <p className="text-body-sm text-muted">
+            A mobile companion for your CrowdSec stack by hhf technology.
+          </p>
+          <div className="mt-md flex items-center gap-xs">
+            <Pill tone="cream">v{appInfo.version}</Pill>
+            <Pill tone="cream">build {appInfo.build}</Pill>
           </div>
-          <h2 className="text-xl font-bold">CrowdSec Manager</h2>
-          <p className="text-sm text-muted-foreground mt-1">Version {appInfo.version} (Build {appInfo.build})</p>
-          <p className="text-xs text-muted-foreground mt-0.5">Capacitor 7 &middot; React 18</p>
         </section>
 
-        {/* About HHF Technology */}
-        <section className="rounded-xl border border-border bg-card p-4 space-y-3">
-          <h3 className="text-sm font-semibold">HHF Technology</h3>
-          <p className="text-sm text-muted-foreground leading-relaxed">
-            Infrastructure Engineer &amp; Homelab Enthusiast — building containerized applications,
-            managing virtual infrastructure, securing networks, and automating solutions.
+        <section className="rounded-lg bg-surface-dark text-on-dark p-md">
+          <div className="text-caption-uppercase uppercase text-on-dark-soft">Authored by</div>
+          <div className="mt-xs font-display text-title-lg">HHF Technology</div>
+          <p className="text-body-sm text-on-dark-soft mt-xxs">
+            Open source security tooling for self-hosted infra.
           </p>
-          <div className="flex flex-wrap gap-1.5">
-            {['Kubernetes', 'Proxmox', 'OPNsense', 'TrueNAS', 'Docker', 'Traefik'].map((tag) => (
-              <span
-                key={tag}
-                className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground"
+          <div className="mt-md grid grid-cols-3 gap-xs">
+            {links.map((link) => (
+              <a
+                key={link.href}
+                href={link.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="h-9 rounded-md bg-surface-dark-elevated text-on-dark text-button font-medium inline-flex items-center justify-center gap-xxs hover:bg-surface-dark-soft transition-colors"
               >
-                {tag}
-              </span>
+                {link.label}
+              </a>
             ))}
           </div>
         </section>
 
-        {/* Links */}
-        <section className="rounded-xl border border-border bg-card overflow-hidden">
-          <h3 className="text-sm font-semibold px-4 pt-4 pb-2">Links</h3>
-          {links.map((link, i) => (
-            <div key={link.href}>
-              {i > 0 && <Separator />}
+        <section className="rounded-lg border border-hairline bg-canvas p-md">
+          <div className="font-display text-title-md text-ink mb-sm">Community</div>
+          <div className="space-y-xxs">
+            {social.map((link) => (
               <a
+                key={link.href}
                 href={link.href}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-3 px-4 py-3 hover:bg-secondary/50 transition-colors"
+                className="flex items-center justify-between py-sm text-body-sm text-ink hover:text-primary transition-colors"
               >
-                <link.icon className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm flex-1">{link.label}</span>
-                <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
+                <span>{link.label}</span>
+                <ExternalLink className="h-3.5 w-3.5 text-muted" />
               </a>
-            </div>
-          ))}
+            ))}
+          </div>
         </section>
 
-        {/* Social */}
-        <section className="rounded-xl border border-border bg-card overflow-hidden">
-          <h3 className="text-sm font-semibold px-4 pt-4 pb-2">Social</h3>
-          {socialLinks.map((link, i) => (
-            <div key={link.href}>
-              {i > 0 && <Separator />}
-              <a
-                href={link.href}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-3 px-4 py-3 hover:bg-secondary/50 transition-colors"
-              >
-                <span className="text-sm flex-1">{link.label}</span>
-                <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
-              </a>
-            </div>
-          ))}
-        </section>
-
-        {/* Reset onboarding */}
-        <section className="rounded-xl border border-border bg-card p-4">
-          <Button
-            variant="ghost"
-            className="w-full text-sm text-muted-foreground"
-            onClick={() => {
-              localStorage.removeItem('csm_onboarding_complete');
-              navigate('/');
-              window.location.reload();
-            }}
-          >
-            Replay Onboarding Walkthrough
-          </Button>
+        <section className="rounded-lg border border-hairline bg-canvas p-md">
+          <div className="font-display text-title-md text-ink">License</div>
+          <p className="text-caption text-muted-soft mt-xxs">MIT — see LICENSE for details.</p>
         </section>
       </div>
     </div>

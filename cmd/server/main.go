@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/gin-contrib/cors"
+	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
 
 	"crowdsec-manager/internal/api"
@@ -24,6 +25,7 @@ import (
 	"crowdsec-manager/internal/cron"
 	"crowdsec-manager/internal/database"
 	"crowdsec-manager/internal/docker"
+	"crowdsec-manager/internal/geoip"
 	"crowdsec-manager/internal/history"
 	"crowdsec-manager/internal/logger"
 	"crowdsec-manager/internal/messaging"
@@ -67,6 +69,12 @@ func main() {
 
 	// Default client for backward compatibility with existing handler signatures
 	dockerClient := multiHost.DefaultClient()
+
+	// Optional GeoIP resolver for log dashboards. Failing to open returns a
+	// no-op resolver so the rest of the app keeps working.
+	geoResolver, geoErr := geoip.Open(cfg.GeoIPDBPath)
+	geoip.LogStartupStatus(cfg.GeoIPDBPath, geoErr)
+	defer geoResolver.Close()
 
 	dataDir := cfg.ConfigDir
 
@@ -123,6 +131,19 @@ func main() {
 		MaxAge:           12 * time.Hour,
 	}))
 
+	// Compress API responses. Large alert/decision payloads (2-3 MB JSON) were
+	// being truncated by WriteTimeout for remote clients on slow links; gzip
+	// brings them down ~5-10x. SSE and WebSocket endpoints are excluded so
+	// streaming and connection upgrade are not buffered.
+	router.Use(gzip.Gzip(
+		gzip.DefaultCompression,
+		gzip.WithExcludedPathsRegexs([]string{
+			`^/api/events/`,      // SSE and WebSocket events
+			`^/api/terminal/`,    // WebSocket terminal
+			`^/api/logs/stream/`, // WebSocket log stream
+		}),
+	))
+
 	// Basic health check endpoint for container orchestration
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
@@ -138,17 +159,18 @@ func main() {
 	apiGroup.Use(middleware.DockerHostSelector(multiHost))
 
 	{
+		ttlCache := cache.New()
+
 		api.RegisterHealthRoutes(apiGroup, dockerClient, db, cfg)
 		api.RegisterIPRoutes(apiGroup, dockerClient, cfg)
 		api.RegisterWhitelistRoutes(apiGroup, dockerClient, cfg)
 		api.RegisterAllowlistRoutes(apiGroup, dockerClient, cfg)
 		api.RegisterScenarioRoutes(apiGroup, dockerClient, cfg.ConfigDir, cfg)
 		api.RegisterCaptchaRoutes(apiGroup, dockerClient, db, cfg)
-		api.RegisterLogRoutes(apiGroup, dockerClient, db, cfg)
+		api.RegisterLogRoutes(apiGroup, dockerClient, db, cfg, geoResolver, ttlCache)
 		api.RegisterBackupRoutes(apiGroup, backupManager, dockerClient)
 		api.RegisterUpdateRoutes(apiGroup, dockerClient, cfg)
 		api.RegisterCronRoutes(apiGroup, cronScheduler)
-		ttlCache := cache.New()
 		api.RegisterServicesRoutes(apiGroup, dockerClient, db, cfg, ttlCache)
 		api.RegisterNotificationRoutes(apiGroup, dockerClient, db, cfg)
 		api.RegisterProfileRoutes(apiGroup, db, cfg, dockerClient)
@@ -195,7 +217,7 @@ func main() {
 		Addr:         fmt.Sprintf(":%d", cfg.Port),
 		Handler:      router,
 		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
+		WriteTimeout: 60 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
 

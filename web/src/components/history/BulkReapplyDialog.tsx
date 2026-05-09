@@ -3,6 +3,7 @@ import { useForm, Controller } from 'react-hook-form'
 import { toast } from 'sonner'
 import { RotateCcw, Loader2 } from 'lucide-react'
 import api from '@/lib/api'
+import { getErrorDetails, getErrorMessage } from '@/lib/api/errors'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -42,7 +43,7 @@ const DURATION_PRESETS = [
   { value: '24h', label: '24 hours' },
   { value: '7d', label: '7 days' },
   { value: '30d', label: '30 days' },
-  { value: 'permanent', label: 'Permanent' },
+  { value: '0', label: 'Permanent' },
   { value: 'custom', label: 'Custom…' },
 ]
 
@@ -76,9 +77,14 @@ export function BulkReapplyDialog({ ids, open, onClose, onSuccess }: BulkReapply
         reason: data.reason || undefined,
       })
       const result = response.data.data
+      const alreadyActive = result?.already_active ?? 0
 
       if (result && result.failed > 0) {
-        toast.warning(`Re-applied ${result.succeeded} of ${ids.length} decisions (${result.failed} failed)`)
+        toast.warning(`Re-applied ${result.succeeded} of ${ids.length} decisions (${result.failed} failed)`, {
+          description: result.errors?.join('\n'),
+        })
+      } else if (alreadyActive > 0) {
+        toast.info(`Already active - ${alreadyActive} unchanged`)
       } else {
         toast.success(`Successfully re-applied ${result?.succeeded ?? ids.length} decisions`)
       }
@@ -87,8 +93,9 @@ export function BulkReapplyDialog({ ids, open, onClose, onSuccess }: BulkReapply
       onSuccess()
       onClose()
     } catch (error: unknown) {
-      const axiosError = error as { response?: { data?: { error?: string } } }
-      toast.error(axiosError.response?.data?.error || 'Failed to bulk re-apply decisions')
+      toast.error(getErrorMessage(error, 'Failed to bulk re-apply decisions'), {
+        description: getErrorDetails(error),
+      })
     } finally {
       setIsLoading(false)
     }

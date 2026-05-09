@@ -1,11 +1,36 @@
 // TypeScript Interfaces matching backend models
+import type { Decision } from './contracts.generated'
 
-export interface ApiResponse<T = unknown> {
-  success: boolean
-  message?: string
-  data?: T
-  error?: string
-}
+export type {
+  AddDecisionRequest,
+  AlertEvent,
+  AlertFilters,
+  AlertHistoryRecord,
+  AlertHistoryResponse,
+  AlertSource,
+  AlertsResponse,
+  ApiResponse,
+  BulkDeleteDecisionsRequest,
+  BulkDeleteDecisionsResponse,
+  BulkDeleteFailure,
+  BulkReapplyDecisionsRequest,
+  BulkReapplyResult,
+  CrowdSecAlert,
+  Decision,
+  DecisionFilters,
+  DecisionHistoryRecord,
+  DecisionHistoryAnalysisResponse,
+  DecisionHistoryResponse,
+  DecisionsResponse,
+  DeleteDecisionRequest,
+  HistoryActivityBucket,
+  HistoryActivityResponse,
+  HistoryBreakdownItem,
+  HistoryChartPoint,
+  HistoryStats,
+  ReapplyDecisionRequest,
+  RepeatedOffender,
+} from './contracts.generated'
 
 export interface Container {
   name: string
@@ -18,40 +43,6 @@ export interface HealthStatus {
   containers: Container[]
   allRunning: boolean
   timestamp: string
-}
-
-export interface Decision {
-  id: number
-  alert_id: number
-  origin: string
-  type: string
-  scope: string
-  value: string
-  duration: string
-  scenario: string
-  created_at: string
-  until?: string
-}
-
-export interface AddDecisionRequest {
-  ip?: string
-  range?: string
-  duration?: string
-  type?: string
-  scope?: string
-  value?: string
-  reason?: string
-}
-
-export interface DeleteDecisionRequest {
-  id?: string
-  ip?: string
-  range?: string
-  type?: string
-  scope?: string
-  value?: string
-  scenario?: string
-  origin?: string
 }
 
 export interface Bouncer {
@@ -249,47 +240,12 @@ export interface ServiceInfo {
   id?: string
 }
 
-export interface AlertSource {
-  cn?: string        // ISO country code (e.g., "FR", "US")
-  as_name?: string   // Autonomous System name
-  as_number?: string // AS number
-  ip?: string
-  range?: string
-  latitude?: number
-  longitude?: number
-  scope?: string
-  value?: string
-}
-
-export interface AlertEvent {
-  timestamp: string
-  meta?: Record<string, string>[]
-  [key: string]: unknown
-}
-
-export interface CrowdSecAlert {
-  id: number
-  scenario: string
-  scope: string
-  value: string
-  origin: string
-  type?: string
-  events_count?: number
-  start_at: string
-  stop_at?: string
-  capacity?: number
-  leakspeed?: string
-  simulated?: boolean
-  message?: string
-  decisions?: Decision[]
-  source?: AlertSource
-  events?: AlertEvent[]
-}
-
 export interface AxiosErrorResponse {
   response?: {
     data?: {
       error?: string
+      message?: string
+      details?: string
     }
   }
 }
@@ -355,84 +311,9 @@ export interface ServiceUpdateStatus {
   error?: string
 }
 
-export interface DecisionFilters {
-  since?: string
-  until?: string
-  type?: string
-  scope?: string
-  origin?: string
-  value?: string
-  scenario?: string
-  ip?: string
-  range?: string
-  includeAll?: boolean
-}
-
-export interface AlertFilters {
-  since?: string
-  until?: string
-  ip?: string
-  range?: string
-  scope?: string
-  value?: string
-  scenario?: string
-  type?: string
-  origin?: string
-  includeAll?: boolean
-}
-
 export interface HistoryConfig {
   retention_days: number
   updated_at?: string
-}
-
-export interface DecisionHistoryRecord {
-  id: number
-  dedupe_key: string
-  decision_id: number
-  alert_id: number
-  origin: string
-  type: string
-  scope: string
-  value: string
-  duration: string
-  scenario: string
-  created_at: string
-  until?: string
-  is_stale: boolean
-  first_seen_at: string
-  last_seen_at: string
-  stale_at?: string
-  last_snapshot_at: string
-}
-
-export interface AlertHistoryRecord {
-  id: number
-  dedupe_key: string
-  alert_id: number
-  scenario: string
-  scope: string
-  value: string
-  origin: string
-  type?: string
-  events_count: number
-  start_at?: string
-  stop_at?: string
-  is_stale: boolean
-  first_seen_at: string
-  last_seen_at: string
-  stale_at?: string
-  last_snapshot_at: string
-}
-
-export interface RepeatedOffender {
-  value: string
-  scope: string
-  hit_count: number
-  window_days: number
-  first_decision_at: string
-  last_decision_at: string
-  last_notified_at?: string
 }
 
 export interface HostInfo {
@@ -479,45 +360,3 @@ export interface StepResult {
   skipped?: boolean
 }
 
-// History re-insertion types
-export interface ReapplyDecisionRequest {
-  id: number
-  type: string      // "ban" | "captcha"
-  duration: string  // e.g. "24h", "7d"
-  reason?: string
-}
-
-export interface BulkReapplyDecisionsRequest {
-  ids: number[]
-  type: string
-  duration: string
-  reason?: string
-}
-
-export interface BulkReapplyResult {
-  succeeded: number
-  failed: number
-  errors?: string[]
-}
-
-export interface HistoryStats {
-  total_decisions: number
-  active_decisions: number
-  total_alerts: number
-  active_alerts: number
-  repeated_offender_count: number
-}
-
-export interface HistoryActivityBucket {
-  ts: string
-  alerts: number
-  decisions: number
-}
-
-export interface HistoryActivityResponse {
-  window: '24h' | '7d'
-  bucket: 'hour' | 'day'
-  buckets: HistoryActivityBucket[]
-  generated_at: string
-  latest_snapshot_at: string | null
-}

@@ -18,13 +18,13 @@ export function EmptyStateCard({
   icon: Icon = Inbox,
 }: EmptyStateCardProps) {
   return (
-    <div className="rounded-xl border border-border bg-card p-6 text-center space-y-3">
-      <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-muted">
-        <Icon className="h-5 w-5 text-muted-foreground" />
+    <div className="rounded-lg border border-hairline bg-surface-card p-lg text-center space-y-sm">
+      <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-pill bg-canvas">
+        <Icon className="h-5 w-5 text-muted" />
       </div>
       <div>
-        <h3 className="text-sm font-semibold">{title}</h3>
-        <p className="text-sm text-muted-foreground mt-1">{description}</p>
+        <h3 className="text-title-sm font-semibold text-ink">{title}</h3>
+        <p className="text-body-sm text-muted mt-xxs">{description}</p>
       </div>
       {actionLabel && onAction && (
         <Button variant="secondary" size="sm" onClick={onAction}>

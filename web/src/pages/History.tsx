@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import api from '@/lib/api'
 import type { DecisionHistoryRecord, AlertHistoryRecord, RepeatedOffender, HistoryStats, HistoryConfig } from '@/lib/api'
+import { invalidateDecisionsAndAlerts } from '@/lib/queryInvalidation'
 import { useSSE } from '@/hooks/useSSE'
 import { useRepeatedOffenderToast } from '@/hooks/useRepeatedOffenderToast'
 import { StatusCard } from '@/components/common/StatusCard'
@@ -679,7 +680,7 @@ export default function History() {
         open={reapplyRecord !== null}
         onClose={() => setReapplyRecord(null)}
         onSuccess={() => {
-          queryClient.invalidateQueries({ queryKey: ['decision-history'] })
+          void invalidateDecisionsAndAlerts(queryClient)
           queryClient.invalidateQueries({ queryKey: ['history-stats'] })
         }}
       />
@@ -690,7 +691,7 @@ export default function History() {
         onClose={() => setBulkReapplyOpen(false)}
         onSuccess={() => {
           setDecisionSelected(new Set())
-          queryClient.invalidateQueries({ queryKey: ['decision-history'] })
+          void invalidateDecisionsAndAlerts(queryClient)
           queryClient.invalidateQueries({ queryKey: ['history-stats'] })
         }}
       />

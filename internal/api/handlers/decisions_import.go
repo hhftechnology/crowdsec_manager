@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"crowdsec-manager/internal/cache"
 	"crowdsec-manager/internal/config"
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/models"
@@ -17,7 +18,7 @@ import (
 )
 
 // ImportDecisions imports decisions from a CSV file
-func ImportDecisions(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
+func ImportDecisions(dockerClient *docker.Client, cfg *config.Config, ttlCache ...*cache.TTLCache) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		dockerClient = resolveDockerClient(c, dockerClient)
 		file, header, err := c.Request.FormFile("file")
@@ -150,6 +151,7 @@ func ImportDecisions(dockerClient *docker.Client, cfg *config.Config) gin.Handle
 			return
 		}
 
+		invalidateCrowdSecDataCache(ttlCache...)
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
 			Message: "Decisions imported successfully",

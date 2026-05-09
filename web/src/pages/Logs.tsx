@@ -2,17 +2,19 @@ import { useState, useRef, useMemo, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import api from '@/lib/api'
+import { dashboardAPI, type DashboardRange } from '@/lib/api/dashboard'
 import { ErrorContexts, getErrorMessage } from '@/lib/api/errors'
 import { useSearch } from '@/contexts/SearchContext'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
-import { FileText, RefreshCw, Activity, Download } from 'lucide-react'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { FileText, RefreshCw, Activity, Download, BarChart3 } from 'lucide-react'
 import { PageHeader, QueryError } from '@/components/common'
 import { LogFilterPanel, type LogFilters } from '@/components/logs/LogFilterPanel'
 import { LogViewer } from '@/components/logs/LogViewer'
-import { TraefikAnalytics } from '@/components/logs/TraefikAnalytics'
+import { TraefikDashboard, CrowdSecDashboard, RangeSelector } from '@/features/logs/dashboard'
 import { useMountEffect } from '@/hooks/useMountEffect'
 
 export default function Logs() {
@@ -47,12 +49,22 @@ export default function Logs() {
     enabled: selectedService === 'traefik' && !isStreaming,
   })
 
-  const { data: traefikStats, isLoading: statsLoading, refetch: refetchStats } = useQuery({
-    queryKey: ['logs-traefik-stats'],
-    queryFn: async () => {
-      const response = await api.logs.analyzeTraefikAdvanced('1000')
-      return response.data.data
-    },
+  const [dashboardRange, setDashboardRange] = useState<DashboardRange>('1h')
+
+  const { data: traefikDashboard, isLoading: traefikDashboardLoading, refetch: refetchTraefikDashboard } = useQuery({
+    queryKey: ['logs-dashboard', 'traefik', dashboardRange],
+    queryFn: async () => (await dashboardAPI.getTraefik(dashboardRange)).data.data,
+    enabled: selectedService === 'traefik',
+    refetchInterval: 10_000,
+    staleTime: 8_000,
+  })
+
+  const { data: crowdsecDashboard, isLoading: crowdsecDashboardLoading, refetch: refetchCrowdSecDashboard } = useQuery({
+    queryKey: ['logs-dashboard', 'crowdsec', dashboardRange],
+    queryFn: async () => (await dashboardAPI.getCrowdSec(dashboardRange)).data.data,
+    enabled: selectedService === 'crowdsec',
+    refetchInterval: 10_000,
+    staleTime: 8_000,
   })
 
   // Close WebSocket on unmount
@@ -224,47 +236,104 @@ export default function Logs() {
         </CardContent>
       </Card>
 
-      {/* Search, Filter & Export Controls */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex flex-col gap-3">
-            <LogFilterPanel
-              services={['crowdsec', 'traefik']}
-              filters={displayFilters}
-              includeAllServices={false}
-              onFilterChange={handleFilterChange}
-            />
-            <div className="flex items-center justify-between">
-              <div className="text-xs text-muted-foreground">
-                Showing {filteredLines.length} of {totalLines} lines
+      <Tabs defaultValue="dashboard" className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <TabsList>
+            <TabsTrigger value="dashboard" className="gap-2">
+              <BarChart3 className="h-4 w-4" />Dashboard
+            </TabsTrigger>
+            <TabsTrigger value="logs" className="gap-2">
+              <FileText className="h-4 w-4" />Logs
+            </TabsTrigger>
+          </TabsList>
+          <RangeSelector value={dashboardRange} onChange={setDashboardRange} />
+        </div>
+
+        <TabsContent value="dashboard" className="space-y-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base">
+                  {selectedService === 'crowdsec' ? 'CrowdSec Dashboard' : 'Traefik Dashboard'}
+                </CardTitle>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    selectedService === 'crowdsec' ? refetchCrowdSecDashboard() : refetchTraefikDashboard()
+                  }
+                >
+                  <RefreshCw className="h-4 w-4" />Refresh
+                </Button>
               </div>
-              <Button variant="outline" size="sm" onClick={handleExport} disabled={!filteredLines.length}>
-                <Download className="h-4 w-4" />Export
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+              <CardDescription>
+                Aggregated view of the last {dashboardRange} of {selectedService === 'crowdsec' ? 'CrowdSec' : 'Traefik'} activity. Auto-refreshes every 10s.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <LogFilterPanel
+                services={['crowdsec', 'traefik']}
+                filters={displayFilters}
+                includeAllServices={false}
+                onFilterChange={handleFilterChange}
+              />
+            </CardContent>
+          </Card>
 
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>Log Output</CardTitle>
-            <Badge variant="secondary">{selectedService === 'crowdsec' ? 'CrowdSec' : 'Traefik'}</Badge>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {isLoading && !isStreaming ? (
-            <div className="h-96 bg-muted animate-pulse rounded" />
+          {selectedService === 'traefik' ? (
+            <TraefikDashboard data={traefikDashboard ?? undefined} isLoading={traefikDashboardLoading} />
           ) : (
-            <LogViewer logs={filteredLines} autoScroll />
+            <CrowdSecDashboard data={crowdsecDashboard ?? undefined} isLoading={crowdsecDashboardLoading} />
           )}
-        </CardContent>
-      </Card>
+        </TabsContent>
 
-      {selectedService === 'traefik' && (
-        <TraefikAnalytics stats={traefikStats || undefined} isLoading={statsLoading} onRefresh={() => refetchStats()} />
-      )}
+        <TabsContent value="logs" className="space-y-4">
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex flex-col gap-3">
+                <LogFilterPanel
+                  services={['crowdsec', 'traefik']}
+                  filters={displayFilters}
+                  includeAllServices={false}
+                  onFilterChange={handleFilterChange}
+                />
+                <div className="flex items-center justify-between">
+                  <div className="text-xs text-muted-foreground">
+                    Showing {filteredLines.length} of {totalLines} lines
+                  </div>
+                  <Button variant="outline" size="sm" onClick={handleExport} disabled={!filteredLines.length}>
+                    <Download className="h-4 w-4" />Export
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle>Log Output</CardTitle>
+                <Badge variant="secondary">{selectedService === 'crowdsec' ? 'CrowdSec' : 'Traefik'}</Badge>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {isLoading && !isStreaming ? (
+                <div className="h-96 bg-muted animate-pulse rounded" />
+              ) : (
+                <LogViewer
+                  logs={filteredLines}
+                  autoScroll
+                  emptyMessage={
+                    isStreaming
+                      ? `Stream connected — waiting for new ${selectedService} log lines. If nothing appears, the container may not be writing to stdout for this service.`
+                      : 'No logs to display'
+                  }
+                />
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

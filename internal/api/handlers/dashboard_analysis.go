@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"time"
+	"strings"
 
 	"crowdsec-manager/internal/cache"
 	"crowdsec-manager/internal/config"
@@ -19,9 +19,20 @@ import (
 )
 
 // GetDecisionsAnalysis retrieves CrowdSec decisions with advanced filtering
-func GetDecisionsAnalysis(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
+func GetDecisionsAnalysis(dockerClient *docker.Client, cfg *config.Config, ttlCache ...*cache.TTLCache) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		dockerClient = resolveDockerClient(c, dockerClient)
+		cacheKey := crowdSecAnalysisCacheKey(c, "decisions")
+		if cacheStore := optionalCache(ttlCache); cacheStore != nil {
+			if cached, ok := cacheStore.Get(cacheKey); ok {
+				c.JSON(http.StatusOK, models.Response{
+					Success: true,
+					Data:    cached,
+				})
+				return
+			}
+		}
+
 		logger.Info("Getting CrowdSec decisions analysis via cscli")
 
 		defaultLimit := config.EffectiveLimit(cfg.DecisionListLimit, constants.MaxListLimit)
@@ -73,9 +84,13 @@ func GetDecisionsAnalysis(dockerClient *docker.Client, cfg *config.Config) gin.H
 
 		// Check if output is empty or null
 		if output == "null" || output == "" || output == "[]" {
+			result := gin.H{"decisions": []models.Decision{}, "count": 0, "total": 0, "limit": limit, "offset": offset}
+			if cacheStore := optionalCache(ttlCache); cacheStore != nil {
+				cacheStore.Set(cacheKey, result, analysisCacheTTL)
+			}
 			c.JSON(http.StatusOK, models.Response{
 				Success: true,
-				Data:    gin.H{"decisions": []models.Decision{}, "count": 0, "total": 0, "limit": limit, "offset": offset},
+				Data:    result,
 			})
 			return
 		}
@@ -146,29 +161,47 @@ func GetDecisionsAnalysis(dockerClient *docker.Client, cfg *config.Config) gin.H
 
 		total := len(decisions)
 		pagedDecisions := paginateDecisions(decisions, limit, offset)
+		result := gin.H{
+			"decisions": pagedDecisions,
+			"count":     len(pagedDecisions),
+			"total":     total,
+			"limit":     limit,
+			"offset":    offset,
+		}
+		if cacheStore := optionalCache(ttlCache); cacheStore != nil {
+			cacheStore.Set(cacheKey, result, analysisCacheTTL)
+		}
 
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
-			Data: gin.H{
-				"decisions": pagedDecisions,
-				"count":     len(pagedDecisions),
-				"total":     total,
-				"limit":     limit,
-				"offset":    offset,
-			},
+			Data:    result,
 		})
 	}
 }
 
-// GetAlertsAnalysis retrieves CrowdSec alerts with advanced filtering
+// GetAlertsAnalysis retrieves CrowdSec alerts with advanced filtering.
 func GetAlertsAnalysis(dockerClient *docker.Client, cfg *config.Config, ttlCache ...*cache.TTLCache) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		dockerClient = resolveDockerClient(c, dockerClient)
+		handler := getAlertsAnalysisWithExecutor(alertAnalysisHandlerInput{
+			Executor: resolveDockerClient(c, dockerClient),
+			Config:   cfg,
+			Cache:    optionalCache(ttlCache),
+		})
+		handler(c)
+	}
+}
 
-		// Cache key includes the "since" param to differentiate dashboard vs analysis queries
-		cacheKey := "alerts-analysis-" + c.Query("since")
-		if len(ttlCache) > 0 && ttlCache[0] != nil {
-			if cached, ok := ttlCache[0].Get(cacheKey); ok {
+type alertAnalysisHandlerInput struct {
+	Executor cscliExecutor
+	Config   *config.Config
+	Cache    *cache.TTLCache
+}
+
+func getAlertsAnalysisWithExecutor(input alertAnalysisHandlerInput) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		cacheKey := crowdSecAnalysisCacheKey(c, "alerts")
+		if input.Cache != nil {
+			if cached, ok := input.Cache.Get(cacheKey); ok {
 				c.JSON(http.StatusOK, models.Response{
 					Success: true,
 					Data:    cached,
@@ -179,47 +212,8 @@ func GetAlertsAnalysis(dockerClient *docker.Client, cfg *config.Config, ttlCache
 
 		logger.Info("Getting CrowdSec alerts analysis via cscli")
 
-		var cmd []string
-		if v := c.Query("id"); v != "" {
-			cmd = []string{"cscli", "alerts", "inspect", v, "-o", "json"}
-		} else {
-			alertLimit := config.EffectiveLimit(cfg.AlertListLimit, constants.MaxListLimit)
-			cmd = []string{"cscli", "alerts", "list", "-o", "json", "--limit", strconv.Itoa(alertLimit)}
-
-			// Add filters based on query parameters
-			if v := c.Query("ip"); v != "" {
-				cmd = append(cmd, "--ip", v)
-			}
-			if v := c.Query("range"); v != "" {
-				cmd = append(cmd, "--range", v)
-			}
-			if v := c.Query("type"); v != "" && v != "all" {
-				cmd = append(cmd, "--type", v)
-			}
-			if v := c.Query("scope"); v != "" && v != "all" {
-				cmd = append(cmd, "--scope", v)
-			}
-			if v := c.Query("value"); v != "" {
-				cmd = append(cmd, "--value", v)
-			}
-			if v := c.Query("scenario"); v != "" {
-				cmd = append(cmd, "--scenario", v)
-			}
-			if v := c.Query("origin"); v != "" && v != "all" {
-				cmd = append(cmd, "--origin", v)
-			}
-			if v := c.Query("since"); v != "" {
-				cmd = append(cmd, "--since", v)
-			}
-			if v := c.Query("until"); v != "" {
-				cmd = append(cmd, "--until", v)
-			}
-			if v := c.Query("includeAll"); v == "true" {
-				cmd = append(cmd, "-a")
-			}
-		}
-
-		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, cmd)
+		cmd := buildAlertsAnalysisCommand(c, input.Config)
+		output, err := input.Executor.ExecCommand(input.Config.CrowdsecContainerName, cmd)
 		if err != nil {
 			logger.Error("Failed to get alerts analysis", "error", err)
 			c.JSON(http.StatusInternalServerError, models.Response{
@@ -229,76 +223,139 @@ func GetAlertsAnalysis(dockerClient *docker.Client, cfg *config.Config, ttlCache
 			return
 		}
 
-		// Parse JSON
-		dataBytes, parseErr := parseCLIJSONToBytes(output)
-		if parseErr != nil {
-			if output == "null" || output == "" {
-				c.JSON(http.StatusOK, models.Response{
-					Success: true,
-					Data:    gin.H{"alerts": []interface{}{}, "count": 0},
-				})
-				return
-			}
-			logger.Warn("Failed to normalize alerts JSON", "error", parseErr)
+		alerts, err := parseAlertsAnalysisOutput(output)
+		if err != nil {
+			logger.Warn("Failed to parse alerts analysis output", "error", err)
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
-				Error:   fmt.Sprintf("Failed to parse alerts: %v", parseErr),
+				Error:   fmt.Sprintf("Failed to parse alerts: %v", err),
 			})
 			return
 		}
-		var alerts []interface{}
-		if err := json.Unmarshal(dataBytes, &alerts); err != nil {
-			// If unmarshaling as list fails, try as a single object (behavior for inspect command)
-			var singleAlert interface{}
-			if errSingle := json.Unmarshal(dataBytes, &singleAlert); errSingle == nil {
-				alerts = []interface{}{singleAlert}
-			} else {
-				if output == "null" || output == "" {
-					c.JSON(http.StatusOK, models.Response{
-						Success: true,
-						Data:    gin.H{"alerts": []interface{}{}, "count": 0},
-					})
-					return
-				}
-
-				logger.Warn("Failed to parse alerts JSON", "error", err)
-				c.JSON(http.StatusInternalServerError, models.Response{
-					Success: false,
-					Error:   fmt.Sprintf("Failed to parse alerts: %v", err),
-				})
-				return
-			}
-		}
-
-		// Normalize nested cscli fields to match the CrowdSecAlert contract.
-		// cscli nests value/scope under source{} and origin/type under decisions[0].
-		for _, item := range alerts {
-			node, ok := item.(map[string]interface{})
-			if !ok {
-				continue
-			}
-			if src, ok := node["source"].(map[string]interface{}); ok {
-				node["value"] = src["value"]
-				node["scope"] = src["scope"]
-			}
-			if decs, ok := node["decisions"].([]interface{}); ok && len(decs) > 0 {
-				if d, ok := decs[0].(map[string]interface{}); ok {
-					node["origin"] = d["origin"]
-					node["type"] = d["type"]
-				}
-			}
-		}
 
 		logger.Info("Alerts analysis retrieved successfully", "count", len(alerts))
-
-		result := gin.H{"alerts": alerts, "count": len(alerts)}
-		if len(ttlCache) > 0 && ttlCache[0] != nil {
-			ttlCache[0].Set(cacheKey, result, 30*time.Second)
-		}
-
-		c.JSON(http.StatusOK, models.Response{
-			Success: true,
-			Data:    result,
+		writeAlertsAnalysisResult(alertAnalysisResultInput{
+			Context:         c,
+			Cache:           input.Cache,
+			CacheKey:        cacheKey,
+			LastNonEmptyKey: alertLastNonEmptyAnalysisCacheKey(c),
+			Alerts:          alerts,
 		})
 	}
+}
+
+func buildAlertsAnalysisCommand(c *gin.Context, cfg *config.Config) []string {
+	if v := c.Query("id"); v != "" {
+		return []string{"cscli", "alerts", "inspect", v, "-o", "json"}
+	}
+
+	alertLimit := config.EffectiveLimit(cfg.AlertListLimit, constants.MaxListLimit)
+	cmd := []string{"cscli", "alerts", "list", "-o", "json", "--limit", strconv.Itoa(alertLimit)}
+
+	if v := c.Query("ip"); v != "" {
+		cmd = append(cmd, "--ip", v)
+	}
+	if v := c.Query("range"); v != "" {
+		cmd = append(cmd, "--range", v)
+	}
+	if v := c.Query("type"); v != "" && v != "all" {
+		cmd = append(cmd, "--type", v)
+	}
+	if v := c.Query("scope"); v != "" && v != "all" {
+		cmd = append(cmd, "--scope", v)
+	}
+	if v := c.Query("value"); v != "" {
+		cmd = append(cmd, "--value", v)
+	}
+	if v := c.Query("scenario"); v != "" {
+		cmd = append(cmd, "--scenario", v)
+	}
+	if v := c.Query("origin"); v != "" && v != "all" {
+		cmd = append(cmd, "--origin", v)
+	}
+	if v := c.Query("since"); v != "" {
+		cmd = append(cmd, "--since", v)
+	}
+	if v := c.Query("until"); v != "" {
+		cmd = append(cmd, "--until", v)
+	}
+	if v := c.Query("includeAll"); v == "true" {
+		cmd = append(cmd, "-a")
+	}
+
+	return cmd
+}
+
+func parseAlertsAnalysisOutput(output string) ([]interface{}, error) {
+	trimmed := strings.TrimSpace(output)
+	if trimmed == "" || trimmed == "null" {
+		return []interface{}{}, nil
+	}
+
+	dataBytes, parseErr := parseCLIJSONToBytes(output)
+	if parseErr != nil {
+		return nil, fmt.Errorf("normalize alerts JSON: %w", parseErr)
+	}
+
+	var alerts []interface{}
+	if err := json.Unmarshal(dataBytes, &alerts); err != nil {
+		var singleAlert interface{}
+		if errSingle := json.Unmarshal(dataBytes, &singleAlert); errSingle != nil {
+			return nil, fmt.Errorf("parse alerts JSON: %w", err)
+		}
+		if singleAlert == nil {
+			return []interface{}{}, nil
+		}
+		alerts = []interface{}{singleAlert}
+	}
+
+	normalizeAlertsAnalysis(alerts)
+	return alerts, nil
+}
+
+func normalizeAlertsAnalysis(alerts []interface{}) {
+	for _, item := range alerts {
+		node, ok := item.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if src, ok := node["source"].(map[string]interface{}); ok {
+			node["value"] = src["value"]
+			node["scope"] = src["scope"]
+		}
+		if decs, ok := node["decisions"].([]interface{}); ok && len(decs) > 0 {
+			if d, ok := decs[0].(map[string]interface{}); ok {
+				node["origin"] = d["origin"]
+				node["type"] = d["type"]
+			}
+		}
+	}
+}
+
+type alertAnalysisResultInput struct {
+	Context         *gin.Context
+	Cache           *cache.TTLCache
+	CacheKey        string
+	LastNonEmptyKey string
+	Alerts          []interface{}
+}
+
+func writeAlertsAnalysisResult(input alertAnalysisResultInput) {
+	result := gin.H{"alerts": input.Alerts, "count": len(input.Alerts)}
+	if input.Cache != nil {
+		if len(input.Alerts) > 0 {
+			input.Cache.Set(input.CacheKey, result, analysisCacheTTL)
+			input.Cache.Set(input.LastNonEmptyKey, result, alertLastNonEmptyAnalysisCacheTTL)
+			input.Context.JSON(http.StatusOK, models.Response{Success: true, Data: result})
+			return
+		}
+		if cached, ok := input.Cache.Get(input.LastNonEmptyKey); ok {
+			input.Cache.Set(input.CacheKey, cached, emptyAnalysisCacheTTL)
+			input.Context.JSON(http.StatusOK, models.Response{Success: true, Data: cached})
+			return
+		}
+		input.Cache.Set(input.CacheKey, result, emptyAnalysisCacheTTL)
+	}
+
+	input.Context.JSON(http.StatusOK, models.Response{Success: true, Data: result})
 }

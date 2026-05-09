@@ -1,9 +1,12 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import api, { CrowdSecAlert } from '@/lib/api'
+import api from '@/lib/api'
+import type { CrowdSecAlert } from '@/lib/api'
 import { crowdsecAPI } from '@/lib/api/crowdsec'
 import type { Decision, AlertEvent } from '@/lib/api/types'
+import { getErrorDetails, getErrorMessage } from '@/lib/api/errors'
+import { invalidateDecisionsAndAlerts } from '@/lib/queryInvalidation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -70,7 +73,7 @@ import {
 import type { FilterField } from '@/components/common'
 import { AlertCard } from '@/components/alerts/AlertCard'
 import { ChartCard, AreaTimeline, BarDistribution, ThreatMap } from '@/components/charts'
-import { groupByField } from '@/lib/chart-utils'
+import { bucketByUtcDay, groupByField } from '@/lib/chart-utils'
 import { buildThreatMapPoints } from '@/lib/threat-map'
 import { useInfiniteScroll, useUrlFilters } from '@/hooks'
 import { useSearch } from '@/contexts/SearchContext'
@@ -94,6 +97,19 @@ interface AlertFilters {
   country?: string
   includeAll?: boolean
 }
+
+type AlertsAnalysisData = {
+  alerts: CrowdSecAlert[]
+  count: number
+}
+
+type LastNonEmptyAlerts = {
+  key: string
+  data: AlertsAnalysisData
+  updatedAt: number
+}
+
+const ALERT_TRANSIENT_EMPTY_GRACE_MS = 2 * 60 * 1000
 
 const FILTER_KEYS = [
   'id', 'since', 'until', 'ip', 'range',
@@ -143,6 +159,18 @@ function escapeCsvField(field: string | number | undefined | null): string {
 function truncate(str: string | undefined | null, max: number): string {
   if (!str) return '-'
   return str.length > max ? str.slice(0, max) + '...' : str
+}
+
+function stableAlertFilterKey(filters: AlertFilters): string {
+  return JSON.stringify(
+    Object.entries(filters)
+      .filter(([, value]) => value !== undefined && value !== '' && value !== false)
+      .sort(([a], [b]) => a.localeCompare(b)),
+  )
+}
+
+function hasAlerts(data: AlertsAnalysisData | null | undefined): data is AlertsAnalysisData {
+  return Array.isArray(data?.alerts) && data.alerts.length > 0
 }
 
 /** Format an event's meta array into a readable key-value display. */
@@ -489,17 +517,46 @@ export default function AlertAnalysis() {
   const [deleteAlertId, setDeleteAlertId] = useState<number | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const { query, setQuery } = useSearch()
+  const activeFilterKey = useMemo(() => stableAlertFilterKey(activeFilters), [activeFilters])
+  const lastNonEmptyAlertsRef = useRef<LastNonEmptyAlerts | null>(null)
 
   // ---- Data fetching ----
 
-  const { data: alertsData, isLoading, isError, error, refetch } = useQuery({
-    queryKey: ['alerts-analysis', activeFilters],
+  const { data: rawAlertsData, isLoading, isFetching, isError, error, refetch } = useQuery<AlertsAnalysisData | null>({
+    queryKey: ['alerts-analysis', activeFilterKey],
     queryFn: async () => {
       const response = await api.crowdsec.getAlertsAnalysis(activeFilters)
       return response.data.data ?? null
     },
     refetchInterval: 30000,
+    staleTime: 30000,
+    placeholderData: (previousData, previousQuery) =>
+      previousQuery?.queryKey?.[1] === activeFilterKey ? previousData : undefined,
   })
+
+  useEffect(() => {
+    if (!hasAlerts(rawAlertsData)) return
+    lastNonEmptyAlertsRef.current = {
+      key: activeFilterKey,
+      data: rawAlertsData,
+      updatedAt: Date.now(),
+    }
+  }, [activeFilterKey, rawAlertsData])
+
+  const alertsData = useMemo(() => {
+    if (hasAlerts(rawAlertsData)) return rawAlertsData
+    const lastNonEmpty = lastNonEmptyAlertsRef.current
+    if (
+      lastNonEmpty &&
+      lastNonEmpty.key === activeFilterKey &&
+      Date.now() - lastNonEmpty.updatedAt <= ALERT_TRANSIENT_EMPTY_GRACE_MS
+    ) {
+      return lastNonEmpty.data
+    }
+    return rawAlertsData ?? null
+  }, [activeFilterKey, rawAlertsData])
+
+  const suppressEmptyState = isFetching && !isLoading && !hasAlerts(rawAlertsData)
 
   // ---- Client-side search filtering (includes country + AS) ----
 
@@ -546,12 +603,7 @@ export default function AlertAnalysis() {
 
   const alertTimeData = useMemo(() => {
     if (!alertsData?.alerts) return []
-    const buckets: Record<string, number> = {}
-    for (const a of alertsData.alerts as CrowdSecAlert[]) {
-      const date = new Date(a.start_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-      buckets[date] = (buckets[date] || 0) + 1
-    }
-    return Object.entries(buckets).map(([date, count]) => ({ date, value: count }))
+    return bucketByUtcDay(alertsData.alerts as CrowdSecAlert[], 'start_at')
   }, [alertsData])
 
   const scenarioData = useMemo(() => {
@@ -604,12 +656,12 @@ export default function AlertAnalysis() {
       if (detailAlert?.id === deleteAlertId) {
         setDetailAlert(null)
       }
-      // Invalidate and refetch
-      queryClient.invalidateQueries({ queryKey: ['alerts-analysis'] })
+      await invalidateDecisionsAndAlerts(queryClient)
       queryClient.invalidateQueries({ queryKey: ['alert-inspect', deleteAlertId] })
     } catch (err) {
-      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed to delete alert'
-      toast.error(msg)
+      toast.error(getErrorMessage(err, 'Failed to delete alert'), {
+        description: getErrorDetails(err),
+      })
     } finally {
       setIsDeleting(false)
     }
@@ -754,8 +806,8 @@ export default function AlertAnalysis() {
                   <span className="ml-1 text-muted-foreground">x</span>
                 </Button>
               )}
-              <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isLoading}>
-                <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+              <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
+                <RefreshCw className={`h-4 w-4 mr-2 ${isFetching ? 'animate-spin' : ''}`} />
                 Refresh
               </Button>
               <Button variant="outline" size="sm" onClick={handleExport}>
@@ -933,6 +985,8 @@ export default function AlertAnalysis() {
                 )}
               </TabsContent>
             </Tabs>
+          ) : suppressEmptyState ? (
+            <PageLoader message="Refreshing alerts..." />
           ) : (
             <EmptyState
               icon={AlertCircle}

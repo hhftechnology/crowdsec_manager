@@ -1,5 +1,5 @@
 import { Suspense, lazy, useState, type ReactNode } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Toaster } from '@/components/ui/toaster';
@@ -15,8 +15,8 @@ import { DashboardSkeleton } from '@/components/dashboard/DashboardSkeleton';
 
 import LoginPage from '@/pages/LoginPage';
 import NotFound from '@/pages/NotFound';
+import { queryClient } from '@/lib/api/queryClient';
 
-const queryClient = new QueryClient();
 const DashboardPage = lazy(() => import('@/pages/DashboardPage'));
 const SecurityPage = lazy(() => import('@/pages/SecurityPage'));
 const LogsPage = lazy(() => import('@/pages/LogsPage'));
@@ -35,7 +35,7 @@ function withRouteFallback(node: ReactNode, fallback: ReactNode = <RouteLoadingS
 
 function AuthenticatedRoutes() {
   return (
-    <div className="max-w-lg mx-auto min-h-screen bg-background safe-top">
+    <div className="mx-auto min-h-screen w-full max-w-lg overflow-x-hidden bg-canvas text-ink safe-top">
       <OfflineConnectionBanner />
       <Routes>
         <Route path="/dashboard" element={withRouteFallback(<DashboardPage />, <DashboardSkeleton showHeader />)} />

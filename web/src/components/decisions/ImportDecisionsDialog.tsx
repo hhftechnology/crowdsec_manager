@@ -2,6 +2,7 @@ import { useState, useRef } from 'react'
 import { toast } from 'sonner'
 import { Upload, Loader2, FileText, AlertCircle } from 'lucide-react'
 import api from '@/lib/api'
+import { getErrorDetails, getErrorMessage } from '@/lib/api/errors'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -41,8 +42,9 @@ export function ImportDecisionsDialog({ onSuccess }: ImportDecisionsDialogProps)
       setFile(null)
       onSuccess()
     } catch (error: unknown) {
-      const axiosError = error as { response?: { data?: { error?: string } } }
-      toast.error(axiosError.response?.data?.error || 'Failed to import decisions')
+      toast.error(getErrorMessage(error, 'Failed to import decisions'), {
+        description: getErrorDetails(error),
+      })
     } finally {
       setIsLoading(false)
     }

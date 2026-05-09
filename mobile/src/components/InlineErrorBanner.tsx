@@ -26,10 +26,10 @@ export function InlineErrorBanner({
       <AlertCircle className="h-4 w-4" />
       <AlertTitle>{resolvedTitle}</AlertTitle>
       <AlertDescription>
-        <div className="space-y-3">
+        <div className="space-y-sm">
           <p>{resolvedMessage}</p>
           {onRetry && (
-            <Button variant="secondary" size="sm" onClick={onRetry} className="gap-1.5">
+            <Button variant="secondary" size="sm" onClick={onRetry} className="gap-xxs">
               <RefreshCw className="h-3 w-3" />
               Retry
             </Button>

@@ -34,12 +34,12 @@ export function DeleteDecisionForm({ onDelete, loading }: DeleteDecisionFormProp
   };
 
   return (
-    <section className="rounded-xl border border-border bg-card p-4 space-y-3">
-      <h3 className="text-sm font-semibold">Delete Decision</h3>
+    <section className="rounded-lg border border-hairline bg-surface-card p-md space-y-sm">
+      <h3 className="text-title-sm font-semibold text-ink">Delete Decision</h3>
 
-      <div className="space-y-2">
-        <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">Delete by</label>
+      <div className="space-y-xs">
+        <div className="space-y-xxs">
+          <label className="text-caption text-muted">Delete by</label>
           <Select value={mode} onValueChange={(val) => setMode(val as DeleteMode)}>
             <SelectTrigger>
               <SelectValue />
@@ -63,7 +63,7 @@ export function DeleteDecisionForm({ onDelete, loading }: DeleteDecisionFormProp
         disabled={!input.trim() || loading}
         onClick={handleSubmit}
       >
-        <Trash2 className="h-4 w-4 mr-1" />
+        <Trash2 className="h-4 w-4 mr-xxs" />
         Delete
       </Button>
     </section>

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -113,6 +114,44 @@ func GetDecisionHistory() gin.HandlerFunc {
 				"total":     total,
 			},
 		})
+	}
+}
+
+// GetDecisionHistoryAnalysis returns persisted decision aggregates for charts.
+func GetDecisionHistoryAnalysis() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if historyService == nil {
+			c.JSON(http.StatusOK, models.Response{
+				Success: true,
+				Data: models.DecisionHistoryAnalysisResponse{
+					Ready:         false,
+					OverTime:      []models.HistoryChartPoint{},
+					DecisionTypes: []models.HistoryBreakdownItem{},
+					TopIPs:        []models.HistoryBreakdownItem{},
+				},
+			})
+			return
+		}
+
+		filter := models.DecisionHistoryFilter{
+			Value:    c.Query("value"),
+			Scenario: c.Query("scenario"),
+			Since:    c.Query("since"),
+			Until:    c.Query("until"),
+			Type:     c.Query("type"),
+			Scope:    c.Query("scope"),
+			Origin:   c.Query("origin"),
+			IP:       c.Query("ip"),
+			Range:    c.Query("range"),
+		}
+
+		analysis, err := historyService.GetDecisionHistoryAnalysis(c.Request.Context(), filter)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, models.Response{Success: false, Error: "failed to load decision history analysis: " + err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, models.Response{Success: true, Data: analysis})
 	}
 }
 
@@ -237,20 +276,60 @@ func ReapplyDecision(dockerClient *docker.Client, cfg *config.Config) gin.Handle
 			return
 		}
 
-		cmd := buildReapplyCmd(record.Scope, record.Value, req.Type, req.Duration, req.Reason)
-		logger.Info("Reapplying decision from history", "id", req.ID, "value", record.Value, "type", req.Type)
+		normalizedDuration, ok := NormalizeDuration(req.Duration)
+		if !ok {
+			c.JSON(http.StatusBadRequest, models.Response{Success: false, Error: "invalid duration: " + req.Duration})
+			return
+		}
 
-		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, cmd)
+		decisionID, active, err := IsDecisionActive(dockerClient, cfg, record.Scope, record.Value)
 		if err != nil {
-			logger.Error("Failed to reapply decision", "error", err, "output", output)
-			c.JSON(http.StatusInternalServerError, models.Response{
-				Success: false,
-				Error:   fmt.Sprintf("failed to reapply decision: %v. Output: %s", err, output),
+			c.JSON(http.StatusInternalServerError, models.Response{Success: false, Error: "failed to check active decision: " + err.Error()})
+			return
+		}
+		if active {
+			c.JSON(http.StatusOK, models.Response{
+				Success: true,
+				Message: "Decision already active",
+				Data: gin.H{
+					"already_active": true,
+					"decision_id":    decisionID,
+				},
 			})
 			return
 		}
 
-		c.JSON(http.StatusOK, models.Response{Success: true, Message: "Decision reapplied successfully"})
+		cmd := buildReapplyCmd(reapplyDecisionCommandInput{
+			Scope:        record.Scope,
+			Value:        record.Value,
+			DecisionType: req.Type,
+			Duration:     normalizedDuration,
+			Reason:       req.Reason,
+		})
+		logger.Info("Reapplying decision from history", "id", req.ID, "value", record.Value, "type", req.Type)
+
+		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, cmd)
+		if err != nil {
+			details := output
+			if details == "" {
+				details = err.Error()
+			}
+			logger.Error("Failed to reapply decision", "error", err, "output", output)
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   "failed to reapply decision",
+				Details: details,
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, models.Response{
+			Success: true,
+			Message: "Decision reapplied successfully",
+			Data: gin.H{
+				"already_active": false,
+			},
+		})
 	}
 }
 
@@ -301,10 +380,41 @@ func BulkReapplyDecisions(dockerClient *docker.Client, cfg *config.Config) gin.H
 				continue
 			}
 
-			cmd := buildReapplyCmd(record.Scope, record.Value, req.Type, req.Duration, req.Reason)
-			if _, execErr := dockerClient.ExecCommand(cfg.CrowdsecContainerName, cmd); execErr != nil {
+			decisionID, active, activeErr := IsDecisionActive(dockerClient, cfg, record.Scope, record.Value)
+			if activeErr != nil {
 				result.Failed++
-				result.Errors = append(result.Errors, fmt.Sprintf("id %d (%s): %v", id, record.Value, execErr))
+				result.Errors = append(result.Errors, fmt.Sprintf("id %d (%s): active check failed: %v", id, record.Value, activeErr))
+				continue
+			}
+			if active {
+				result.Succeeded++
+				result.AlreadyActive++
+				result.DecisionIDs = append(result.DecisionIDs, decisionID)
+				continue
+			}
+
+			normalizedDuration, ok := NormalizeDuration(req.Duration)
+			if !ok {
+				result.Failed++
+				result.Errors = append(result.Errors, fmt.Sprintf("id %d (%s): invalid duration %q", id, record.Value, req.Duration))
+				continue
+			}
+
+			cmd := buildReapplyCmd(reapplyDecisionCommandInput{
+				Scope:        record.Scope,
+				Value:        record.Value,
+				DecisionType: req.Type,
+				Duration:     normalizedDuration,
+				Reason:       req.Reason,
+			})
+			output, execErr := dockerClient.ExecCommand(cfg.CrowdsecContainerName, cmd)
+			if execErr != nil {
+				result.Failed++
+				details := output
+				if details == "" {
+					details = execErr.Error()
+				}
+				result.Errors = append(result.Errors, fmt.Sprintf("id %d (%s): %s", id, record.Value, details))
 			} else {
 				result.Succeeded++
 			}
@@ -318,17 +428,131 @@ func BulkReapplyDecisions(dockerClient *docker.Client, cfg *config.Config) gin.H
 	}
 }
 
+type reapplyDecisionCommandInput struct {
+	Scope        string
+	Value        string
+	DecisionType string
+	Duration     string
+	Reason       string
+}
+
 // buildReapplyCmd constructs the cscli decisions add command for reapplication.
 // Uses --ip for Ip scope, --scope/--value otherwise.
-func buildReapplyCmd(scope, value, decisionType, duration, reason string) []string {
-	cmd := []string{"cscli", "decisions", "add", "--type", decisionType, "--duration", duration}
-	if strings.EqualFold(scope, "Ip") || scope == "" {
-		cmd = append(cmd, "--ip", value)
+func buildReapplyCmd(input reapplyDecisionCommandInput) []string {
+	cmd := []string{"cscli", "decisions", "add", "--type", input.DecisionType}
+	if strings.EqualFold(input.Scope, "Ip") || input.Scope == "" {
+		cmd = append(cmd, "--ip", input.Value)
 	} else {
-		cmd = append(cmd, "--scope", scope, "--value", value)
+		cmd = append(cmd, "--scope", input.Scope, "--value", input.Value)
 	}
-	if reason != "" {
-		cmd = append(cmd, "--reason", reason)
+	if input.Duration != "" {
+		cmd = append(cmd, "--duration", input.Duration)
+	}
+	if input.Reason != "" {
+		cmd = append(cmd, "--reason", input.Reason)
 	}
 	return cmd
+}
+
+// IsDecisionActive checks CrowdSec for an existing active decision with scope/value.
+func IsDecisionActive(executor cscliExecutor, cfg *config.Config, scope, value string) (int64, bool, error) {
+	if strings.TrimSpace(value) == "" {
+		return 0, false, nil
+	}
+
+	resolvedScope := strings.TrimSpace(scope)
+	if resolvedScope == "" {
+		resolvedScope = "Ip"
+	}
+
+	cmd := []string{"cscli", "decisions", "list", "--scope", resolvedScope, "--value", value, "-o", "json"}
+	output, err := executor.ExecCommand(cfg.CrowdsecContainerName, cmd)
+	if err != nil {
+		return 0, false, fmt.Errorf("list decisions: %w", err)
+	}
+
+	trimmed := strings.TrimSpace(output)
+	if trimmed == "" || trimmed == "null" || trimmed == "[]" {
+		return 0, false, nil
+	}
+
+	var decisions []models.Decision
+	if err := json.Unmarshal([]byte(trimmed), &decisions); err != nil {
+		return 0, false, fmt.Errorf("parse decisions list: %w", err)
+	}
+
+	for _, decision := range decisions {
+		if strings.EqualFold(decision.Scope, resolvedScope) && decision.Value == value {
+			return decision.ID, true, nil
+		}
+	}
+	return 0, false, nil
+}
+
+// ReapplyDecisionWithExecutorAndRecord is used by handler tests to exercise
+// reapply behavior without a real history store or Docker daemon.
+func ReapplyDecisionWithExecutorAndRecord(executor cscliExecutor, cfg *config.Config, record *models.DecisionHistoryRecord) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req models.ReapplyDecisionRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, models.Response{Success: false, Error: "invalid request: " + err.Error()})
+			return
+		}
+		if record == nil {
+			c.JSON(http.StatusNotFound, models.Response{Success: false, Error: fmt.Sprintf("history record %d not found", req.ID)})
+			return
+		}
+
+		normalizedDuration, ok := NormalizeDuration(req.Duration)
+		if !ok {
+			c.JSON(http.StatusBadRequest, models.Response{Success: false, Error: "invalid duration: " + req.Duration})
+			return
+		}
+
+		decisionID, active, err := IsDecisionActive(executor, cfg, record.Scope, record.Value)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, models.Response{Success: false, Error: "failed to check active decision: " + err.Error()})
+			return
+		}
+		if active {
+			c.JSON(http.StatusOK, models.Response{
+				Success: true,
+				Message: "Decision already active",
+				Data: gin.H{
+					"already_active": true,
+					"decision_id":    decisionID,
+				},
+			})
+			return
+		}
+
+		cmd := buildReapplyCmd(reapplyDecisionCommandInput{
+			Scope:        record.Scope,
+			Value:        record.Value,
+			DecisionType: req.Type,
+			Duration:     normalizedDuration,
+			Reason:       req.Reason,
+		})
+		output, err := executor.ExecCommand(cfg.CrowdsecContainerName, cmd)
+		if err != nil {
+			details := output
+			if details == "" {
+				details = err.Error()
+			}
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   "failed to reapply decision",
+				Details: details,
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, models.Response{
+			Success: true,
+			Message: "Decision reapplied successfully",
+			Data: gin.H{
+				"already_active": false,
+			},
+		})
+	}
 }

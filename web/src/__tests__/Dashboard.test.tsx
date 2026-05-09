@@ -1,10 +1,31 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import * as rtl from '@testing-library/react'
+import { cleanup, render } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import Dashboard from '@/pages/Dashboard'
 import type { HistoryActivityResponse } from '@/lib/api/types'
+
+const { fireEvent, screen, waitFor, within } = rtl as unknown as {
+  fireEvent: {
+    mouseDown: (element: Element) => void
+    click: (element: Element) => void
+  }
+  screen: {
+    getByRole: (role: string, options?: { name?: string | RegExp }) => HTMLElement
+    findByRole: (role: string, options?: { name?: string | RegExp }) => Promise<HTMLElement>
+    getByText: (text: string | RegExp) => HTMLElement
+    findByText: (text: string | RegExp) => Promise<HTMLElement>
+    getAllByText: (text: string | RegExp) => HTMLElement[]
+    getByLabelText: (text: string | RegExp) => HTMLElement
+    getAllByTestId: (testId: string | RegExp) => HTMLElement[]
+  }
+  waitFor: (callback: () => void | Promise<void>) => Promise<void>
+  within: (element: Element) => {
+    getByText: (text: string | RegExp) => HTMLElement
+  }
+}
 
 const mockNavigate = vi.fn()
 
@@ -15,6 +36,8 @@ const mockApi = vi.hoisted(() => ({
   crowdsec: {
     getDecisionsSummary: vi.fn(),
     getDecisions: vi.fn(),
+    getDecisionHistoryAnalysis: vi.fn(),
+    getRepeatedOffenders: vi.fn(),
     getBouncers: vi.fn(),
     getAlertsAnalysis: vi.fn(),
     getHistoryActivity: vi.fn(),
@@ -50,7 +73,13 @@ vi.mock('@/components/charts', () => ({
   ),
   AreaTimeline: () => <div />,
   PieBreakdown: () => <div />,
-  BarDistribution: () => <div />,
+  BarDistribution: ({ data }: { data: Array<{ name: string; value: number }> }) => (
+    <div>
+      {data.map((item) => (
+        <span key={item.name}>{item.name}:{item.value}</span>
+      ))}
+    </div>
+  ),
   ThreatMap: () => <div />,
 }))
 
@@ -91,6 +120,12 @@ describe('Dashboard', () => {
     mockApi.crowdsec.getDecisions.mockResolvedValue({
       data: { data: { decisions: [], count: 0 } },
     })
+    mockApi.crowdsec.getDecisionHistoryAnalysis.mockResolvedValue({
+      data: { data: { ready: false, count: 0, latest_snapshot_at: null, over_time: [], decision_types: [], top_ips: [] } },
+    })
+    mockApi.crowdsec.getRepeatedOffenders.mockResolvedValue({
+      data: { data: { offenders: [], count: 0 } },
+    })
     mockApi.crowdsec.getBouncers.mockResolvedValue({
       data: { data: { bouncers: [], count: 0 } },
     })
@@ -115,6 +150,38 @@ describe('Dashboard', () => {
     })
     expect(screen.getAllByTestId('activity-bar')).toHaveLength(7)
     expect(mockApi.crowdsec.getDecisions).toHaveBeenCalled()
+  })
+
+  it('uses repeated offenders for top blocked IPs once history is ready', async () => {
+    mockApi.crowdsec.getDecisionHistoryAnalysis.mockResolvedValue({
+      data: {
+        data: {
+          ready: true,
+          count: 3,
+          latest_snapshot_at: '2026-04-24T00:00:00Z',
+          over_time: [{ ts: '2026-04-24T00:00:00Z', value: 3 }],
+          decision_types: [{ name: 'ban', value: 3 }],
+          top_ips: [{ name: 'live-history-ip', value: 3 }],
+        },
+      },
+    })
+    mockApi.crowdsec.getRepeatedOffenders.mockResolvedValue({
+      data: {
+        data: {
+          offenders: [
+            { value: '203.0.113.10', scope: 'Ip', hit_count: 6, window_days: 30, first_decision_at: '2026-04-20T00:00:00Z', last_decision_at: '2026-04-24T00:00:00Z' },
+          ],
+          count: 1,
+        },
+      },
+    })
+    mockApi.crowdsec.getDecisions.mockResolvedValue({
+      data: { data: { decisions: [{ id: 1, alert_id: 1, value: '198.51.100.44', type: 'ban', scope: 'Ip', origin: 'crowdsec', scenario: 'test', duration: '4h', created_at: '2026-04-24T00:00:00Z' }], count: 1 } },
+    })
+
+    renderDashboard()
+
+    expect(await screen.findByText('203.0.113.10:6')).toBeInTheDocument()
   })
 
   it('renders the alert count and activity chart while detailed alert analysis is still loading', async () => {

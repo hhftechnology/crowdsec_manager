@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strconv"
 
+	"crowdsec-manager/internal/cache"
 	"crowdsec-manager/internal/config"
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
@@ -19,7 +20,7 @@ import (
 var numericIDPattern = regexp.MustCompile(`^\d+$`)
 
 // DeleteAlert removes a single alert by ID
-func DeleteAlert(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
+func DeleteAlert(dockerClient *docker.Client, cfg *config.Config, ttlCache ...*cache.TTLCache) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		dockerClient = resolveDockerClient(c, dockerClient)
 
@@ -43,10 +44,15 @@ func DeleteAlert(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFun
 		cmd := []string{"cscli", "alerts", "delete", "--id", alertID}
 		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, cmd)
 		if err != nil {
-			logger.Error("Failed to delete alert", "alertID", alertID, "error", err)
+			details := output
+			if details == "" {
+				details = err.Error()
+			}
+			logger.Error("Failed to delete alert", "alertID", alertID, "error", err, "output", output)
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
-				Error:   fmt.Sprintf("Failed to delete alert %s: %v", alertID, err),
+				Error:   fmt.Sprintf("Failed to delete alert %s", alertID),
+				Details: details,
 			})
 			return
 		}
@@ -59,6 +65,7 @@ func DeleteAlert(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFun
 		}
 
 		logger.Info("Alert deleted", "alertID", alertID, "output", output)
+		invalidateCrowdSecDataCache(ttlCache...)
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
 			Message: fmt.Sprintf("Alert %s deleted successfully", alertID),
@@ -92,10 +99,15 @@ func InspectAlert(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFu
 		cmd := []string{"cscli", "alerts", "inspect", alertID, "-o", "json"}
 		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, cmd)
 		if err != nil {
-			logger.Error("Failed to inspect alert", "alertID", alertID, "error", err)
+			details := output
+			if details == "" {
+				details = err.Error()
+			}
+			logger.Error("Failed to inspect alert", "alertID", alertID, "error", err, "output", output)
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
-				Error:   fmt.Sprintf("Failed to inspect alert %s: %v", alertID, err),
+				Error:   fmt.Sprintf("Failed to inspect alert %s", alertID),
+				Details: details,
 			})
 			return
 		}

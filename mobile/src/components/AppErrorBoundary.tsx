@@ -34,11 +34,11 @@ export class AppErrorBoundary extends React.Component<Props, State> {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen flex items-center justify-center bg-background p-6">
-          <div className="w-full max-w-md rounded-xl border border-destructive/30 bg-card p-5">
-            <h1 className="text-lg font-semibold">Something went wrong</h1>
-            <p className="text-sm text-muted-foreground mt-2">{this.state.message}</p>
-            <div className="mt-4 flex gap-2">
+        <div className="min-h-screen flex items-center justify-center bg-canvas p-lg">
+          <div className="w-full max-w-md rounded-lg border border-error/30 bg-surface-card p-lg">
+            <h1 className="text-title-lg font-semibold text-ink">Something went wrong</h1>
+            <p className="text-body-sm text-muted mt-xs">{this.state.message}</p>
+            <div className="mt-md flex gap-xs">
               <Button onClick={this.reset}>Try again</Button>
               <Button variant="secondary" onClick={() => window.location.reload()}>
                 Reload app

@@ -1,14 +1,11 @@
 import { useCallback, useState } from 'react';
 import { useMountEffect } from '@/hooks/useMountEffect';
-import { RefreshCw, Play, Square, RotateCw } from 'lucide-react';
 import { useApi } from '@/contexts/ApiContext';
-import { PageHeader } from '@/components/PageHeader';
+import { TopBar } from '@/components/TopBar';
 import { PullToRefresh } from '@/components/PullToRefresh';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { QueryStateView } from '@/components/QueryStateView';
-import { StatusDot } from '@/components/StatusDot';
 import { ConfirmActionDialog } from '@/components/ConfirmActionDialog';
+import { ButtonPrimary, ButtonSecondary, Dot, Pill } from '@/components/design';
 import { showActionError, showActionSuccess } from '@/lib/actionToast';
 import type { HealthContainer } from '@/lib/api';
 
@@ -19,7 +16,7 @@ async function triggerHaptics() {
     const { Haptics, ImpactStyle } = await import('@capacitor/haptics');
     await Haptics.impact({ style: ImpactStyle.Medium });
   } catch {
-    // Haptics not available (web/PWA) — silently ignore
+    /* PWA fallback */
   }
 }
 
@@ -68,20 +65,18 @@ export default function ContainersPage() {
     }
   }, [api, pendingAction, fetchContainers]);
 
+  const runningCount = containers.filter((c) => c.running).length;
+  const total = containers.length;
+
   return (
     <PullToRefresh onRefresh={fetchContainers}>
-      <div className="pb-nav">
-        <PageHeader
+      <div className="pb-nav bg-canvas">
+        <TopBar
           title="Containers"
-          subtitle="Manage Docker containers"
-          action={
-            <Button variant="ghost" size="icon" onClick={fetchContainers} disabled={loading}>
-              <RefreshCw className={loading ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
-            </Button>
-          }
+          right={<Pill tone={runningCount === total ? 'success' : 'warning'}>{`${runningCount} / ${total}`}</Pill>}
         />
 
-        <div className="px-4 space-y-3">
+        <div className="px-md py-md space-y-sm">
           <QueryStateView
             isLoading={loading}
             error={error}
@@ -91,61 +86,50 @@ export default function ContainersPage() {
             emptyDescription="No Docker containers discovered. Check your Docker setup."
           >
             {containers.map((container) => (
-              <div
-                key={container.id || container.name}
-                className="rounded-xl border border-border bg-card p-4 space-y-3"
-              >
-                <div className="flex items-center gap-3">
-                  <StatusDot
-                    color={container.running ? 'success' : 'error'}
-                    pulse={container.running}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-semibold truncate">{container.name}</div>
-                    <div className="text-[10px] text-muted-foreground font-mono truncate">
-                      {container.id?.slice(0, 12)}
-                    </div>
+              <div key={container.id || container.name} className="rounded-lg bg-surface-card p-md">
+                <div className="flex items-center justify-between gap-sm">
+                  <div className="flex items-center gap-xs min-w-0">
+                    <Dot tone={container.running ? 'success' : 'error'} pulse={container.running} />
+                    <span className="font-display text-title-md text-ink truncate">{container.name}</span>
                   </div>
-                  <Badge variant={container.running ? 'success' : 'destructive'} className="shrink-0">
+                  <Pill tone={container.running ? 'success' : 'error'}>
                     {container.status || (container.running ? 'running' : 'stopped')}
-                  </Badge>
+                  </Pill>
                 </div>
-
-                <div className="flex items-center gap-2 justify-end">
+                <div className="mt-xs grid grid-cols-2 gap-sm text-caption text-muted">
+                  <span>
+                    id <span className="font-mono text-ink">{container.id?.slice(0, 12) || '—'}</span>
+                  </span>
+                  <span>
+                    state <span className="font-mono text-ink">{container.running ? 'up' : 'down'}</span>
+                  </span>
+                </div>
+                <div className="mt-md flex gap-xs flex-wrap">
+                  <ButtonSecondary
+                    size="sm"
+                    onClick={() => setPendingAction({ container: container.name, action: 'restart' })}
+                    disabled={!container.running}
+                  >
+                    Restart
+                  </ButtonSecondary>
                   {container.running ? (
-                    <>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() =>
-                          setPendingAction({ container: container.name, action: 'stop' })
-                        }
-                      >
-                        <Square className="h-3.5 w-3.5 mr-1" />
-                        Stop
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() =>
-                          setPendingAction({ container: container.name, action: 'restart' })
-                        }
-                      >
-                        <RotateCw className="h-3.5 w-3.5 mr-1" />
-                        Restart
-                      </Button>
-                    </>
-                  ) : (
-                    <Button
+                    <ButtonSecondary
                       size="sm"
-                      onClick={() =>
-                        setPendingAction({ container: container.name, action: 'start' })
-                      }
+                      onClick={() => setPendingAction({ container: container.name, action: 'stop' })}
                     >
-                      <Play className="h-3.5 w-3.5 mr-1" />
+                      Stop
+                    </ButtonSecondary>
+                  ) : (
+                    <ButtonSecondary
+                      size="sm"
+                      onClick={() => setPendingAction({ container: container.name, action: 'start' })}
+                    >
                       Start
-                    </Button>
+                    </ButtonSecondary>
                   )}
+                  <ButtonPrimary size="sm" disabled={!container.running}>
+                    Shell
+                  </ButtonPrimary>
                 </div>
               </div>
             ))}
@@ -159,7 +143,11 @@ export default function ContainersPage() {
           }}
           title={`${pendingAction?.action ? pendingAction.action.charAt(0).toUpperCase() + pendingAction.action.slice(1) : ''} Container`}
           description={`Are you sure you want to ${pendingAction?.action} "${pendingAction?.container}"?`}
-          confirmLabel={pendingAction?.action ? pendingAction.action.charAt(0).toUpperCase() + pendingAction.action.slice(1) : 'Confirm'}
+          confirmLabel={
+            pendingAction?.action
+              ? pendingAction.action.charAt(0).toUpperCase() + pendingAction.action.slice(1)
+              : 'Confirm'
+          }
           destructive={pendingAction?.action === 'stop'}
           loading={actionLoading}
           onConfirm={confirmAction}

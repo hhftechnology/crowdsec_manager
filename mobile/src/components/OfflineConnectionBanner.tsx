@@ -61,7 +61,7 @@ export function OfflineConnectionBanner() {
 
   if (!isOnline) {
     return (
-      <div className="sticky top-0 z-50 flex items-center gap-2 border-b border-warning/30 bg-warning/10 px-4 py-2 text-xs text-warning-foreground">
+      <div className="sticky top-0 z-50 flex items-center gap-xs border-b border-warning/30 bg-warning/10 px-md py-xs text-caption text-warning-foreground">
         <WifiOff className="h-3.5 w-3.5" />
         You are offline. Some actions may fail until connection is restored.
       </div>
@@ -70,7 +70,7 @@ export function OfflineConnectionBanner() {
 
   if (isAuthenticated && !apiReachable) {
     return (
-      <div className="sticky top-0 z-50 flex items-center gap-2 border-b border-destructive/30 bg-destructive/10 px-4 py-2 text-xs text-destructive">
+      <div className="sticky top-0 z-50 flex items-center gap-xs border-b border-error/30 bg-error/10 px-md py-xs text-caption text-error">
         <CloudOff className="h-3.5 w-3.5" />
         API unreachable at {baseUrlRef.current}. Check server status or network
         path.

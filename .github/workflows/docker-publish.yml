@@ -9,12 +9,15 @@ on:
       - 'Dockerfile'
       - '.github/workflows/docker-publish.yml'
       - 'web/**'
+      - 'mobile/**'
       - 'internal/**'
+      - 'pkg/**'
       - 'cmd/**'
       - 'config/**'
       - 'scripts/**'
       - 'go.mod'
       - 'go.sum'
+      - 'Makefile'
       - '*.go'
       - 'data/**'
       - 'docs/**'
@@ -39,6 +42,17 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Verify generated contracts
+        shell: bash
+        run: |
+          make contracts
+          git diff --exit-code -- web/src/lib/api/contracts.generated.ts mobile/src/lib/api/contracts.generated.ts
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3

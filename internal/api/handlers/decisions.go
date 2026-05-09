@@ -1,10 +1,10 @@
 package handlers
 
 import (
-	"fmt"
 	"net/http"
 	"strconv"
 
+	"crowdsec-manager/internal/cache"
 	"crowdsec-manager/internal/config"
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
@@ -22,10 +22,11 @@ type AddDecisionRequest struct {
 	Scope    string `json:"scope"`
 	Value    string `json:"value"`
 	Reason   string `json:"reason"`
+	Origin   string `json:"origin"`
 }
 
 // AddDecision adds a new decision via cscli
-func AddDecision(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
+func AddDecision(dockerClient *docker.Client, cfg *config.Config, ttlCache ...*cache.TTLCache) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		dockerClient = resolveDockerClient(c, dockerClient)
 		var req AddDecisionRequest
@@ -37,29 +38,46 @@ func AddDecision(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFun
 			return
 		}
 
-		cmd := []string{"cscli", "decisions", "add"}
-		cmd, _ = appendCLIFlags(cmd, []CLIFlag{
-			{"--ip", req.IP},
-			{"--range", req.Range},
-			{"--duration", req.Duration},
-			{"--type", req.Type},
-			{"--scope", req.Scope},
-			{"--value", req.Value},
-			{"--reason", req.Reason},
-		})
+		// Validate that at least one selector is present and IP/range are not both set.
+		if err := ValidateAddDecisionRequest(&req); err != nil {
+			c.JSON(http.StatusBadRequest, models.Response{
+				Success: false,
+				Error:   err.Error(),
+			})
+			return
+		}
+
+		// Normalize duration: "" omits the flag for cscli's default; explicit
+		// permanent aliases become "0"; "30d" becomes "720h"; invalid returns 400.
+		normalized, ok := NormalizeDuration(req.Duration)
+		if !ok {
+			c.JSON(http.StatusBadRequest, models.Response{
+				Success: false,
+				Error:   "invalid duration: " + req.Duration,
+			})
+			return
+		}
+
+		cmd := buildAddDecisionCommand(req, normalized)
 
 		logger.Info("Adding decision", "command", cmd)
 
 		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, cmd)
 		if err != nil {
 			logger.Error("Failed to add decision", "error", err, "output", output)
+			details := output
+			if details == "" {
+				details = err.Error()
+			}
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
-				Error:   fmt.Sprintf("Failed to add decision: %v. Output: %s", err, output),
+				Error:   "Failed to add decision",
+				Details: details,
 			})
 			return
 		}
 
+		invalidateCrowdSecDataCache(ttlCache...)
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
 			Message: "Decision added successfully",
@@ -68,8 +86,22 @@ func AddDecision(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFun
 	}
 }
 
+func buildAddDecisionCommand(req AddDecisionRequest, normalizedDuration string) []string {
+	cmd := []string{"cscli", "decisions", "add"}
+	cmd, _ = appendCLIFlags(cmd, []CLIFlag{
+		{"--ip", req.IP},
+		{"--range", req.Range},
+		{"--duration", normalizedDuration},
+		{"--type", req.Type},
+		{"--scope", req.Scope},
+		{"--value", req.Value},
+		{"--reason", req.Reason},
+	})
+	return cmd
+}
+
 // DeleteDecision deletes a decision via cscli
-func DeleteDecision(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
+func DeleteDecision(dockerClient *docker.Client, cfg *config.Config, ttlCache ...*cache.TTLCache) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		dockerClient = resolveDockerClient(c, dockerClient)
 
@@ -89,6 +121,15 @@ func DeleteDecision(dockerClient *docker.Client, cfg *config.Config) gin.Handler
 			c.JSON(http.StatusBadRequest, models.Response{
 				Success: false,
 				Error:   "Invalid request parameters: " + err.Error(),
+			})
+			return
+		}
+
+		// Reject when both IP and Range are supplied — they are mutually exclusive in cscli.
+		if req.IP != "" && req.Range != "" {
+			c.JSON(http.StatusBadRequest, models.Response{
+				Success: false,
+				Error:   ErrIPAndRange.Error(),
 			})
 			return
 		}
@@ -119,9 +160,14 @@ func DeleteDecision(dockerClient *docker.Client, cfg *config.Config) gin.Handler
 		output, err := dockerClient.ExecCommand(cfg.CrowdsecContainerName, cmd)
 		if err != nil {
 			logger.Error("Failed to delete decision", "error", err, "output", output)
+			details := output
+			if details == "" {
+				details = err.Error()
+			}
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
-				Error:   fmt.Sprintf("Failed to delete decision: %v. Output: %s", err, output),
+				Error:   "Failed to delete decision",
+				Details: details,
 			})
 			return
 		}
@@ -133,6 +179,7 @@ func DeleteDecision(dockerClient *docker.Client, cfg *config.Config) gin.Handler
 			}
 		}
 
+		invalidateCrowdSecDataCache(ttlCache...)
 		c.JSON(http.StatusOK, models.Response{
 			Success: true,
 			Message: "Decision(s) deleted successfully",

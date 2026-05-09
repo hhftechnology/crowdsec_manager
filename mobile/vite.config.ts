@@ -2,9 +2,21 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { VitePWA } from "vite-plugin-pwa";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
+const pkg = JSON.parse(
+  readFileSync(
+    fileURLToPath(new URL("./package.json", import.meta.url)),
+    "utf8",
+  ),
+) as { version: string };
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
+  define: {
+    "import.meta.env.VITE_APP_VERSION": JSON.stringify(pkg.version),
+  },
   server: {
     host: "::",
     port: 5174,
@@ -23,8 +35,8 @@ export default defineConfig(({ mode }) => ({
         description: "Mobile CrowdSec security management app",
         start_url: "/",
         display: "standalone",
-        background_color: "#f0e4d4",
-        theme_color: "#6d1f2f",
+        background_color: "#faf9f5",
+        theme_color: "#cc785c",
         orientation: "portrait",
         icons: [
           { src: "/pwa-192x192.png", sizes: "192x192", type: "image/png" },

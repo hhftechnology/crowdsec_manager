@@ -1,5 +1,11 @@
 import { ApiClient } from './client';
-import type { LogStats, StructuredLogsResponse } from './types';
+import type {
+  CrowdSecDashboard,
+  DashboardRange,
+  LogStats,
+  StructuredLogsResponse,
+  TraefikDashboard,
+} from './types';
 
 export function createLogsApi(client: ApiClient) {
   return {
@@ -20,6 +26,16 @@ export function createLogsApi(client: ApiClient) {
         await client.get<StructuredLogsResponse>(`/api/logs/structured/${encodeURIComponent(service)}`, {
           params: { tail, level: level || undefined },
         })
+      ).data;
+    },
+    async dashboardTraefik(range: DashboardRange = '1h') {
+      return (
+        await client.get<TraefikDashboard>('/api/logs/traefik/dashboard', { params: { range } })
+      ).data;
+    },
+    async dashboardCrowdSec(range: DashboardRange = '1h') {
+      return (
+        await client.get<CrowdSecDashboard>('/api/logs/crowdsec/dashboard', { params: { range } })
       ).data;
     },
     streamUrl(service: string) {

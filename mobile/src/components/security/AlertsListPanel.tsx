@@ -14,48 +14,48 @@ interface AlertsListPanelProps {
 export function AlertsListPanel({ alerts, onDelete, onInspect }: AlertsListPanelProps) {
   if (alerts.length === 0) {
     return (
-      <div className="rounded-xl border border-border bg-card p-4">
-        <h3 className="text-sm font-semibold mb-2">Recent Alerts</h3>
-        <p className="text-xs text-muted-foreground">No recent alerts.</p>
+      <div className="rounded-lg border border-hairline bg-surface-card p-md">
+        <h3 className="text-title-sm font-semibold mb-xs">Recent Alerts</h3>
+        <p className="text-caption text-muted">No recent alerts.</p>
       </div>
     );
   }
 
   return (
-    <div className="rounded-xl border border-border bg-card p-4 space-y-2">
+    <div className="rounded-lg border border-hairline bg-surface-card p-md space-y-xs">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold">Recent Alerts</h3>
+        <h3 className="text-title-sm font-semibold text-ink">Recent Alerts</h3>
         <Badge variant="outline">{alerts.length}</Badge>
       </div>
       <div className="max-h-[60vh] overflow-y-auto">
-        <div className="space-y-2">
+        <div className="space-y-xs">
           {alerts.map((alert, i) => (
             <div
               key={alert.id || i}
-              className="rounded-lg border border-border/50 bg-muted/30 p-3 space-y-1"
+              className="rounded-lg border border-hairline-soft bg-canvas p-sm space-y-xxs"
             >
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 min-w-0">
+              <div className="flex items-center justify-between gap-xs">
+                <div className="flex items-center gap-xs min-w-0">
                   <StatusDot color="warning" />
-                  <span className="text-xs font-medium truncate">
+                  <span className="text-caption font-medium truncate">
                     {alert.scenario || 'Alert'}
                   </span>
                 </div>
-                <div className="flex items-center gap-1 shrink-0">
+                <div className="flex items-center gap-xxs shrink-0">
                   {alert.events_count !== undefined && (
-                    <Badge variant="secondary" className="text-[10px]">
+                    <Badge variant="secondary" className="text-caption">
                       {alert.events_count} events
                     </Badge>
                   )}
                   {alert.id && (
-                    <Badge variant="outline" className="text-[10px]">
+                    <Badge variant="outline" className="text-caption">
                       #{alert.id}
                     </Badge>
                   )}
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+              <div className="flex items-center gap-xs text-caption text-muted">
                 {alert.source?.ip && (
                   <span className="font-mono">{alert.source.ip}</span>
                 )}
@@ -73,23 +73,23 @@ export function AlertsListPanel({ alerts, onDelete, onInspect }: AlertsListPanel
                 )}
               </div>
 
-              <div className="flex items-center justify-end gap-1 pt-1">
+              <div className="flex items-center justify-end gap-xxs pt-xxs">
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-6 px-2 text-[10px]"
+                  className="h-6 px-xs text-caption"
                   onClick={() => alert.id && onInspect(alert.id)}
                 >
-                  <Eye className="h-3 w-3 mr-1" />
+                  <Eye className="h-3 w-3 mr-xxs" />
                   Inspect
                 </Button>
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-6 px-2 text-[10px] text-destructive hover:text-destructive"
+                  className="h-6 px-xs text-caption text-error hover:text-error"
                   onClick={() => alert.id && onDelete(alert.id)}
                 >
-                  <Trash2 className="h-3 w-3 mr-1" />
+                  <Trash2 className="h-3 w-3 mr-xxs" />
                   Delete
                 </Button>
               </div>

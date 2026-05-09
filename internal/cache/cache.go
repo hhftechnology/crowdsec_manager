@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"strings"
 	"sync"
 	"time"
 )
@@ -44,4 +45,16 @@ func (c *TTLCache) Set(key string, value interface{}, ttl time.Duration) {
 		expiresAt: time.Now().Add(ttl),
 	}
 	c.mu.Unlock()
+}
+
+// DeletePrefix removes all cached entries whose key starts with prefix.
+func (c *TTLCache) DeletePrefix(prefix string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	for key := range c.items {
+		if strings.HasPrefix(key, prefix) {
+			delete(c.items, key)
+		}
+	}
 }

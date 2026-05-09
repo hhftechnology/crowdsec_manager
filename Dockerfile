@@ -52,8 +52,11 @@ COPY --from=backend-builder /app/crowdsec-manager .
 # Copy frontend build from frontend-builder
 COPY --from=frontend-builder /app/web/dist ./web/dist
 
-# Create necessary directories
-RUN mkdir -p /app/backups /app/logs /app/config /app/data
+# Create necessary directories. /app/geoip is the default mount point for
+# an optional GeoLite2-City.mmdb (set GEOIP_DB_PATH to override). When the
+# file is absent the dashboard endpoints still respond — country and
+# coordinates are simply omitted.
+RUN mkdir -p /app/backups /app/logs /app/config /app/data /app/geoip
 
 # Expose port
 EXPOSE 8080

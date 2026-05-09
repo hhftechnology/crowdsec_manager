@@ -1,14 +1,14 @@
 import { useCallback, useState } from 'react';
 import { useMountEffect } from '@/hooks/useMountEffect';
-import { RefreshCw, Trash2, Plus } from 'lucide-react';
+import { Trash2 } from 'lucide-react';
 import { useApi } from '@/contexts/ApiContext';
-import { PageHeader } from '@/components/PageHeader';
-import { Button } from '@/components/ui/button';
+import { TopBar } from '@/components/TopBar';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { QueryStateView } from '@/components/QueryStateView';
 import { ConfirmActionDialog } from '@/components/ConfirmActionDialog';
 import { FormDialog } from '@/components/FormDialog';
+import { ButtonPrimary, Pill } from '@/components/design';
 import { showActionError, showActionSuccess } from '@/lib/actionToast';
 import type { ScenarioFile, ScenarioItem } from '@/lib/api';
 
@@ -30,10 +30,8 @@ export default function ScenariosPage() {
 
   const load = useCallback(async () => {
     if (!api) return;
-
     setLoading(true);
     setError(null);
-
     try {
       const [scenarioList, fileList] = await Promise.all([api.scenarios.list(), api.scenarios.files()]);
       setScenarios(Array.isArray(scenarioList?.scenarios) ? scenarioList.scenarios : []);
@@ -51,17 +49,10 @@ export default function ScenariosPage() {
 
   const setupScenario = async () => {
     if (!api || !newName.trim() || !newContent.trim()) return;
-
     setActionLoading(true);
     try {
       const res = await api.scenarios.setup({
-        scenarios: [
-          {
-            name: newName.trim(),
-            description: newDescription.trim(),
-            content: newContent,
-          },
-        ],
+        scenarios: [{ name: newName.trim(), description: newDescription.trim(), content: newContent }],
       });
       showActionSuccess('Scenario setup complete', res.message || newName.trim());
       setShowSetupDialog(false);
@@ -78,7 +69,6 @@ export default function ScenariosPage() {
 
   const deleteScenarioFile = async () => {
     if (!api || !deleteFilename) return;
-
     setActionLoading(true);
     try {
       const res = await api.scenarios.deleteFile(deleteFilename);
@@ -92,76 +82,99 @@ export default function ScenariosPage() {
     }
   };
 
+  const featuredScenario = scenarios[0];
+  const featuredYaml = files[0];
+
   return (
-    <div className="pb-nav">
-      <PageHeader
+    <div className="pb-nav bg-canvas">
+      <TopBar
         title="Scenarios"
-        subtitle="Setup, list files, and remove custom files"
-        action={
-          <div className="flex gap-1">
-            <Button variant="ghost" size="icon" onClick={load} disabled={loading}>
-              <RefreshCw className={loading ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
-            </Button>
-            <Button size="sm" onClick={() => setShowSetupDialog(true)}>
-              <Plus className="h-4 w-4 mr-1" />
-              Setup
-            </Button>
-          </div>
-        }
+        right={<Pill tone="cream">{scenarios.length} active</Pill>}
       />
 
-      <div className="px-4 space-y-4">
-        <section className="rounded-xl border border-border bg-card p-4">
-          <h3 className="text-sm font-semibold mb-2">Installed scenarios</h3>
-          <QueryStateView
-            isLoading={loading}
-            error={error}
-            onRetry={load}
-            isEmpty={scenarios.length === 0}
-            emptyTitle="No scenarios listed"
-            emptyDescription="Refresh after setup or check CrowdSec status."
-          >
-            <div className="space-y-2">
-              {scenarios.map((scenario) => (
-                <div key={scenario.name} className="rounded-lg border border-border p-3">
-                  <div className="text-sm font-semibold">{scenario.name}</div>
-                  <div className="text-xs text-muted-foreground">{scenario.description || 'No description'}</div>
-                  <div className="text-[11px] text-muted-foreground mt-1">
-                    Status: {scenario.status || 'unknown'} · Version: {scenario.version || scenario.local_version || 'n/a'}
-                  </div>
-                </div>
-              ))}
+      <div className="px-md py-md space-y-md">
+        <QueryStateView
+          isLoading={loading}
+          error={error}
+          onRetry={load}
+          isEmpty={scenarios.length === 0 && files.length === 0}
+          emptyTitle="No scenarios listed"
+          emptyDescription="Refresh after setup or check CrowdSec status."
+        >
+          {/* YAML callout — first installed scenario */}
+          {featuredScenario && (
+            <div className="rounded-lg bg-surface-dark text-on-dark p-md font-mono text-code">
+              <div className="text-on-dark-soft mb-xs flex items-center justify-between">
+                <span className="truncate">{featuredScenario.name}.yaml</span>
+                <Pill tone="teal">{featuredScenario.status || 'enabled'}</Pill>
+              </div>
+              <YamlLine k="type" v={(featuredScenario as { type?: string }).type || 'leaky'} />
+              <YamlLine k="name" v={featuredScenario.name} />
+              <YamlLine k="version" v={featuredScenario.version || featuredScenario.local_version || 'n/a'} />
+              {featuredScenario.description && <YamlLine k="description" v={`"${featuredScenario.description}"`} />}
             </div>
-          </QueryStateView>
-        </section>
+          )}
 
-        <section className="rounded-xl border border-border bg-card p-4">
-          <h3 className="text-sm font-semibold mb-2">Scenario files</h3>
-          <QueryStateView
-            isLoading={loading}
-            error={error}
-            onRetry={load}
-            isEmpty={files.length === 0}
-            emptyTitle="No scenario files"
-            emptyDescription="No custom scenario file found in config directory."
-          >
-            <div className="space-y-2">
-              {files.map((file) => (
-                <div key={file.filename} className="rounded-lg border border-border p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <div>
-                      <div className="text-sm font-semibold">{file.filename}</div>
-                      <div className="text-xs text-muted-foreground">{file.description || file.name || 'No metadata'}</div>
-                    </div>
-                    <Button variant="ghost" size="icon" onClick={() => setDeleteFilename(file.filename)}>
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
+          {/* Custom YAML file preview */}
+          {featuredYaml && (
+            <div className="rounded-lg bg-surface-dark-elevated text-on-dark p-md font-mono text-code">
+              <div className="text-on-dark-soft mb-xs flex items-center justify-between">
+                <span className="truncate">{featuredYaml.filename}</span>
+                <Pill tone="cream">custom</Pill>
+              </div>
+              <p className="text-on-dark/90 text-caption">{featuredYaml.description || featuredYaml.name || 'No metadata'}</p>
             </div>
-          </QueryStateView>
-        </section>
+          )}
+
+          <div className="flex items-center justify-between">
+            <div className="font-display text-title-md text-ink">Installed scenarios</div>
+            <ButtonPrimary size="sm" onClick={() => setShowSetupDialog(true)}>
+              + Setup
+            </ButtonPrimary>
+          </div>
+
+          <div className="space-y-xs">
+            {scenarios.map((scenario) => (
+              <div key={scenario.name} className="rounded-md bg-surface-card flex items-center justify-between px-md py-sm gap-sm">
+                <div className="min-w-0">
+                  <span className="font-mono text-body-sm text-ink truncate block">{scenario.name}</span>
+                  {scenario.description && (
+                    <span className="text-caption text-muted truncate block">{scenario.description}</span>
+                  )}
+                </div>
+                <Pill tone="success">{scenario.status || 'enabled'}</Pill>
+              </div>
+            ))}
+          </div>
+
+          {files.length > 0 && (
+            <>
+              <div className="font-display text-title-md text-ink mt-md">Custom files</div>
+              <div className="space-y-xs">
+                {files.map((file) => (
+                  <div
+                    key={file.filename}
+                    className="rounded-md bg-surface-card flex items-center justify-between px-md py-sm gap-sm"
+                  >
+                    <div className="min-w-0">
+                      <div className="font-mono text-body-sm text-ink truncate">{file.filename}</div>
+                      <div className="text-caption text-muted truncate">
+                        {file.description || file.name || 'No metadata'}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setDeleteFilename(file.filename)}
+                      className="w-8 h-8 inline-flex items-center justify-center text-error hover:bg-error/10 rounded-md transition-colors"
+                      aria-label="Delete scenario file"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </QueryStateView>
       </div>
 
       <FormDialog
@@ -173,13 +186,21 @@ export default function ScenariosPage() {
         loading={actionLoading}
         onSubmit={setupScenario}
       >
-        <Input placeholder="Scenario name (e.g. crowdsecurity/custom-test)" value={newName} onChange={(e) => setNewName(e.target.value)} />
-        <Input placeholder="Description" value={newDescription} onChange={(e) => setNewDescription(e.target.value)} />
+        <Input
+          placeholder="Scenario name (e.g. crowdsecurity/custom-test)"
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+        />
+        <Input
+          placeholder="Description"
+          value={newDescription}
+          onChange={(e) => setNewDescription(e.target.value)}
+        />
         <Textarea
           placeholder="Scenario YAML content"
           value={newContent}
           onChange={(e) => setNewContent(e.target.value)}
-          className="min-h-[180px]"
+          className="min-h-[180px] font-mono text-code"
         />
       </FormDialog>
 
@@ -195,6 +216,15 @@ export default function ScenariosPage() {
         loading={actionLoading}
         onConfirm={deleteScenarioFile}
       />
+    </div>
+  );
+}
+
+function YamlLine({ k, v }: { k: string; v: string }) {
+  return (
+    <div>
+      <span className="text-accent-amber">{k}</span>
+      <span className="text-on-dark">: {v}</span>
     </div>
   );
 }

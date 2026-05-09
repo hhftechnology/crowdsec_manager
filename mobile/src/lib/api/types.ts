@@ -1,9 +1,32 @@
-export interface ApiEnvelope<T = unknown> {
-  success: boolean;
-  data?: T;
-  message?: string;
-  error?: string;
-}
+export type {
+  AddDecisionRequest,
+  AlertFilters,
+  AlertHistoryRecord,
+  AlertHistoryResponse,
+  AlertsResponse,
+  ApiEnvelope,
+  ApiResponse,
+  BulkDeleteDecisionsRequest,
+  BulkDeleteDecisionsResponse,
+  BulkDeleteFailure,
+  BulkReapplyDecisionsRequest,
+  BulkReapplyResult,
+  CrowdSecAlert as CrowdsecAlert,
+  Decision,
+  DecisionFilters,
+  DecisionHistoryRecord,
+  DecisionHistoryAnalysisResponse,
+  DecisionHistoryResponse,
+  DecisionsResponse,
+  DeleteDecisionRequest,
+  HistoryActivityBucket,
+  HistoryActivityResponse,
+  HistoryBreakdownItem,
+  HistoryChartPoint,
+  HistoryStats,
+  ReapplyDecisionRequest,
+  RepeatedOffender,
+} from './contracts.generated';
 
 export interface ApiResult<T> {
   data: T;
@@ -61,75 +84,6 @@ export interface IPSecurity {
   is_whitelisted: boolean;
   in_crowdsec: boolean;
   in_traefik: boolean;
-}
-
-export interface Decision {
-  id: number;
-  alert_id?: number;
-  origin?: string;
-  source?: string;
-  type: string;
-  scope?: string;
-  value: string;
-  duration?: string;
-  scenario?: string;
-  reason?: string;
-  created_at?: string;
-  until?: string;
-}
-
-export interface DecisionsResponse {
-  decisions: Decision[];
-  count: number;
-  total?: number;
-  limit?: number;
-  offset?: number;
-}
-
-export interface AlertsResponse {
-  alerts: CrowdsecAlert[];
-  count: number;
-}
-
-export interface CrowdsecAlert {
-  id: number;
-  scenario?: string;
-  scope?: string;
-  value?: string;
-  origin?: string;
-  type?: string;
-  message?: string;
-  events_count?: number;
-  start_at?: string;
-  stop_at?: string;
-  source?: {
-    ip?: string;
-    cn?: string;
-    as_name?: string;
-    scope?: string;
-    value?: string;
-  };
-}
-
-export interface AddDecisionRequest {
-  ip?: string;
-  range?: string;
-  duration?: string;
-  type?: string;
-  scope?: string;
-  value?: string;
-  reason?: string;
-}
-
-export interface DeleteDecisionRequest {
-  id?: string;
-  ip?: string;
-  range?: string;
-  type?: string;
-  scope?: string;
-  value?: string;
-  scenario?: string;
-  origin?: string;
 }
 
 export interface Bouncer {
@@ -219,6 +173,96 @@ export interface StructuredLogsResponse {
   service: string;
 }
 
+export type DashboardRange = '5m' | '1h' | '6h' | '24h';
+
+export const DASHBOARD_RANGES: DashboardRange[] = ['5m', '1h', '6h', '24h'];
+
+export interface NameValue {
+  name: string;
+  value: number;
+}
+
+export interface IPStat {
+  ip: string;
+  count: number;
+  country?: string;
+  lat?: number;
+  lng?: number;
+}
+
+export interface TraefikBucket {
+  t: string;
+  total: number;
+  c2xx: number;
+  c3xx: number;
+  c4xx: number;
+  c5xx: number;
+}
+
+export interface TraefikRecentError {
+  t: string;
+  ip: string;
+  method?: string;
+  path?: string;
+  status: number;
+  duration_ms?: number;
+}
+
+export interface TraefikDashboard {
+  range: DashboardRange;
+  format: 'json' | 'clf';
+  generated_at: string;
+  total_requests: number;
+  unique_ips: number;
+  avg_duration_ms: number | null;
+  error_rate: number;
+  series: TraefikBucket[];
+  status_codes: NameValue[];
+  methods: NameValue[];
+  top_ips: IPStat[];
+  top_hosts: NameValue[];
+  top_routers: NameValue[];
+  slowest_endpoints: NameValue[];
+  tls_versions: NameValue[];
+  recent_errors: TraefikRecentError[];
+}
+
+export interface CrowdSecBucket {
+  t: string;
+  alerts: number;
+  decisions: number;
+  errors: number;
+}
+
+export interface AcquisitionStat {
+  source: string;
+  lines: number;
+}
+
+export interface CrowdSecActivity {
+  t: string;
+  level: string;
+  source?: string;
+  message: string;
+}
+
+export interface CrowdSecDashboard {
+  range: DashboardRange;
+  generated_at: string;
+  total_events: number;
+  decisions: number;
+  alerts: number;
+  parser_errors: number;
+  series: CrowdSecBucket[];
+  top_scenarios: NameValue[];
+  top_source_ips: IPStat[];
+  top_origins: NameValue[];
+  top_decision_types: NameValue[];
+  acquisition: AcquisitionStat[];
+  bouncer_activity: CrowdSecActivity[];
+  recent_errors: CrowdSecActivity[];
+}
+
 export type HubCategoryKey =
   | 'collections'
   | 'scenarios'
@@ -274,53 +318,6 @@ export interface HubOperationRecord {
   created_at?: string;
 }
 
-export interface DecisionHistoryRecord {
-  id: number;
-  dedupe_key: string;
-  decision_id: number;
-  alert_id: number;
-  origin: string;
-  type: string;
-  scope: string;
-  value: string;
-  duration: string;
-  scenario: string;
-  created_at: string;
-  until?: string;
-  is_stale: boolean;
-  first_seen_at: string;
-  last_seen_at: string;
-  stale_at?: string;
-  last_snapshot_at: string;
-}
-
-export interface DecisionHistoryResponse {
-  decisions: DecisionHistoryRecord[];
-  count: number;
-  total: number;
-}
-
-export interface ReapplyDecisionRequest {
-  id: number;
-  type: string;
-  duration: string;
-  reason?: string;
-}
-
 export interface MetricsResponse {
   [key: string]: unknown;
-}
-
-export interface HistoryActivityBucket {
-  ts: string;
-  alerts: number;
-  decisions: number;
-}
-
-export interface HistoryActivityResponse {
-  window: string;
-  bucket: string;
-  buckets: HistoryActivityBucket[];
-  generated_at: string;
-  latest_snapshot_at: string | null;
 }

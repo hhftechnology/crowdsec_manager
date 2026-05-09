@@ -136,18 +136,6 @@ export function parseStoredConnectionProfile(value: string | null): ConnectionPr
   }
 }
 
-export function stripSensitiveConnectionFields(
-  profile: ConnectionProfile,
-): ConnectionProfile {
-  const normalized = normalizeConnectionProfileDraft(profile);
-
-  return {
-    ...normalized,
-    proxyPassword: '',
-    pangolinToken: '',
-  };
-}
-
 export function canAutoRestoreConnectionProfile(
   profile: ConnectionProfile,
 ): boolean {
