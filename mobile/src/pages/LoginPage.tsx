@@ -32,7 +32,7 @@ export default function LoginPage() {
     <div className="bg-canvas safe-top safe-bottom flex min-h-screen flex-col">
       <div className="px-md pt-md flex items-center justify-between">
         <Wordmark />
-        <UpperBadge tone="cream">v3.0</UpperBadge>
+        <UpperBadge tone="cream">v2.4</UpperBadge>
       </div>
 
       <div className="flex-1 px-md pt-xl overflow-y-auto pb-xl">

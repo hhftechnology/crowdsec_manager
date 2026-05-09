@@ -123,11 +123,11 @@ export default function MorePage() {
             <div className="font-display text-title-md text-on-dark">About</div>
             <span className="text-on-dark-soft">→</span>
           </div>
-          <p className="mt-xxs text-caption text-on-dark-soft">CrowdSec Manager · 3.0 · HHF Technology</p>
+          <p className="mt-xxs text-caption text-on-dark-soft">CrowdSec Manager · 2.4 · HHF Technology</p>
         </button>
 
         <section className="rounded-lg bg-primary text-on-primary p-md">
-          <UpperBadge tone="cream">Beta</UpperBadge>
+          <UpperBadge tone="cream">Stable</UpperBadge>
           <div className="mt-xs font-display text-display-sm">Replay onboarding</div>
           <p className="mt-xxs text-body-sm opacity-90">Walk through the four-slide tour again.</p>
           <div className="mt-sm">

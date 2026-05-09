@@ -13,12 +13,12 @@ const links = [
 
 const social = [
   { label: 'X / Twitter', href: 'https://x.com/hhftechnology' },
-  { label: 'Reddit', href: 'https://reddit.com/u/hhftechtips' },
+  { label: 'Reddit', href: 'https://reddit.com/r/hhftechnology' },
   { label: 'Discord', href: 'https://discord.gg/HDCt9MjyMJ' },
 ];
 
 export default function AboutPage() {
-  const [appInfo, setAppInfo] = useState({ version: '3.0.0', build: '2026.03' });
+  const [appInfo, setAppInfo] = useState({ version: '', build: '' });
 
   useMountEffect(() => {
     CapApp.getInfo()
@@ -37,7 +37,7 @@ export default function AboutPage() {
           <Spike className="w-6 h-6 text-ink" />
           <h2 className="mt-md font-display text-display-md text-ink">CrowdSec Manager</h2>
           <p className="text-body-sm text-muted">
-            A mobile companion for your CrowdSec stack. Capacitor 7 · React 18 · TanStack Query.
+            A mobile companion for your CrowdSec stack by hhf technology.
           </p>
           <div className="mt-md flex items-center gap-xs">
             <Pill tone="cream">v{appInfo.version}</Pill>
