@@ -9,6 +9,10 @@ vi.mock('@/contexts/ApiContext', () => ({
   useApi: () => mockUseApi(),
 }));
 
+vi.mock('@/components/dashboard/ManagerUpdateCard', () => ({
+  ManagerUpdateCard: () => null,
+}));
+
 function createBaseApi() {
   return {
     health: {

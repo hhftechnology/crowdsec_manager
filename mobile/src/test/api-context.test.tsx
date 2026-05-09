@@ -111,7 +111,7 @@ describe('ApiContext', () => {
     });
   });
 
-  it('persists only non-secret profile fields and clears them on logout', async () => {
+  it('persists the full profile (including secrets) and clears it on logout', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -150,7 +150,7 @@ describe('ApiContext', () => {
       mode: 'proxy-basic',
       baseUrl: 'https://proxy.example.com',
       proxyUsername: 'alice',
-      proxyPassword: '',
+      proxyPassword: 'secret',
     });
 
     fireEvent.click(screen.getByRole('button', { name: 'Logout' }));
@@ -158,10 +158,40 @@ describe('ApiContext', () => {
     await waitFor(() => {
       expect(screen.getByTestId('base-url')).toHaveTextContent('');
     });
-    expect(localStorage.getItem('csm_connection_profile')).toBeNull();
+    await waitFor(() => {
+      expect(localStorage.getItem('csm_connection_profile')).toBeNull();
+    });
   });
 
-  it('does not restore secret-backed authenticated sessions from sanitized storage', () => {
+  it('auto-restores a pangolin profile that includes the token', async () => {
+    localStorage.setItem(
+      'csm_connection_profile',
+      JSON.stringify({
+        mode: 'pangolin',
+        baseUrl: 'https://pangolin.example.com',
+        allowInsecure: false,
+        proxyUsername: '',
+        proxyPassword: '',
+        pangolinToken: 'tokenId.tokenSecret',
+        pangolinTokenParam: 'p_token',
+      }),
+    );
+
+    render(
+      <ApiProvider>
+        <Harness draft={createDraft()} />
+      </ApiProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('base-url')).toHaveTextContent(
+        'https://pangolin.example.com',
+      );
+    });
+    expect(screen.getByTestId('mode')).toHaveTextContent('pangolin');
+  });
+
+  it('does not restore a pangolin session when the token is missing', async () => {
     localStorage.setItem(
       'csm_connection_profile',
       JSON.stringify({
@@ -181,11 +211,14 @@ describe('ApiContext', () => {
       </ApiProvider>,
     );
 
+    // Allow the async load microtasks to settle, then assert it stayed empty.
+    await Promise.resolve();
+    await Promise.resolve();
     expect(screen.getByTestId('base-url')).toHaveTextContent('');
     expect(screen.getByTestId('mode')).toHaveTextContent('');
   });
 
-  it('migrates legacy url-only storage into the new profile shape', () => {
+  it('migrates legacy url-only storage into the new profile shape', async () => {
     localStorage.setItem('csm_base_url', 'https://legacy.example.com');
     localStorage.setItem('csm_allow_insecure', 'true');
 
@@ -195,9 +228,11 @@ describe('ApiContext', () => {
       </ApiProvider>,
     );
 
-    expect(screen.getByTestId('base-url')).toHaveTextContent(
-      'https://legacy.example.com',
-    );
+    await waitFor(() => {
+      expect(screen.getByTestId('base-url')).toHaveTextContent(
+        'https://legacy.example.com',
+      );
+    });
     expect(screen.getByTestId('mode')).toHaveTextContent('direct');
   });
 });

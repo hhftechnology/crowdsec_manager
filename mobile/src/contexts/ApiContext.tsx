@@ -9,7 +9,6 @@ import {
   parsePangolinAccessToken,
   parseStoredConnectionProfile,
   serializeConnectionProfile,
-  stripSensitiveConnectionFields,
   type ConnectionMode,
   type ConnectionProfile,
   type ConnectionProfileDraft,
@@ -17,6 +16,8 @@ import {
 import { createApi, ApiError, type ApiService } from '@/lib/api';
 import { queryClient } from '@/lib/api/queryClient';
 import { normalizeAppError } from '@/lib/errors';
+import { secureStorage } from '@/lib/secureStorage';
+import { useMountEffect } from '@/hooks/useMountEffect';
 
 interface ApiContextType {
   connectionProfile: ConnectionProfile | null;
@@ -24,7 +25,7 @@ interface ApiContextType {
   isLoading: boolean;
   error: string | null;
   login: (profile: ConnectionProfileDraft) => Promise<boolean>;
-  logout: () => void;
+  logout: () => Promise<void>;
   api: ApiService | null;
 }
 
@@ -34,19 +35,20 @@ const LEGACY_INSECURE_KEY = 'csm_allow_insecure';
 
 const ApiContext = createContext<ApiContextType | null>(null);
 
-function readInitialConnectionProfile(): ConnectionProfile | null {
+async function loadInitialConnectionProfile(): Promise<ConnectionProfile | null> {
   const stored = parseStoredConnectionProfile(
-    localStorage.getItem(CONNECTION_PROFILE_KEY),
+    await secureStorage.getItem(CONNECTION_PROFILE_KEY),
   );
   if (stored && canAutoRestoreConnectionProfile(stored)) return stored;
 
-  const legacyBaseUrl = localStorage.getItem(LEGACY_BASE_URL_KEY);
+  const legacyBaseUrl = await secureStorage.getItem(LEGACY_BASE_URL_KEY);
   if (!legacyBaseUrl) return null;
 
+  const legacyInsecure = await secureStorage.getItem(LEGACY_INSECURE_KEY);
   return normalizeConnectionProfileDraft({
     ...createDefaultConnectionProfileDraft(),
     baseUrl: legacyBaseUrl,
-    allowInsecure: localStorage.getItem(LEGACY_INSECURE_KEY) === 'true',
+    allowInsecure: legacyInsecure === 'true',
   });
 }
 
@@ -119,9 +121,36 @@ export const ApiProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
   const [connectionProfile, setConnectionProfile] =
-    useState<ConnectionProfile | null>(readInitialConnectionProfile);
-  const [isLoading, setIsLoading] = useState(false);
+    useState<ConnectionProfile | null>(null);
+  // Starts true so App.tsx renders the loader instead of flashing the login
+  // screen while we read the persisted profile from native storage.
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  useMountEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const profile = await loadInitialConnectionProfile();
+        if (cancelled) return;
+        if (profile) {
+          setConnectionProfile(profile);
+          // Migrate legacy keys: re-persist under the new key, drop the old ones.
+          await secureStorage.setItem(
+            CONNECTION_PROFILE_KEY,
+            serializeConnectionProfile(profile),
+          );
+          await secureStorage.removeItem(LEGACY_BASE_URL_KEY);
+          await secureStorage.removeItem(LEGACY_INSECURE_KEY);
+        }
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  });
 
   const api = useMemo(() => {
     if (!connectionProfile) return null;
@@ -163,14 +192,12 @@ export const ApiProvider: React.FC<{ children: React.ReactNode }> = ({
           await nextApi.client.verifyConnection();
 
           setConnectionProfile(candidateProfile);
-          localStorage.setItem(
+          await secureStorage.setItem(
             CONNECTION_PROFILE_KEY,
-            serializeConnectionProfile(
-              stripSensitiveConnectionFields(candidateProfile),
-            ),
+            serializeConnectionProfile(candidateProfile),
           );
-          localStorage.removeItem(LEGACY_BASE_URL_KEY);
-          localStorage.removeItem(LEGACY_INSECURE_KEY);
+          await secureStorage.removeItem(LEGACY_BASE_URL_KEY);
+          await secureStorage.removeItem(LEGACY_INSECURE_KEY);
           queryClient.clear();
           return true;
         } catch (candidateError) {
@@ -193,10 +220,10 @@ export const ApiProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   }, []);
 
-  const logout = useCallback(() => {
-    localStorage.removeItem(CONNECTION_PROFILE_KEY);
-    localStorage.removeItem(LEGACY_BASE_URL_KEY);
-    localStorage.removeItem(LEGACY_INSECURE_KEY);
+  const logout = useCallback(async () => {
+    await secureStorage.removeItem(CONNECTION_PROFILE_KEY);
+    await secureStorage.removeItem(LEGACY_BASE_URL_KEY);
+    await secureStorage.removeItem(LEGACY_INSECURE_KEY);
     setConnectionProfile(null);
     setError(null);
     queryClient.clear();

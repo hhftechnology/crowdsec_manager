@@ -6,6 +6,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { PullToRefresh } from '@/components/PullToRefresh';
 import { QueryStateView } from '@/components/QueryStateView';
 import { DashboardSkeleton } from '@/components/dashboard/DashboardSkeleton';
+import { ManagerUpdateCard } from '@/components/dashboard/ManagerUpdateCard';
 import { Bars, Donut, Dot, Pill, Spike, TextLink, UpperBadge } from '@/components/design';
 import { normalizeAppError, type AppErrorState } from '@/lib/errors';
 import { relativeTime } from '@/lib/utils';
@@ -203,6 +204,7 @@ export default function DashboardPage() {
         />
 
         <div className="px-md pb-md space-y-md">
+          <ManagerUpdateCard />
           <QueryStateView
             isLoading={loading}
             error={error}
