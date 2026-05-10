@@ -1,16 +1,19 @@
 package handlers
 
 import (
-	"crowdsec-manager/internal/config"
-	"crowdsec-manager/internal/database"
-	"crowdsec-manager/internal/docker"
-	"crowdsec-manager/internal/logger"
-	"crowdsec-manager/internal/models"
+	"encoding/base64"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"crowdsec-manager/internal/config"
+	"crowdsec-manager/internal/database"
+	"crowdsec-manager/internal/docker"
+	"crowdsec-manager/internal/logger"
+	"crowdsec-manager/internal/models"
 
 	"github.com/gin-gonic/gin"
 )
@@ -43,9 +46,43 @@ decisions:
 on_success: break
 `
 
+var (
+	errProfileContentMissing      = errors.New("profile content is required")
+	errProfileEncodingUnsupported = errors.New("unsupported profile content encoding")
+)
+
 func getProfilesPath(cfg *config.Config) string {
 	// Assume profiles.yaml is in the same directory as acquis.yaml
 	return filepath.Join(filepath.Dir(cfg.CrowdSecAcquisFile), "profiles.yaml")
+}
+
+func decodeProfileContent(req models.ProfileRequest) (string, error) {
+	encoding := strings.ToLower(strings.TrimSpace(req.Encoding))
+	switch encoding {
+	case "":
+		if req.Content != "" {
+			return req.Content, nil
+		}
+		if req.ContentB64 != "" {
+			return decodeProfileContentBase64(req.ContentB64)
+		}
+		return "", errProfileContentMissing
+	case "base64":
+		if req.ContentB64 == "" {
+			return "", errProfileContentMissing
+		}
+		return decodeProfileContentBase64(req.ContentB64)
+	default:
+		return "", fmt.Errorf("%w: %s", errProfileEncodingUnsupported, req.Encoding)
+	}
+}
+
+func decodeProfileContentBase64(content string) (string, error) {
+	decoded, err := base64.StdEncoding.DecodeString(content)
+	if err != nil {
+		return "", fmt.Errorf("decode base64 profile content: %w", err)
+	}
+	return string(decoded), nil
 }
 
 // readProfilesFromContainer reads profiles.yaml from CrowdSec container
@@ -168,6 +205,15 @@ func UpdateProfiles(db *database.Database, cfg *config.Config, dockerClient *doc
 			return
 		}
 
+		content, err := decodeProfileContent(req)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, models.Response{
+				Success: false,
+				Error:   err.Error(),
+			})
+			return
+		}
+
 		profilesPath := getProfilesPath(cfg)
 
 		// Ensure directory exists
@@ -181,7 +227,7 @@ func UpdateProfiles(db *database.Database, cfg *config.Config, dockerClient *doc
 		}
 
 		// Save history
-		if err := db.CreateProfileHistory(req.Content); err != nil {
+		if err := db.CreateProfileHistory(content); err != nil {
 			// Log error but proceed with file update? Or fail?
 			// For now, let's fail to ensure history is kept.
 			c.JSON(http.StatusInternalServerError, models.Response{
@@ -192,7 +238,7 @@ func UpdateProfiles(db *database.Database, cfg *config.Config, dockerClient *doc
 		}
 
 		// Write to file
-		if err := os.WriteFile(profilesPath, []byte(req.Content), 0644); err != nil {
+		if err := os.WriteFile(profilesPath, []byte(content), 0644); err != nil {
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,
 				Error:   fmt.Sprintf("failed to write profiles.yaml: %v", err),

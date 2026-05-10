@@ -434,8 +434,10 @@ type ConfigValidationReport struct {
 
 // ProfileRequest represents the request to update profiles.yaml
 type ProfileRequest struct {
-	Content string `json:"content"`
-	Restart bool   `json:"restart"`
+	Content    string `json:"content"`
+	ContentB64 string `json:"content_b64"`
+	Encoding   string `json:"encoding"`
+	Restart    bool   `json:"restart"`
 }
 
 // ProfileHistory represents a historical version of profiles.yaml

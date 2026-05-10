@@ -22,9 +22,7 @@ const config: CapacitorConfig = {
       androidScaleType: 'CENTER_CROP',
     },
     StatusBar: {
-      overlaysWebView: true,
       style: 'LIGHT',
-      backgroundColor: '#00000000',
     },
     Keyboard: {
       resize: 'body',

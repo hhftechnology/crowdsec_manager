@@ -13,7 +13,11 @@
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
         <item name="android:background">@null</item>
-        <item name="android:windowTranslucentStatus">true</item>
+        <!-- Edge-to-edge: transparent system bars, no windowTranslucentStatus
+             (deprecated on SDK 35). MainActivity calls
+             WindowCompat.setDecorFitsSystemWindows(window, false) so the WebView
+             renders behind the status/nav bars; the WebView itself uses
+             env(safe-area-inset-*) via .safe-top / .pb-nav utilities. -->
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>

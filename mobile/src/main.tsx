@@ -11,11 +11,13 @@ createRoot(document.getElementById("root")!).render(<App />);
 // Hide native splash screen after React has rendered
 SplashScreen.hide();
 
-// Configure native plugins for edge-to-edge display
+// Configure native plugins. Edge-to-edge layout is handled natively
+// (Android: WindowCompat.setDecorFitsSystemWindows in MainActivity + transparent
+// status/nav bars in styles.xml; iOS: default WKWebView behavior). The
+// deprecated setOverlaysWebView / setBackgroundColor APIs (Android 15 SDK 35
+// removed Window.setStatusBarColor) are intentionally not called.
 if (Capacitor.isNativePlatform()) {
-  StatusBar.setOverlaysWebView({ overlay: true });
   StatusBar.setStyle({ style: Style.Light });
-  StatusBar.setBackgroundColor({ color: '#00000000' });
 
   Keyboard.setResizeMode({ mode: KeyboardResize.Body });
   Keyboard.setScroll({ isDisabled: false });
