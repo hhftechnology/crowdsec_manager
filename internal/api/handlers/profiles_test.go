@@ -15,10 +15,11 @@ func TestDecodeProfileContent(t *testing.T) {
 	encoded := base64.StdEncoding.EncodeToString([]byte(content))
 
 	tests := []struct {
-		name    string
-		req     models.ProfileRequest
-		want    string
-		wantErr error
+		name          string
+		req           models.ProfileRequest
+		want          string
+		wantErr       error
+		wantBase64Err bool
 	}{
 		{
 			name: "legacy plain content",
@@ -48,7 +49,7 @@ func TestDecodeProfileContent(t *testing.T) {
 				ContentB64: "not-valid-base64",
 				Encoding:   "base64",
 			},
-			wantErr: base64.CorruptInputError(3),
+			wantBase64Err: true,
 		},
 		{
 			name:    "missing content",
@@ -66,11 +67,17 @@ func TestDecodeProfileContent(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
 			got, err := decodeProfileContent(tt.req)
+			if tt.wantBase64Err {
+				var corruptErr base64.CorruptInputError
+				if !errors.As(err, &corruptErr) {
+					t.Fatalf("decodeProfileContent() error = %v, want base64.CorruptInputError", err)
+				}
+				return
+			}
 			if tt.wantErr != nil {
 				if !errors.Is(err, tt.wantErr) {
 					t.Fatalf("decodeProfileContent() error = %v, want %v", err, tt.wantErr)
