@@ -2,7 +2,7 @@
   "name": "crowdsec-manager-mobile",
   "private": true,
   "description": "Mobile companion app for Crowdsec",
-  "version": "2.4.0",
+  "version": "2.4.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -21,12 +21,12 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@capacitor/app": "7.1.0",
-    "@capacitor/core": "^7.1.1",
-    "@capacitor/haptics": "7.0.2",
-    "@capacitor/keyboard": "^7.0.5",
-    "@capacitor/splash-screen": "7.0.3",
-    "@capacitor/status-bar": "^7.0.5",
+    "@capacitor/app": "^8.1.0",
+    "@capacitor/core": "^8.3.3",
+    "@capacitor/haptics": "^8.0.2",
+    "@capacitor/keyboard": "^8.0.3",
+    "@capacitor/splash-screen": "^8.0.1",
+    "@capacitor/status-bar": "^8.0.2",
     "@radix-ui/react-alert-dialog": "^1.1.14",
     "@radix-ui/react-dialog": "^1.1.14",
     "@radix-ui/react-scroll-area": "^1.2.10",
@@ -54,10 +54,10 @@
     "vite-plugin-pwa": "1.0.3"
   },
   "devDependencies": {
-    "@capacitor/android": "^7.1.1",
+    "@capacitor/android": "^8.3.3",
     "@capacitor/assets": "^3.0.5",
-    "@capacitor/cli": "^7.1.1",
-    "@capacitor/ios": "^7.1.1",
+    "@capacitor/cli": "^8.3.3",
+    "@capacitor/ios": "^8.3.3",
     "@eslint/js": "^9.32.0",
     "@testing-library/jest-dom": "^6.6.0",
     "@testing-library/react": "^16.0.0",
