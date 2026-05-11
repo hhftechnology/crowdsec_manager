@@ -57,24 +57,38 @@ var (
 )
 
 func decodeProfileContent(req models.ProfileRequest) (string, error) {
+	var decoded string
+	var err error
+
 	encoding := strings.ToLower(strings.TrimSpace(req.Encoding))
 	switch encoding {
 	case "":
 		if req.Content != "" {
-			return req.Content, nil
+			decoded = req.Content
+		} else if req.ContentB64 != "" {
+			decoded, err = decodeProfileContentBase64(req.ContentB64)
+			if err != nil {
+				return "", err
+			}
+		} else {
+			return "", errProfileContentMissing
 		}
-		if req.ContentB64 != "" {
-			return decodeProfileContentBase64(req.ContentB64)
-		}
-		return "", errProfileContentMissing
 	case "base64":
 		if req.ContentB64 == "" {
 			return "", errProfileContentMissing
 		}
-		return decodeProfileContentBase64(req.ContentB64)
+		decoded, err = decodeProfileContentBase64(req.ContentB64)
+		if err != nil {
+			return "", err
+		}
 	default:
 		return "", fmt.Errorf("%w: %s", errProfileEncodingUnsupported, req.Encoding)
 	}
+
+	if strings.TrimSpace(decoded) == "" {
+		return "", errProfileContentMissing
+	}
+	return decoded, nil
 }
 
 func decodeProfileContentBase64(content string) (string, error) {
@@ -207,9 +221,10 @@ func UpdateProfiles(db *database.Database, cfg *config.Config, dockerClient *doc
 
 		content, err := decodeProfileContent(req)
 		if err != nil {
+			logger.Error("Failed to decode profile content", "error", err)
 			c.JSON(http.StatusBadRequest, models.Response{
 				Success: false,
-				Error:   err.Error(),
+				Error:   "invalid profile content",
 			})
 			return
 		}
