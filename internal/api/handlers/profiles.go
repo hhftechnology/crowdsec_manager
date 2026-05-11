@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"crowdsec-manager/internal/config"
+	"crowdsec-manager/internal/constants"
 	"crowdsec-manager/internal/database"
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
@@ -46,15 +47,14 @@ decisions:
 on_success: break
 `
 
+func getProfilesPath(cfg *config.Config) string {
+	return filepath.Join(cfg.ConfigDir, constants.CrowdSecConfigSubdir, "profiles.yaml")
+}
+
 var (
 	errProfileContentMissing      = errors.New("profile content is required")
 	errProfileEncodingUnsupported = errors.New("unsupported profile content encoding")
 )
-
-func getProfilesPath(cfg *config.Config) string {
-	// Assume profiles.yaml is in the same directory as acquis.yaml
-	return filepath.Join(filepath.Dir(cfg.CrowdSecAcquisFile), "profiles.yaml")
-}
 
 func decodeProfileContent(req models.ProfileRequest) (string, error) {
 	encoding := strings.ToLower(strings.TrimSpace(req.Encoding))
@@ -109,12 +109,12 @@ func createDefaultProfilesYaml(path string) error {
 	// Ensure the directory exists
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("failed to create directory %s: %v", dir, err)
+		return fmt.Errorf("failed to create directory %s: %w", dir, err)
 	}
 
 	// Write default content
 	if err := os.WriteFile(path, []byte(DefaultProfilesYAML), 0644); err != nil {
-		return fmt.Errorf("failed to write default profiles.yaml: %v", err)
+		return fmt.Errorf("failed to write default profiles.yaml: %w", err)
 	}
 
 	logger.Info("Created default profiles.yaml", "path", path)
