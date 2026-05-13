@@ -14,6 +14,8 @@ const (
 	Range1h  DashboardRange = "1h"
 	Range6h  DashboardRange = "6h"
 	Range24h DashboardRange = "24h"
+	Range7d  DashboardRange = "7d"
+	RangeAll DashboardRange = "all"
 )
 
 // IPStat is a single row in the "top IPs" widget.
@@ -46,29 +48,84 @@ type TraefikRecentError struct {
 	DurationMs int64  `json:"duration_ms,omitempty"`
 }
 
+// TraefikServiceDetail provides granular health and performance metrics
+// for a single Traefik service (backend).
+type TraefikServiceDetail struct {
+	Name        string  `json:"name"`
+	Requests    int     `json:"requests"`
+	AvgDuration float64 `json:"avg_duration_ms"`
+	ErrorRate   float64 `json:"error_rate"`
+}
+
+// TraefikPathDetail provides metrics for a single request path.
+type TraefikPathDetail struct {
+	Path        string  `json:"path"`
+	Method      string  `json:"method"`
+	Count       int     `json:"count"`
+	AvgDuration float64 `json:"avg_duration_ms"`
+}
+
+// TraefikRouterDetail provides metrics for a single Traefik router.
+type TraefikRouterDetail struct {
+	Name        string  `json:"name"`
+	Requests    int     `json:"requests"`
+	AvgDuration float64 `json:"avg_duration_ms"`
+	Service     string  `json:"service,omitempty"`
+}
+
+// SystemStats holds system resource utilization data.
+type SystemStats struct {
+	CPU    CPUStats    `json:"cpu"`
+	Memory MemoryStats `json:"memory"`
+	Disk   DiskStats   `json:"disk"`
+}
+
+type CPUStats struct {
+	UsagePercent float64 `json:"usage_percent"`
+	Cores        int     `json:"cores"`
+	Model        string  `json:"model"`
+}
+
+type MemoryStats struct {
+	Total       uint64  `json:"total"`
+	Used        uint64  `json:"used"`
+	Available   uint64  `json:"available"`
+	UsedPercent float64 `json:"used_percent"`
+}
+
+type DiskStats struct {
+	Total       uint64  `json:"total"`
+	Used        uint64  `json:"used"`
+	Free        uint64  `json:"free"`
+	UsedPercent float64 `json:"used_percent"`
+}
+
 // TraefikDashboard is the complete payload returned by
 // GET /api/logs/traefik/dashboard.
-//
-// AvgDurationMs is a pointer (rather than carrying omitempty) so that
-// the JSON payload makes the absence explicit when Traefik is configured
-// with the Common Log Format and no duration field is available.
 type TraefikDashboard struct {
-	Range            DashboardRange       `json:"range"`
-	Format           string               `json:"format"` // "json" or "clf"
-	GeneratedAt      string               `json:"generated_at"`
-	TotalRequests    int                  `json:"total_requests"`
-	UniqueIPs        int                  `json:"unique_ips"`
-	AvgDurationMs    *float64             `json:"avg_duration_ms"`
-	ErrorRate        float64              `json:"error_rate"`
-	Series           []TraefikBucket      `json:"series"`
-	StatusCodes      []NameValue          `json:"status_codes"`
-	Methods          []NameValue          `json:"methods"`
-	TopIPs           []IPStat             `json:"top_ips"`
-	TopHosts         []NameValue          `json:"top_hosts"`
-	TopRouters       []NameValue          `json:"top_routers"`
-	SlowestEndpoints []NameValue          `json:"slowest_endpoints"` // value = ms
-	TLSVersions      []NameValue          `json:"tls_versions"`
-	RecentErrors     []TraefikRecentError `json:"recent_errors"`
+	Range             DashboardRange       `json:"range"`
+	Format            string               `json:"format"` // "json" or "clf"
+	GeneratedAt       string               `json:"generated_at"`
+	TotalRequests     int                  `json:"total_requests"`
+	UniqueIPs         int                  `json:"unique_ips"`
+	AvgDurationMs     *float64             `json:"avg_duration_ms"`
+	P95ResponseTimeMs *float64             `json:"p95_response_time_ms"`
+	P99ResponseTimeMs *float64             `json:"p99_response_time_ms"`
+	ErrorRate         float64              `json:"error_rate"`
+	Series            []TraefikBucket      `json:"series"`
+	StatusCodes       []NameValue          `json:"status_codes"`
+	Methods           []NameValue          `json:"methods"`
+	TopIPs            []IPStat             `json:"top_ips"`
+	TopHosts          []NameValue          `json:"top_hosts"`
+	TopPaths          []TraefikPathDetail  `json:"top_paths"`
+	TopRouters        []TraefikRouterDetail `json:"top_routers"`
+	TopServices       []TraefikServiceDetail `json:"top_services"`
+	TopAddresses      []NameValue          `json:"top_addresses"`
+	UserAgents        []NameValue          `json:"user_agents"`
+	SlowestEndpoints  []NameValue          `json:"slowest_endpoints"` // value = ms
+	TLSVersions       []NameValue          `json:"tls_versions"`
+	RecentErrors      []TraefikRecentError `json:"recent_errors"`
+	System            *SystemStats         `json:"system,omitempty"`
 }
 
 // CrowdSecBucket is one point on the CrowdSec event volume time-series.

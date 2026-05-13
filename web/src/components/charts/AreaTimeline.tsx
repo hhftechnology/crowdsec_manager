@@ -23,6 +23,8 @@ interface AreaTimelineProps {
   showGrid?: boolean
   /** Fill area with a gradient. Defaults to true. */
   gradientFill?: boolean
+  /** Optional formatter for X-axis ticks. */
+  tickFormatter?: (value: string) => string
 }
 
 interface ChartTooltipPayload {
@@ -59,6 +61,7 @@ export default function AreaTimeline({
   height = 300,
   showGrid = true,
   gradientFill = true,
+  tickFormatter,
 }: AreaTimelineProps) {
   const gradientId = `area-gradient-${dataKey}`
 
@@ -87,6 +90,7 @@ export default function AreaTimeline({
           tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
           tickLine={false}
           axisLine={false}
+          tickFormatter={tickFormatter}
         />
         <YAxis
           tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}

@@ -68,12 +68,13 @@ func BucketTraefikRaw(rawLogs string, since, now time.Time, rng models.Dashboard
 		}
 	}
 
-	parser := docker.NewLogParser()
-	entries := parser.Parse(rawLogs, "traefik")
-
 	if hasJSON {
 		return aggregateTraefikJSON(jsonRows, since, now, rng, geo)
 	}
+
+	parser := docker.NewLogParser()
+	entries := parser.Parse(rawLogs, "traefik")
+
 	return BucketTraefik(entries, since, now, rng, geo)
 }
 
@@ -85,8 +86,35 @@ func BucketTraefik(entries []docker.StructuredLogEntry, since, now time.Time, rn
 	}
 	out := emptyTraefikDashboard(rng, "clf", now)
 
+	var minTs, maxTs time.Time
+	for _, e := range entries {
+		if e.Timestamp.IsZero() {
+			continue
+		}
+		if !since.IsZero() && e.Timestamp.Before(since) {
+			continue
+		}
+		if minTs.IsZero() || e.Timestamp.Before(minTs) {
+			minTs = e.Timestamp
+		}
+		if maxTs.IsZero() || e.Timestamp.After(maxTs) {
+			maxTs = e.Timestamp
+		}
+	}
+
 	gran := bucketGranularity(rng)
+	if (rng == models.RangeAll || rng == models.Range7d) && !minTs.IsZero() && !maxTs.IsZero() {
+		gran = calculateDynamicGranularity(maxTs.Sub(minTs))
+	}
+
 	buckets := map[time.Time]*models.TraefikBucket{}
+	if !minTs.IsZero() && !maxTs.IsZero() {
+		start := minTs.Truncate(gran).UTC()
+		end := maxTs.Truncate(gran).UTC()
+		for t := start; !t.After(end); t = t.Add(gran) {
+			buckets[t] = &models.TraefikBucket{T: t.Format(time.RFC3339)}
+		}
+	}
 	statusCounts := map[string]int{}
 	methodCounts := map[string]int{}
 	ipCounts := map[string]int{}
@@ -164,8 +192,27 @@ func BucketTraefik(entries []docker.StructuredLogEntry, since, now time.Time, rn
 	out.Methods = topNameValues(methodCounts, 0)
 	out.TopIPs = topIPs(ipCounts, geo, maxTopIPs)
 	out.RecentErrors = sortedRecentErrors(errorRows, maxRecentErrors)
+	out.System = GetSystemStats()
 
 	return out
+}
+
+type serviceAgg struct {
+	count    int
+	totalDur int64
+	errors   int
+}
+
+type pathAgg struct {
+	count    int
+	totalDur int64
+	method   string
+}
+
+type routerAgg struct {
+	count    int
+	totalDur int64
+	service  string
 }
 
 func aggregateTraefikJSON(rows []traefikJSON, since, now time.Time, rng models.DashboardRange, geo GeoLookup) models.TraefikDashboard {
@@ -174,85 +221,165 @@ func aggregateTraefikJSON(rows []traefikJSON, since, now time.Time, rng models.D
 	}
 	out := emptyTraefikDashboard(rng, "json", now)
 
+	var minTs, maxTs time.Time
+	for _, row := range rows {
+		ts := row.startTime()
+		if ts.IsZero() {
+			continue
+		}
+		if minTs.IsZero() || ts.Before(minTs) {
+			minTs = ts
+		}
+		if maxTs.IsZero() || ts.After(maxTs) {
+			maxTs = ts
+		}
+	}
+
 	gran := bucketGranularity(rng)
+	if (rng == models.RangeAll || rng == models.Range7d) && !minTs.IsZero() && !maxTs.IsZero() {
+		gran = calculateDynamicGranularity(maxTs.Sub(minTs))
+	}
+
 	buckets := map[time.Time]*models.TraefikBucket{}
+	if !minTs.IsZero() && !maxTs.IsZero() {
+		start := minTs.Truncate(gran).UTC()
+		end := maxTs.Truncate(gran).UTC()
+		for t := start; !t.After(end); t = t.Add(gran) {
+			buckets[t] = &models.TraefikBucket{T: t.Format(time.RFC3339)}
+		}
+	}
 	statusCounts := map[string]int{}
 	methodCounts := map[string]int{}
 	hostCounts := map[string]int{}
-	routerCounts := map[string]int{}
 	tlsCounts := map[string]int{}
 	ipCounts := map[string]int{}
+	uaCounts := map[string]int{}
+	addrCounts := map[string]int{}
 	endpointMaxMs := map[string]int{}
+
+	serviceStats := map[string]*serviceAgg{}
+	pathStats := map[string]*pathAgg{}
+	routerStats := map[string]*routerAgg{}
 
 	var errorRows []models.TraefikRecentError
 	errorTotal := 0
 	totalRequests := 0
 	var totalDurationNs int64
+	var durationsMs []float64
 
 	for _, row := range rows {
 		ts := row.startTime()
 		if ts.IsZero() {
 			continue
 		}
-		ip := row.ClientHost
+		ip := row.getIP()
 		if ip == "" {
 			continue
 		}
+
+		method := row.getMethod()
+		host := row.getHost()
+		path := row.getPath()
+		status := row.getStatus()
+		duration := row.getDuration()
+		router := row.getRouter()
+		service := row.getService()
+		ua := row.getUA()
+
 		totalRequests++
 		ipCounts[ip]++
-		statusStr := strconv.Itoa(row.DownstreamStatus)
-		statusCounts[statusStr]++
-		if row.RequestMethod != "" {
-			methodCounts[row.RequestMethod]++
-		}
-		if row.RequestHost != "" {
-			hostCounts[row.RequestHost]++
-		}
-		if row.RouterName != "" {
-			routerCounts[row.RouterName]++
-		}
-		if row.TLSVersion != "" {
-			tlsCounts[row.TLSVersion]++
-		}
-		totalDurationNs += row.Duration
+		totalDurationNs += duration
 
-		key := ts.Truncate(gran).UTC()
-		b, ok := buckets[key]
+		if method != "" {
+			methodCounts[method]++
+		}
+		if host != "" {
+			hostCounts[host]++
+		}
+		if router != "" {
+			r := routerStats[router]
+			if r == nil {
+				r = &routerAgg{service: service}
+				routerStats[router] = r
+			}
+			r.count++
+			r.totalDur += duration
+		}
+		if service != "" {
+			s := serviceStats[service]
+			if s == nil {
+				s = &serviceAgg{}
+				serviceStats[service] = s
+			}
+			s.count++
+			s.totalDur += duration
+			if status >= 400 {
+				s.errors++
+			}
+		}
+		if path != "" {
+			key := method + ":" + path
+			p := pathStats[key]
+			if p == nil {
+				p = &pathAgg{method: method}
+				pathStats[key] = p
+			}
+			p.count++
+			p.totalDur += duration
+		}
+		if ua != "" {
+			uaCounts[ua]++
+		}
+
+		addr := row.getStr("RequestAddr", "request_Addr")
+		if addr != "" {
+			addrCounts[addr]++
+		}
+		tls := row.getStr("TLSVersion", "tls_version")
+		if tls != "" {
+			tlsCounts[tls]++
+		}
+
+		statusStr := strconv.Itoa(status)
+		statusCounts[statusStr]++
+
+		if status >= 400 {
+			errorTotal++
+		}
+		durationsMs = append(durationsMs, float64(duration)/float64(time.Millisecond))
+
+		bucketKey := ts.Truncate(gran).UTC()
+		b, ok := buckets[bucketKey]
 		if !ok {
-			b = &models.TraefikBucket{T: key.Format(time.RFC3339)}
-			buckets[key] = b
+			b = &models.TraefikBucket{T: bucketKey.Format(time.RFC3339)}
+			buckets[bucketKey] = b
 		}
 		b.Total++
-		switch row.DownstreamStatus / 100 {
+		switch status / 100 {
 		case 2:
 			b.C2xx++
 		case 3:
 			b.C3xx++
 		case 4:
 			b.C4xx++
-			errorTotal++
 		case 5:
 			b.C5xx++
-			errorTotal++
 		}
 
-		durationMs := int(row.Duration / int64(time.Millisecond))
-		path := row.RequestPath
-		// Skip long-lived streaming endpoints: row.Duration is connection
-		// lifetime, not response latency, so they always dominate the chart.
+		durationMs := int(duration / int64(time.Millisecond))
 		if path != "" && !isStreamingPath(path) {
 			if cur, ok := endpointMaxMs[path]; !ok || durationMs > cur {
 				endpointMaxMs[path] = durationMs
 			}
 		}
 
-		if row.DownstreamStatus >= 400 {
+		if status >= 400 {
 			errorRows = append(errorRows, models.TraefikRecentError{
 				T:          ts.UTC().Format(time.RFC3339),
 				IP:         ip,
-				Method:     row.RequestMethod,
-				Path:       row.RequestPath,
-				Status:     row.DownstreamStatus,
+				Method:     method,
+				Path:       path,
+				Status:     status,
 				DurationMs: int64(durationMs),
 			})
 		}
@@ -264,49 +391,242 @@ func aggregateTraefikJSON(rows []traefikJSON, since, now time.Time, rng models.D
 		out.ErrorRate = float64(errorTotal) / float64(totalRequests)
 		avgMs := float64(totalDurationNs) / float64(totalRequests) / float64(time.Millisecond)
 		out.AvgDurationMs = &avgMs
+
+		sort.Float64s(durationsMs)
+		p95Idx := int(float64(len(durationsMs)) * 0.95)
+		p99Idx := int(float64(len(durationsMs)) * 0.99)
+
+		if p95Idx >= len(durationsMs) {
+			p95Idx = len(durationsMs) - 1
+		}
+		if p95Idx < 0 {
+			p95Idx = 0
+		}
+		if p99Idx >= len(durationsMs) {
+			p99Idx = len(durationsMs) - 1
+		}
+		if p99Idx < 0 {
+			p99Idx = 0
+		}
+
+		if len(durationsMs) > 0 {
+			p95Ms := durationsMs[p95Idx]
+			out.P95ResponseTimeMs = &p95Ms
+			p99Ms := durationsMs[p99Idx]
+			out.P99ResponseTimeMs = &p99Ms
+		}
 	}
 
 	out.Series = sortedBuckets(buckets)
 	out.StatusCodes = topNameValues(statusCounts, 0)
 	out.Methods = topNameValues(methodCounts, 0)
+	out.TopRouters = sortedRouterDetails(routerStats, maxTopRouters)
+	out.TopPaths = sortedPathDetails(pathStats, maxTopRouters)
 	out.TopHosts = topNameValues(hostCounts, maxTopHosts)
-	out.TopRouters = topNameValues(routerCounts, maxTopRouters)
+	out.TopAddresses = topNameValues(addrCounts, maxTopRouters)
+	out.UserAgents = topNameValues(uaCounts, 50)
+	out.TopServices = sortedServiceDetails(serviceStats, maxTopRouters)
 	out.TLSVersions = topNameValues(tlsCounts, maxTLSVersions)
 	out.SlowestEndpoints = topNameValues(endpointMaxMs, maxSlowestEndpoints)
 	out.TopIPs = topIPs(ipCounts, geo, maxTopIPs)
 	out.RecentErrors = sortedRecentErrors(errorRows, maxRecentErrors)
+	out.System = GetSystemStats()
 
 	return out
 }
 
-type traefikJSON struct {
-	ClientHost       string `json:"ClientHost"`
-	DownstreamStatus int    `json:"DownstreamStatus"`
-	RequestMethod    string `json:"RequestMethod"`
-	RequestHost      string `json:"RequestHost"`
-	RequestPath      string `json:"RequestPath"`
-	RouterName       string `json:"RouterName"`
-	Duration         int64  `json:"Duration"` // nanoseconds (Traefik convention)
-	StartUTC         string `json:"StartUTC"`
-	StartLocal       string `json:"StartLocal"`
-	TLSVersion       string `json:"TLSVersion"`
+func sortedServiceDetails(stats map[string]*serviceAgg, limit int) []models.TraefikServiceDetail {
+	out := make([]models.TraefikServiceDetail, 0, len(stats))
+	for name, s := range stats {
+		avg := 0.0
+		if s.count > 0 {
+			avg = float64(s.totalDur) / float64(s.count) / float64(time.Millisecond)
+		}
+		errRate := 0.0
+		if s.count > 0 {
+			errRate = (float64(s.errors) / float64(s.count)) * 100
+		}
+		out = append(out, models.TraefikServiceDetail{
+			Name:        name,
+			Requests:    s.count,
+			AvgDuration: avg,
+			ErrorRate:   errRate,
+		})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Requests > out[j].Requests
+	})
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out
+}
+
+func sortedPathDetails(stats map[string]*pathAgg, limit int) []models.TraefikPathDetail {
+	out := make([]models.TraefikPathDetail, 0, len(stats))
+	for key, p := range stats {
+		// key is Method:Path
+		parts := strings.SplitN(key, ":", 2)
+		path := key
+		if len(parts) == 2 {
+			path = parts[1]
+		}
+		avg := 0.0
+		if p.count > 0 {
+			avg = float64(p.totalDur) / float64(p.count) / float64(time.Millisecond)
+		}
+		out = append(out, models.TraefikPathDetail{
+			Path:        path,
+			Method:      p.method,
+			Count:       p.count,
+			AvgDuration: avg,
+		})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Count > out[j].Count
+	})
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out
+}
+
+func sortedRouterDetails(stats map[string]*routerAgg, limit int) []models.TraefikRouterDetail {
+	out := make([]models.TraefikRouterDetail, 0, len(stats))
+	for name, r := range stats {
+		avg := 0.0
+		if r.count > 0 {
+			avg = float64(r.totalDur) / float64(r.count) / float64(time.Millisecond)
+		}
+		out = append(out, models.TraefikRouterDetail{
+			Name:        name,
+			Requests:    r.count,
+			AvgDuration: avg,
+			Service:     r.service,
+		})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Requests > out[j].Requests
+	})
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out
+}
+
+type traefikJSON map[string]interface{}
+
+func (r traefikJSON) getStr(keys ...string) string {
+	for _, k := range keys {
+		if v, ok := r[k]; ok {
+			if s, ok := v.(string); ok && s != "" {
+				return s
+			}
+		}
+	}
+	return ""
+}
+
+func (r traefikJSON) getInt(keys ...string) int {
+	for _, k := range keys {
+		if v, ok := r[k]; ok {
+			switch val := v.(type) {
+			case float64:
+				return int(val)
+			case int:
+				return val
+			case int64:
+				return int(val)
+			}
+		}
+	}
+	return 0
+}
+
+func (r traefikJSON) getInt64(keys ...string) int64 {
+	for _, k := range keys {
+		if v, ok := r[k]; ok {
+			switch val := v.(type) {
+			case float64:
+				return int64(val)
+			case int:
+				return int64(val)
+			case int64:
+				return val
+			}
+		}
+	}
+	return 0
+}
+
+func (r traefikJSON) getUA() string {
+	return r.getStr("UserAgent", "request_User-Agent", "user_agent", "ua")
+}
+
+func (r traefikJSON) getIP() string {
+	return r.getStr("ClientHost", "ClientAddr", "client_ip", "ip", "RemoteAddr")
+}
+
+func (r traefikJSON) getHost() string {
+	h := r.getStr("RequestHost", "request_Host", "host", "OriginHost")
+	if h == "" {
+		// Try to parse from RequestAddr (host:port)
+		addr := r.getStr("RequestAddr")
+		if addr != "" {
+			if i := strings.LastIndexByte(addr, ':'); i > 0 {
+				return addr[:i]
+			}
+			return addr
+		}
+	}
+	return h
+}
+
+func (r traefikJSON) getMethod() string {
+	return r.getStr("RequestMethod", "method", "request_Method")
+}
+
+func (r traefikJSON) getPath() string {
+	return r.getStr("RequestPath", "path", "request_Path")
+}
+
+func (r traefikJSON) getStatus() int {
+	return r.getInt("DownstreamStatus", "status", "downstream_Status")
+}
+
+func (r traefikJSON) getDuration() int64 {
+	return r.getInt64("Duration", "duration")
+}
+
+func (r traefikJSON) getRouter() string {
+	return r.getStr("RouterName", "router")
+}
+
+func (r traefikJSON) getService() string {
+	return r.getStr("ServiceName", "service")
+}
+
+func (r traefikJSON) getServiceAddr() string {
+	return r.getStr("ServiceAddr")
 }
 
 func (r traefikJSON) populated() bool {
-	return r.ClientHost != "" || r.DownstreamStatus != 0 || r.RequestMethod != ""
+	return len(r) > 0 && (r.getIP() != "" || r.getStatus() != 0)
 }
 
 func (r traefikJSON) startTime() time.Time {
-	if r.StartUTC != "" {
-		if t, err := time.Parse(time.RFC3339Nano, r.StartUTC); err == nil {
+	utc := r.getStr("StartUTC", "time", "t")
+	if utc != "" {
+		if t, err := time.Parse(time.RFC3339Nano, utc); err == nil {
 			return t
 		}
-		if t, err := time.Parse(time.RFC3339, r.StartUTC); err == nil {
+		if t, err := time.Parse(time.RFC3339, utc); err == nil {
 			return t
 		}
 	}
-	if r.StartLocal != "" {
-		if t, err := time.Parse(time.RFC3339Nano, r.StartLocal); err == nil {
+	local := r.getStr("StartLocal")
+	if local != "" {
+		if t, err := time.Parse(time.RFC3339Nano, local); err == nil {
 			return t.UTC()
 		}
 	}
@@ -323,7 +643,11 @@ func emptyTraefikDashboard(rng models.DashboardRange, format string, now time.Ti
 		Methods:          []models.NameValue{},
 		TopIPs:           []models.IPStat{},
 		TopHosts:         []models.NameValue{},
-		TopRouters:       []models.NameValue{},
+		TopPaths:         []models.TraefikPathDetail{},
+		TopRouters:       []models.TraefikRouterDetail{},
+		TopServices:      []models.TraefikServiceDetail{},
+		TopAddresses:     []models.NameValue{},
+		UserAgents:       []models.NameValue{},
 		SlowestEndpoints: []models.NameValue{},
 		TLSVersions:      []models.NameValue{},
 		RecentErrors:     []models.TraefikRecentError{},
@@ -341,8 +665,56 @@ func bucketGranularity(rng models.DashboardRange) time.Duration {
 	case models.Range24h:
 		return time.Hour
 	default:
+		return time.Hour
+	}
+}
+
+func calculateDynamicGranularity(span time.Duration) time.Duration {
+	if span <= 0 {
+		return time.Hour
+	}
+	// Target ~40 points
+	target := span / 40
+	if target < time.Minute {
 		return time.Minute
 	}
+	if target < 5*time.Minute {
+		return 5 * time.Minute
+	}
+	if target < 10*time.Minute {
+		return 10 * time.Minute
+	}
+	if target < 15*time.Minute {
+		return 15 * time.Minute
+	}
+	if target < 30*time.Minute {
+		return 30 * time.Minute
+	}
+	if target < time.Hour {
+		return time.Hour
+	}
+	if target < 2*time.Hour {
+		return 2 * time.Hour
+	}
+	if target < 3*time.Hour {
+		return 3 * time.Hour
+	}
+	if target < 4*time.Hour {
+		return 4 * time.Hour
+	}
+	if target < 6*time.Hour {
+		return 6 * time.Hour
+	}
+	if target < 12*time.Hour {
+		return 12 * time.Hour
+	}
+	if target < 24*time.Hour {
+		return 24 * time.Hour
+	}
+	if target < 7*24*time.Hour {
+		return 7 * 24 * time.Hour
+	}
+	return 30 * 24 * time.Hour
 }
 
 func sortedBuckets(buckets map[time.Time]*models.TraefikBucket) []models.TraefikBucket {
@@ -437,4 +809,43 @@ func extractCLFPath(message string) string {
 		return parts[1]
 	}
 	return ""
+}
+
+func cleanUserAgent(ua string) string {
+	if ua == "" {
+		return "Unknown"
+	}
+	if strings.Contains(ua, "Chrome") && !strings.Contains(ua, "Edg") && !strings.Contains(ua, "OPR") {
+		return "Chrome"
+	}
+	if strings.Contains(ua, "Firefox") {
+		return "Firefox"
+	}
+	if strings.Contains(ua, "Safari") && !strings.Contains(ua, "Chrome") {
+		return "Safari"
+	}
+	if strings.Contains(ua, "Edg") {
+		return "Edge"
+	}
+	if strings.Contains(ua, "OPR") || strings.Contains(ua, "Opera") {
+		return "Opera"
+	}
+	if strings.Contains(ua, "curl") {
+		return "Curl"
+	}
+	if strings.Contains(ua, "Postman") {
+		return "Postman"
+	}
+	if strings.Contains(ua, "Trident") || strings.Contains(ua, "MSIE") {
+		return "IE"
+	}
+	// Fallback to the first word or a truncated version
+	parts := strings.Split(ua, " ")
+	if len(parts) > 0 {
+		if strings.Contains(parts[0], "/") {
+			return strings.Split(parts[0], "/")[0]
+		}
+		return parts[0]
+	}
+	return "Other"
 }
