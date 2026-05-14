@@ -62,14 +62,7 @@ function formatNumber(n: number): string { return n.toLocaleString() }
 function formatPercent(n: number): string { return `${(n * 100).toFixed(1)}%` }
 function formatDuration(ms: number | null | undefined): string {
   if (ms == null) return '—'
-  // If it looks like nanoseconds (very large), convert to ms first for consistency or handle both
-  let value = ms
-  let unit = 'ms'
-  
-  if (value > 1000000) { // Likely nanoseconds if > 1M
-    value = value / 1000000
-  }
-  
+  const value = ms
   if (value < 1) return `${(value * 1000).toFixed(0)} µs`
   if (value < 1000) return `${value.toFixed(1)} ms`
   return `${(value / 1000).toFixed(2)} s`
@@ -345,12 +338,15 @@ export default function TraefikDashboardPage() {
   const [dashboardRange, setDashboardRange] = useState<DashboardRange>('1h')
   const { query, setQuery } = useSearch()
   
+  const [isLiveView, setIsLiveView] = useState(false)
+
   // Dashboard Metrics
   const { data: dashboardData, isLoading: dashboardLoading, isFetching: dashboardFetching, refetch: refetchDashboard } = useQuery({
     queryKey: ['logs-dashboard', 'traefik', dashboardRange],
     queryFn: async () => (await dashboardAPI.getTraefik(dashboardRange)).data.data,
-    refetchInterval: 10_000,
-    staleTime: 8_000,
+    refetchInterval: () => isLiveView ? 5_000 : false,
+    staleTime: isLiveView ? 3_000 : Infinity,
+    gcTime: isLiveView ? 60_000 : 5 * 60_000,
   })
 
   // Logs Config
@@ -446,8 +442,14 @@ export default function TraefikDashboardPage() {
 
     // Sort
     logs.sort((a, b) => {
-      const aVal = a[sortConfig.key] ?? ''
-      const bVal = b[sortConfig.key] ?? ''
+      let aVal = a[sortConfig.key] ?? ''
+      let bVal = b[sortConfig.key] ?? ''
+      
+      // Numeric sort if applicable
+      if (!isNaN(Number(aVal)) && !isNaN(Number(bVal)) && aVal !== '' && bVal !== '') {
+        return sortConfig.direction === 'asc' ? Number(aVal) - Number(bVal) : Number(bVal) - Number(aVal)
+      }
+
       if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1
       if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1
       return 0
@@ -491,7 +493,7 @@ export default function TraefikDashboardPage() {
     }
   }, [d?.user_agents])
 
-  const seriesData = (d?.series ?? []).map((b: any) => {
+  const seriesData = useMemo(() => (d?.series ?? []).map((b: any) => {
     const t = new Date(b.t)
     const HHmm = b.t.slice(11, 16)
     const MMdd = `${t.getMonth() + 1}/${t.getDate()}`
@@ -518,7 +520,7 @@ export default function TraefikDashboardPage() {
       '4xx': b.c4xx,
       '5xx': b.c5xx,
     }
-  })
+  }), [d?.series, dashboardRange])
 
   const seriesTickFormatter = useCallback((val: string) => {
     if (!val) return val
@@ -533,7 +535,7 @@ export default function TraefikDashboardPage() {
     return val
   }, [dashboardRange])
 
-  const mapPoints = (d?.top_ips ?? [])
+  const mapPoints = useMemo(() => (d?.top_ips ?? [])
     .filter((ip) => typeof ip.lat === 'number' && typeof ip.lng === 'number')
     .map((ip) => ({
       lat: ip.lat as number,
@@ -541,7 +543,7 @@ export default function TraefikDashboardPage() {
       value: ip.count,
       label: `${ip.ip}${ip.country ? ` (${ip.country})` : ''}`,
       country: ip.country,
-    }))
+    })), [d?.top_ips])
 
   const groupedStatusCodes = useMemo(() => groupStatusCodes(d?.status_codes || []), [d?.status_codes])
 
@@ -577,6 +579,10 @@ export default function TraefikDashboardPage() {
           </TabsList>
           
           <div className="flex items-center gap-2">
+            <Button variant={isLiveView ? "default" : "outline"} size="sm" onClick={() => setIsLiveView(!isLiveView)} className="h-9 gap-2">
+              <Activity className={cn("h-4 w-4", isLiveView && "animate-pulse")} />
+              {isLiveView ? "Live" : "Static"}
+            </Button>
             <RangeSelector value={dashboardRange} onChange={setDashboardRange} />
           </div>
         </div>
@@ -587,7 +593,10 @@ export default function TraefikDashboardPage() {
             <StatCard 
               title="Total Requests" 
               value={dashboardLoading ? '—' : formatNumber(d?.total_requests ?? 0)} 
-              description={d?.total_requests ? `${(d.total_requests / (d.range === '1h' ? 3600 : d.range === '24h' ? 86400 : 300)).toFixed(2)} req/s` : undefined}
+              description={d?.total_requests ? (() => {
+                const sec = { '5m': 300, '1h': 3600, '6h': 21600, '24h': 86400, '7d': 604800 }[d.range as string] || 3600;
+                return `${(d.total_requests / sec).toFixed(2)} req/s`;
+              })() : undefined}
               icon={<Activity className="h-4 w-4 text-[#3b82f6]" />} 
               loading={dashboardLoading} 
             />
@@ -775,11 +784,20 @@ export default function TraefikDashboardPage() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="flex items-center gap-2">
-                    <div className="relative">
-                      <div className="w-2 h-2 bg-[hsl(var(--success))] rounded-full" />
-                      <div className="absolute inset-0 w-2 h-2 bg-[hsl(var(--success))] rounded-full animate-ping opacity-75" />
-                    </div>
-                    <span className="text-xs font-semibold uppercase text-[hsl(var(--success))]">Live</span>
+                    {isLiveView ? (
+                      <>
+                        <div className="relative">
+                          <div className="w-2 h-2 bg-[hsl(var(--success))] rounded-full" />
+                          <div className="absolute inset-0 w-2 h-2 bg-[hsl(var(--success))] rounded-full animate-ping opacity-75" />
+                        </div>
+                        <span className="text-xs font-semibold uppercase text-[hsl(var(--success))]">Live</span>
+                      </>
+                    ) : (
+                      <>
+                        <div className="w-2 h-2 bg-muted-foreground/50 rounded-full" />
+                        <span className="text-xs font-semibold uppercase text-muted-foreground">Static</span>
+                      </>
+                    )}
                   </div>
                   <CardTitle className="text-sm font-semibold uppercase tracking-wide"> 
                     Event Feed
@@ -797,7 +815,7 @@ export default function TraefikDashboardPage() {
                         <th className="px-4 py-2 font-medium text-left">Method</th>
                         <th className="px-4 py-2 font-medium text-left">Path</th>
                         <th className="px-4 py-2 font-medium text-left">Status</th>
-                        <th className="px-4 py-2 font-medium text-left text-right">Duration</th>
+                        <th className="px-4 py-2 font-medium text-right">Duration</th>
                         <th className="px-4 py-2 font-medium text-left">Service</th>
                       </tr>
                     </thead>
@@ -812,7 +830,7 @@ export default function TraefikDashboardPage() {
                           const color = isError ? 'bg-[hsl(var(--destructive))]' : isWarn ? 'bg-[hsl(var(--warning))]' : 'bg-[hsl(var(--success))]';
                           return (
                             <tr key={i} className="border-t hover:bg-muted/30 transition-colors">
-                              <td colSpan={5} className="px-4 py-2 text-xs font-mono">
+                              <td colSpan={6} className="px-4 py-2 text-xs font-mono">
                                 <div className="flex items-center gap-3">
                                    <div className={`w-1.5 h-1.5 rounded-full ${color} shrink-0`}></div>
                                    <div className="truncate flex-1" title={line}>{line}</div>
@@ -885,32 +903,34 @@ export default function TraefikDashboardPage() {
                 <ScrollArea className="h-80 pr-4">
                   <div className="space-y-1">
                     {d?.top_paths?.length ? (
-                      d.top_paths.slice(0, 15).map((route, idx) => {
-                        const maxCount = Math.max(...(d.top_paths.map(r => r.count)), 1);
-                        const barWidth = (route.count / maxCount) * 100;
-                        return (
-                          <div key={idx} className="relative flex items-center gap-3 px-3 py-2 rounded-md hover:bg-muted/50 transition-colors group">
-                            <div
-                              className="absolute inset-y-0 left-0 bg-primary/5 rounded-md transition-all duration-500"
-                              style={{ width: `${barWidth}%` }}
-                            />
-                            <div className="relative flex items-center gap-2 flex-1 min-w-0">
-                              {route.method && (
-                                <Badge variant="outline" className={cn("text-[10px] px-1.5 py-0 shrink-0 font-bold border", getMethodStyles(route.method))}>
-                                  {route.method}
-                                </Badge>
-                              )}
-                              <span className="font-mono text-xs truncate text-muted-foreground group-hover:text-foreground transition-colors" title={route.path}>
-                                {route.path}
-                              </span>
+                      (() => {
+                        const maxCount = Math.max(...d.top_paths.map((r: any) => r.count), 1);
+                        return d.top_paths.slice(0, 15).map((route: any, idx: number) => {
+                          const barWidth = (route.count / maxCount) * 100;
+                          return (
+                            <div key={idx} className="relative flex items-center gap-3 px-3 py-2 rounded-md hover:bg-muted/50 transition-colors group">
+                              <div
+                                className="absolute inset-y-0 left-0 bg-primary/5 rounded-md transition-all duration-500"
+                                style={{ width: `${barWidth}%` }}
+                              />
+                              <div className="relative flex items-center gap-2 flex-1 min-w-0">
+                                {route.method && (
+                                  <Badge variant="outline" className={cn("text-[10px] px-1.5 py-0 shrink-0 font-bold border", getMethodStyles(route.method))}>
+                                    {route.method}
+                                  </Badge>
+                                )}
+                                <span className="font-mono text-xs truncate text-muted-foreground group-hover:text-foreground transition-colors" title={route.path}>
+                                  {route.path}
+                                </span>
+                              </div>
+                              <div className="relative text-right shrink-0">
+                                <span className="text-sm font-semibold tabular-nums">{route.count.toLocaleString()}</span>
+                                <p className="text-[10px] text-muted-foreground">{route.avg_duration_ms.toFixed(0)}ms</p>
+                              </div>
                             </div>
-                            <div className="relative text-right shrink-0">
-                              <span className="text-sm font-semibold tabular-nums">{route.count.toLocaleString()}</span>
-                              <p className="text-[10px] text-muted-foreground">{route.avg_duration_ms.toFixed(0)}ms</p>
-                            </div>
-                          </div>
-                        );
-                      })
+                          );
+                        });
+                      })()
                     ) : (
                       <div className="py-12 text-center text-sm text-muted-foreground flex flex-col items-center gap-2">
                         <Route className="h-6 w-6 opacity-20" />
@@ -937,38 +957,40 @@ export default function TraefikDashboardPage() {
                 <ScrollArea className="h-80 pr-4">
                   <div className="space-y-1">
                     {d?.top_services?.length ? (
-                      d.top_services.slice(0, 15).map((service, idx) => {
-                        const maxCount = Math.max(...(d.top_services.map(s => s.requests)), 1);
-                        const barWidth = (service.requests / maxCount) * 100;
-                        const variant = service.error_rate < 5 ? 'success' : service.error_rate < 10 ? 'warning' : 'destructive';
-                        return (
-                          <div key={idx} className="relative flex items-center gap-3 px-3 py-2 rounded-md hover:bg-muted/50 transition-colors group">
-                            <div
-                              className="absolute inset-y-0 left-0 bg-primary/5 rounded-md transition-all duration-500"
-                              style={{ width: `${barWidth}%` }}
-                            />
-                            <div className={cn("relative w-1 h-8 rounded-full shrink-0", 
-                              variant === 'success' ? 'bg-[hsl(var(--success))]' : 
-                              variant === 'warning' ? 'bg-[hsl(var(--warning))]' : 
-                              'bg-[hsl(var(--destructive))]'
-                            )} />
-                            <div className="relative flex-1 min-w-0">
-                              <span className="text-sm font-medium truncate block text-muted-foreground group-hover:text-foreground transition-colors" title={service.name}>
-                                {service.name}
-                              </span>
-                              <div className="flex items-center gap-3 text-[10px] text-muted-foreground/70">
-                                <span className="flex items-center gap-1"><Clock className="h-2.5 w-2.5" />{service.avg_duration_ms.toFixed(0)}ms avg</span>
-                                <span className={service.error_rate > 5 ? 'text-destructive font-medium' : ''}>
-                                  {service.error_rate.toFixed(1)}% error
+                      (() => {
+                        const maxCount = Math.max(...d.top_services.map((s: any) => s.requests), 1);
+                        return d.top_services.slice(0, 15).map((service: any, idx: number) => {
+                          const barWidth = (service.requests / maxCount) * 100;
+                          const variant = service.error_rate < 5 ? 'success' : service.error_rate < 10 ? 'warning' : 'destructive';
+                          return (
+                            <div key={idx} className="relative flex items-center gap-3 px-3 py-2 rounded-md hover:bg-muted/50 transition-colors group">
+                              <div
+                                className="absolute inset-y-0 left-0 bg-primary/5 rounded-md transition-all duration-500"
+                                style={{ width: `${barWidth}%` }}
+                              />
+                              <div className={cn("relative w-1 h-8 rounded-full shrink-0", 
+                                variant === 'success' ? 'bg-[hsl(var(--success))]' : 
+                                variant === 'warning' ? 'bg-[hsl(var(--warning))]' : 
+                                'bg-[hsl(var(--destructive))]'
+                              )} />
+                              <div className="relative flex-1 min-w-0">
+                                <span className="text-sm font-medium truncate block text-muted-foreground group-hover:text-foreground transition-colors" title={service.name}>
+                                  {service.name}
                                 </span>
+                                <div className="flex items-center gap-3 text-[10px] text-muted-foreground/70">
+                                  <span className="flex items-center gap-1"><Clock className="h-2.5 w-2.5" />{service.avg_duration_ms.toFixed(0)}ms avg</span>
+                                  <span className={service.error_rate > 5 ? 'text-destructive font-medium' : ''}>
+                                    {service.error_rate.toFixed(1)}% error
+                                  </span>
+                                </div>
                               </div>
+                              <span className="relative text-sm font-semibold tabular-nums shrink-0">
+                                {service.requests.toLocaleString()}
+                              </span>
                             </div>
-                            <span className="relative text-sm font-semibold tabular-nums shrink-0">
-                              {service.requests.toLocaleString()}
-                            </span>
-                          </div>
-                        );
-                      })
+                          );
+                        });
+                      })()
                     ) : (
                       <div className="py-12 text-center text-sm text-muted-foreground flex flex-col items-center gap-2">
                         <Server className="h-6 w-6 opacity-20" />
@@ -1101,30 +1123,32 @@ export default function TraefikDashboardPage() {
                 <ScrollArea className="h-80 pr-4">
                   <div className="space-y-1">
                     {d?.top_routers?.length ? (
-                      d.top_routers.map((router, idx) => {
-                        const maxCount = Math.max(...(d.top_routers.map(r => r.requests)), 1);
-                        const barWidth = (router.requests / maxCount) * 100;
-                        return (
-                          <div key={idx} className="relative flex items-center gap-3 px-3 py-2 rounded-md hover:bg-muted/50 transition-colors group">
-                            <div
-                              className="absolute inset-y-0 left-0 bg-primary/5 rounded-md transition-all duration-500"
-                              style={{ width: `${barWidth}%` }}
-                            />
-                            <div className="relative flex-1 min-w-0">
-                              <span className="text-sm font-medium truncate block text-muted-foreground group-hover:text-foreground transition-colors" title={router.name}>
-                                {router.name}
-                              </span>
-                              {router.service && (
-                                <span className="text-[10px] text-muted-foreground/70">→ {router.service}</span>
-                              )}
+                      (() => {
+                        const maxCount = Math.max(...d.top_routers.map((r: any) => r.requests), 1);
+                        return d.top_routers.map((router: any, idx: number) => {
+                          const barWidth = (router.requests / maxCount) * 100;
+                          return (
+                            <div key={idx} className="relative flex items-center gap-3 px-3 py-2 rounded-md hover:bg-muted/50 transition-colors group">
+                              <div
+                                className="absolute inset-y-0 left-0 bg-primary/5 rounded-md transition-all duration-500"
+                                style={{ width: `${barWidth}%` }}
+                              />
+                              <div className="relative flex-1 min-w-0">
+                                <span className="text-sm font-medium truncate block text-muted-foreground group-hover:text-foreground transition-colors" title={router.name}>
+                                  {router.name}
+                                </span>
+                                {router.service && (
+                                  <span className="text-[10px] text-muted-foreground/70">→ {router.service}</span>
+                                )}
+                              </div>
+                              <div className="relative text-right shrink-0">
+                                <span className="text-sm font-semibold tabular-nums">{router.requests.toLocaleString()}</span>
+                                <p className="text-[10px] text-muted-foreground">{router.avg_duration_ms.toFixed(0)}ms</p>
+                              </div>
                             </div>
-                            <div className="relative text-right shrink-0">
-                              <span className="text-sm font-semibold tabular-nums">{router.requests.toLocaleString()}</span>
-                              <p className="text-[10px] text-muted-foreground">{router.avg_duration_ms.toFixed(0)}ms</p>
-                            </div>
-                          </div>
-                        );
-                      })
+                          );
+                        });
+                      })()
                     ) : (
                       <div className="py-12 text-center text-sm text-muted-foreground flex flex-col items-center gap-2">
                         <Activity className="h-6 w-6 opacity-20" />
@@ -1312,7 +1336,7 @@ export default function TraefikDashboardPage() {
                   color={getResourceColor(d.system.cpu.usage_percent)}
                   details={[
                     { label: 'Cores', value: String(d.system.cpu.cores) },
-                    { label: 'Model', value: d.system.cpu.model.split('@')[0].trim() },
+                    { label: 'Model', value: d.system.cpu.model ? d.system.cpu.model.split('@')[0].trim() : 'Unknown' },
                   ]}
                 />
                 <ResourceGauge

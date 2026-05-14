@@ -5,6 +5,7 @@
 package aggregate
 
 import (
+	"bufio"
 	"encoding/json"
 	"sort"
 	"strconv"
@@ -49,11 +50,12 @@ const (
 // and, if found, walks every line as JSON in addition to the usual
 // CLF parsing.
 func BucketTraefikRaw(rawLogs string, since, now time.Time, rng models.DashboardRange, geo GeoLookup) models.TraefikDashboard {
-	lines := strings.Split(rawLogs, "\n")
-	jsonRows := make([]traefikJSON, 0, len(lines))
+	scanner := bufio.NewScanner(strings.NewReader(rawLogs))
+	jsonRows := make([]traefikJSON, 0, 1000) // Initial capacity hint
 	hasJSON := false
 
-	for _, line := range lines {
+	for scanner.Scan() {
+		line := scanner.Text()
 		line = strings.TrimSpace(line)
 		if line == "" || line[0] != '{' {
 			continue
@@ -265,7 +267,7 @@ func aggregateTraefikJSON(rows []traefikJSON, since, now time.Time, rng models.D
 	errorTotal := 0
 	totalRequests := 0
 	var totalDurationNs int64
-	var durationsMs []float64
+	durationsMs := make([]float64, 0, len(rows))
 
 	for _, row := range rows {
 		ts := row.startTime()
@@ -331,11 +333,17 @@ func aggregateTraefikJSON(rows []traefikJSON, since, now time.Time, rng models.D
 			uaCounts[ua]++
 		}
 
-		addr := row.getStr("RequestAddr", "request_Addr")
+		addr := row.RequestAddr
+		if addr == "" {
+			addr = row.Request_Addr
+		}
 		if addr != "" {
 			addrCounts[addr]++
 		}
-		tls := row.getStr("TLSVersion", "tls_version")
+		tls := row.TLSVersion
+		if tls == "" {
+			tls = row.TLS_Version_Small
+		}
 		if tls != "" {
 			tlsCounts[tls]++
 		}
@@ -514,64 +522,70 @@ func sortedRouterDetails(stats map[string]*routerAgg, limit int) []models.Traefi
 	return out
 }
 
-type traefikJSON map[string]interface{}
-
-func (r traefikJSON) getStr(keys ...string) string {
-	for _, k := range keys {
-		if v, ok := r[k]; ok {
-			if s, ok := v.(string); ok && s != "" {
-				return s
-			}
-		}
-	}
-	return ""
-}
-
-func (r traefikJSON) getInt(keys ...string) int {
-	for _, k := range keys {
-		if v, ok := r[k]; ok {
-			switch val := v.(type) {
-			case float64:
-				return int(val)
-			case int:
-				return val
-			case int64:
-				return int(val)
-			}
-		}
-	}
-	return 0
-}
-
-func (r traefikJSON) getInt64(keys ...string) int64 {
-	for _, k := range keys {
-		if v, ok := r[k]; ok {
-			switch val := v.(type) {
-			case float64:
-				return int64(val)
-			case int:
-				return int64(val)
-			case int64:
-				return val
-			}
-		}
-	}
-	return 0
+type traefikJSON struct {
+	StartUTC           string `json:"StartUTC"`
+	StartLocal         string `json:"StartLocal"`
+	Time               string `json:"time"`
+	T                  string `json:"t"`
+	ClientHost         string `json:"ClientHost"`
+	ClientAddr         string `json:"ClientAddr"`
+	ClientIP           string `json:"client_ip"`
+	IP                 string `json:"ip"`
+	RemoteAddr         string `json:"RemoteAddr"`
+	RequestMethod      string `json:"RequestMethod"`
+	Method             string `json:"method"`
+	Request_Method     string `json:"request_Method"`
+	RequestPath        string `json:"RequestPath"`
+	Path               string `json:"path"`
+	Request_Path       string `json:"request_Path"`
+	DownstreamStatus   int    `json:"DownstreamStatus"`
+	Status             int    `json:"status"`
+	Downstream_Status  int    `json:"downstream_Status"`
+	Duration           int64  `json:"Duration"`
+	Duration_Small     int64  `json:"duration"`
+	RouterName         string `json:"RouterName"`
+	Router             string `json:"router"`
+	ServiceName        string `json:"ServiceName"`
+	Service            string `json:"service"`
+	RequestHost        string `json:"RequestHost"`
+	Request_Host       string `json:"request_Host"`
+	Host               string `json:"host"`
+	OriginHost         string `json:"OriginHost"`
+	RequestAddr        string `json:"RequestAddr"`
+	Request_Addr       string `json:"request_Addr"`
+	TLSVersion         string `json:"TLSVersion"`
+	TLS_Version_Small  string `json:"tls_version"`
+	UserAgent          string `json:"UserAgent"`
+	Request_User_Agent string `json:"request_User-Agent"`
+	User_Agent_Small   string `json:"user_agent"`
+	UA                 string `json:"ua"`
+	ServiceAddr        string `json:"ServiceAddr"`
 }
 
 func (r traefikJSON) getUA() string {
-	return r.getStr("UserAgent", "request_User-Agent", "user_agent", "ua")
+	if r.UserAgent != "" { return r.UserAgent }
+	if r.Request_User_Agent != "" { return r.Request_User_Agent }
+	if r.User_Agent_Small != "" { return r.User_Agent_Small }
+	return r.UA
 }
 
 func (r traefikJSON) getIP() string {
-	return r.getStr("ClientHost", "ClientAddr", "client_ip", "ip", "RemoteAddr")
+	if r.ClientHost != "" { return r.ClientHost }
+	if r.ClientAddr != "" { return r.ClientAddr }
+	if r.ClientIP != "" { return r.ClientIP }
+	if r.IP != "" { return r.IP }
+	return r.RemoteAddr
 }
 
 func (r traefikJSON) getHost() string {
-	h := r.getStr("RequestHost", "request_Host", "host", "OriginHost")
+	h := r.RequestHost
+	if h == "" { h = r.Request_Host }
+	if h == "" { h = r.Host }
+	if h == "" { h = r.OriginHost }
+	
 	if h == "" {
-		// Try to parse from RequestAddr (host:port)
-		addr := r.getStr("RequestAddr")
+		addr := r.RequestAddr
+		if addr == "" { addr = r.Request_Addr }
 		if addr != "" {
 			if i := strings.LastIndexByte(addr, ':'); i > 0 {
 				return addr[:i]
@@ -583,39 +597,47 @@ func (r traefikJSON) getHost() string {
 }
 
 func (r traefikJSON) getMethod() string {
-	return r.getStr("RequestMethod", "method", "request_Method")
+	if r.RequestMethod != "" { return r.RequestMethod }
+	if r.Method != "" { return r.Method }
+	return r.Request_Method
 }
 
 func (r traefikJSON) getPath() string {
-	return r.getStr("RequestPath", "path", "request_Path")
+	if r.RequestPath != "" { return r.RequestPath }
+	if r.Path != "" { return r.Path }
+	return r.Request_Path
 }
 
 func (r traefikJSON) getStatus() int {
-	return r.getInt("DownstreamStatus", "status", "downstream_Status")
+	if r.DownstreamStatus != 0 { return r.DownstreamStatus }
+	if r.Status != 0 { return r.Status }
+	return r.Downstream_Status
 }
 
 func (r traefikJSON) getDuration() int64 {
-	return r.getInt64("Duration", "duration")
+	if r.Duration != 0 { return r.Duration }
+	return r.Duration_Small
 }
 
 func (r traefikJSON) getRouter() string {
-	return r.getStr("RouterName", "router")
+	if r.RouterName != "" { return r.RouterName }
+	return r.Router
 }
 
 func (r traefikJSON) getService() string {
-	return r.getStr("ServiceName", "service")
-}
-
-func (r traefikJSON) getServiceAddr() string {
-	return r.getStr("ServiceAddr")
+	if r.ServiceName != "" { return r.ServiceName }
+	return r.Service
 }
 
 func (r traefikJSON) populated() bool {
-	return len(r) > 0 && (r.getIP() != "" || r.getStatus() != 0)
+	return r.getIP() != "" || r.getStatus() != 0
 }
 
 func (r traefikJSON) startTime() time.Time {
-	utc := r.getStr("StartUTC", "time", "t")
+	utc := r.StartUTC
+	if utc == "" { utc = r.Time }
+	if utc == "" { utc = r.T }
+	
 	if utc != "" {
 		if t, err := time.Parse(time.RFC3339Nano, utc); err == nil {
 			return t
@@ -624,7 +646,7 @@ func (r traefikJSON) startTime() time.Time {
 			return t
 		}
 	}
-	local := r.getStr("StartLocal")
+	local := r.StartLocal
 	if local != "" {
 		if t, err := time.Parse(time.RFC3339Nano, local); err == nil {
 			return t.UTC()

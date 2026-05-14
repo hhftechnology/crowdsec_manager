@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -23,13 +24,22 @@ func GetSystemStats() *models.SystemStats {
 	}
 }
 
+var (
+	lastCPUUsage float64
+	lastCPUTime  time.Time
+	cpuMutex     sync.Mutex
+)
+
 func getCPUStats() models.CPUStats {
 	cores := runtime.NumCPU()
-	usage := 0.0
 
-	// Try to get CPU usage from /proc/stat (Linux)
-	if u, err := readCPUUsage(); err == nil {
-		usage = u
+	cpuMutex.Lock()
+	usage := lastCPUUsage
+	lastTime := lastCPUTime
+	cpuMutex.Unlock()
+
+	if time.Since(lastTime) > 5*time.Second {
+		go updateCPUUsage()
 	}
 
 	model := "Generic CPU"
@@ -41,6 +51,15 @@ func getCPUStats() models.CPUStats {
 		UsagePercent: usage,
 		Cores:        cores,
 		Model:        model,
+	}
+}
+
+func updateCPUUsage() {
+	if u, err := readCPUUsage(); err == nil {
+		cpuMutex.Lock()
+		lastCPUUsage = u
+		lastCPUTime = time.Now()
+		cpuMutex.Unlock()
 	}
 }
 
@@ -61,7 +80,10 @@ func getMemoryStats() models.MemoryStats {
 		if len(fields) < 2 {
 			continue
 		}
-		val, _ := strconv.ParseUint(fields[1], 10, 64)
+		val, err := strconv.ParseUint(fields[1], 10, 64)
+		if err != nil {
+			continue
+		}
 		val *= 1024 // kB to B
 
 		if strings.HasPrefix(line, "MemTotal:") {
@@ -150,10 +172,16 @@ func getCPUTicks() (uint64, uint64, error) {
 
 		var total uint64
 		for i := 1; i < len(fields); i++ {
-			val, _ := strconv.ParseUint(fields[i], 10, 64)
+			val, err := strconv.ParseUint(fields[i], 10, 64)
+			if err != nil {
+				continue
+			}
 			total += val
 		}
-		idle, _ := strconv.ParseUint(fields[4], 10, 64)
+		idle, err := strconv.ParseUint(fields[4], 10, 64)
+		if err != nil {
+			return 0, 0, err
+		}
 		return idle, total, nil
 	}
 	return 0, 0, fmt.Errorf("could not read /proc/stat")

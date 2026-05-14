@@ -17,7 +17,7 @@ const (
 	decisionListCachePrefix           = "decisions"
 	serviceDashboardCachePrefix       = "logs:dashboard:"
 	analysisCacheTTL                  = 30 * time.Second
-	serviceDashboardCacheTTL          = 30 * time.Second
+	serviceDashboardCacheTTL          = 60 * time.Second
 	emptyAnalysisCacheTTL             = 5 * time.Second
 	alertLastNonEmptyAnalysisCacheTTL = 2 * time.Minute
 )

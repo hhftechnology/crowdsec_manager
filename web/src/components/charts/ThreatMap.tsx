@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, type MouseEvent } from 'react'
+import { useState, useEffect, useRef, useMemo, type MouseEvent } from 'react'
 import {
   ComposableMap,
   Geographies,
@@ -87,7 +87,10 @@ export default function ThreatMap({
     )
   }
 
-  const maxValue = Math.max(...data.map((d) => d.value))
+  const maxValue = useMemo(() => {
+    if (data.length === 0) return 0
+    return data.reduce((max, d) => Math.max(max, d.value), 0)
+  }, [data])
 
   return (
     <div ref={containerRef} className="relative group overflow-hidden rounded-lg border bg-card" style={{ height }}>
