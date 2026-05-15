@@ -13,34 +13,90 @@ import (
 	"time"
 )
 
-// GetSystemStats collects basic system resource usage.
-// Since we are running in a container, these metrics often reflect
-// the host or the container's limits depending on the environment.
+const systemStatsCacheTTL = 5 * time.Second
+
+var (
+	systemStatsMutex          sync.Mutex
+	cachedSystemStats         *models.SystemStats
+	cachedSystemStatsTime     time.Time
+	systemStatsUpdateInFlight bool
+)
+
+// PrimeSystemStats initializes the system stats cache during startup.
+func PrimeSystemStats() {
+	refreshSystemStats()
+}
+
+// GetSystemStats returns cached basic system resource usage and refreshes stale
+// values asynchronously. Call PrimeSystemStats during startup to avoid a cold
+// CPU sample on the first dashboard request.
 func GetSystemStats() *models.SystemStats {
-	return &models.SystemStats{
+	systemStatsMutex.Lock()
+	stats := cachedSystemStats
+	if stats == nil {
+		systemStatsUpdateInFlight = true
+		systemStatsMutex.Unlock()
+		refreshSystemStats()
+		systemStatsMutex.Lock()
+		defer systemStatsMutex.Unlock()
+		return cachedSystemStats
+	}
+	stale := time.Since(cachedSystemStatsTime) > systemStatsCacheTTL
+	if stale && !systemStatsUpdateInFlight {
+		systemStatsUpdateInFlight = true
+		go refreshSystemStats()
+	}
+	systemStatsMutex.Unlock()
+
+	return stats
+}
+
+func refreshSystemStats() {
+	defer func() {
+		if recover() != nil {
+			// Keep the cache refresh path non-fatal; the next call can retry.
+		}
+		systemStatsMutex.Lock()
+		systemStatsUpdateInFlight = false
+		systemStatsMutex.Unlock()
+	}()
+
+	stats := &models.SystemStats{
 		CPU:    getCPUStats(),
 		Memory: getMemoryStats(),
 		Disk:   getDiskStats(),
 	}
+
+	systemStatsMutex.Lock()
+	cachedSystemStats = stats
+	cachedSystemStatsTime = time.Now()
+	systemStatsMutex.Unlock()
 }
 
 var (
-	lastCPUUsage float64
-	lastCPUTime  time.Time
-	cpuMutex     sync.Mutex
+	lastCPUUsage      float64
+	lastCPUTime       time.Time
+	cpuMutex          sync.Mutex
+	cpuInitOnce       sync.Once
+	cpuUpdateInFlight bool
 )
 
 func getCPUStats() models.CPUStats {
 	cores := runtime.NumCPU()
 
+	cpuInitOnce.Do(func() {
+		updateCPUUsage()
+	})
+
 	cpuMutex.Lock()
 	usage := lastCPUUsage
 	lastTime := lastCPUTime
-	cpuMutex.Unlock()
-
-	if time.Since(lastTime) > 5*time.Second {
+	inFlight := cpuUpdateInFlight
+	if time.Since(lastTime) > 5*time.Second && !inFlight {
+		cpuUpdateInFlight = true
 		go updateCPUUsage()
 	}
+	cpuMutex.Unlock()
 
 	model := "Generic CPU"
 	if m, err := readCPUModel(); err == nil {
@@ -55,6 +111,15 @@ func getCPUStats() models.CPUStats {
 }
 
 func updateCPUUsage() {
+	defer func() {
+		if recover() != nil {
+			// Keep background refresh failures from crashing the process.
+		}
+		cpuMutex.Lock()
+		cpuUpdateInFlight = false
+		cpuMutex.Unlock()
+	}()
+
 	if u, err := readCPUUsage(); err == nil {
 		cpuMutex.Lock()
 		lastCPUUsage = u
@@ -112,6 +177,9 @@ func getMemoryStats() models.MemoryStats {
 func getDiskStats() models.DiskStats {
 	var stats models.DiskStats
 	fs := syscall.Statfs_t{}
+	// In containers, "/" may be an overlay filesystem. We intentionally
+	// report the container/root view as a practical dashboard signal rather
+	// than trying to infer every host-mounted log or data volume.
 	err := syscall.Statfs("/", &fs)
 	if err != nil {
 		return stats

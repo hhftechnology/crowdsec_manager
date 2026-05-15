@@ -18,6 +18,10 @@ func (f fakeGeo) Lookup(ip string) (Location, bool) {
 	return loc, ok
 }
 
+func testSystemStats() *models.SystemStats {
+	return &models.SystemStats{}
+}
+
 func parseEntries(t *testing.T, raw string) []docker.StructuredLogEntry {
 	t.Helper()
 	parser := docker.NewLogParser()
@@ -26,7 +30,7 @@ func parseEntries(t *testing.T, raw string) []docker.StructuredLogEntry {
 
 func TestBucketTraefik_EmptyInput(t *testing.T) {
 	now := time.Date(2026, 5, 7, 12, 0, 0, 0, time.UTC)
-	d := BucketTraefik(nil, now.Add(-time.Hour), now, models.Range1h, fakeGeo{})
+	d := BucketTraefik(nil, now.Add(-time.Hour), now, models.Range1h, fakeGeo{}, testSystemStats())
 	if d.Format != "clf" {
 		t.Fatalf("default format should be clf when nothing parses as JSON; got %q", d.Format)
 	}
@@ -53,7 +57,7 @@ func TestBucketTraefik_CLFAggregates(t *testing.T) {
 	geo := fakeGeo{hits: map[string]Location{
 		"5.6.7.8": {Country: "DE", Lat: 51, Lng: 9},
 	}}
-	d := BucketTraefik(entries, now.Add(-time.Hour), now, models.Range1h, geo)
+	d := BucketTraefik(entries, now.Add(-time.Hour), now, models.Range1h, geo, testSystemStats())
 
 	if d.Format != "clf" {
 		t.Fatalf("expected CLF format, got %q", d.Format)
@@ -117,7 +121,7 @@ func TestBucketTraefik_FiltersByCutoff(t *testing.T) {
 	}, "\n")
 	entries := parseEntries(t, logs)
 	now := time.Date(2026, 5, 7, 12, 0, 0, 0, time.UTC)
-	d := BucketTraefik(entries, now.Add(-time.Hour), now, models.Range1h, fakeGeo{})
+	d := BucketTraefik(entries, now.Add(-time.Hour), now, models.Range1h, fakeGeo{}, testSystemStats())
 	if d.TotalRequests != 1 {
 		t.Fatalf("expected 1 request after cutoff filtering, got %d", d.TotalRequests)
 	}
@@ -130,8 +134,8 @@ func TestBucketTraefik_JSONFormatPopulatesExtras(t *testing.T) {
 		`{"ClientHost":"5.6.7.8","DownstreamStatus":500,"RequestMethod":"POST","RequestHost":"api.example.com","RouterName":"router-b@docker","RequestPath":"/y","Duration":40000000,"StartUTC":"2026-05-07T11:55:00Z","TLSVersion":"1.2"}`,
 	}, "\n")
 	now := time.Date(2026, 5, 7, 12, 0, 0, 0, time.UTC)
-	d := BucketTraefik(nil, now.Add(-time.Hour), now, models.Range1h, fakeGeo{})
-	d = BucketTraefikRaw(logs, now.Add(-time.Hour), now, models.Range1h, fakeGeo{})
+	d := BucketTraefik(nil, now.Add(-time.Hour), now, models.Range1h, fakeGeo{}, testSystemStats())
+	d = BucketTraefikRaw(logs, now.Add(-time.Hour), now, models.Range1h, fakeGeo{}, testSystemStats())
 
 	if d.Format != "json" {
 		t.Fatalf("expected json format when JSON lines present, got %q", d.Format)
@@ -142,6 +146,12 @@ func TestBucketTraefik_JSONFormatPopulatesExtras(t *testing.T) {
 	// Duration in nanoseconds: 12ms and 40ms -> avg 26ms
 	if got := *d.AvgDurationMs; got < 25 || got > 27 {
 		t.Fatalf("expected avg duration ~26ms, got %v", got)
+	}
+	if d.P95ResponseTimeMs == nil || *d.P95ResponseTimeMs < 38 || *d.P95ResponseTimeMs > 39 {
+		t.Fatalf("expected interpolated p95 around 38.6ms, got %v", d.P95ResponseTimeMs)
+	}
+	if d.P99ResponseTimeMs == nil || *d.P99ResponseTimeMs < 39 || *d.P99ResponseTimeMs > 40 {
+		t.Fatalf("expected interpolated p99 around 39.7ms, got %v", d.P99ResponseTimeMs)
 	}
 	if len(d.TopHosts) == 0 || len(d.TopRouters) == 0 {
 		t.Fatalf("JSON mode should populate hosts/routers; got %+v / %+v", d.TopHosts, d.TopRouters)
@@ -165,7 +175,7 @@ func TestBucketTraefik_SlowestEndpointsExcludesStreaming(t *testing.T) {
 		`{"ClientHost":"9.9.9.9","DownstreamStatus":101,"RequestMethod":"GET","RequestHost":"example.com","RequestPath":"/api/terminal/abc","Duration":60000000000,"StartUTC":"2026-05-07T11:57:00Z"}`,
 	}, "\n")
 	now := time.Date(2026, 5, 7, 12, 0, 0, 0, time.UTC)
-	d := BucketTraefikRaw(logs, now.Add(-time.Hour), now, models.Range1h, fakeGeo{})
+	d := BucketTraefikRaw(logs, now.Add(-time.Hour), now, models.Range1h, fakeGeo{}, testSystemStats())
 
 	if d.Format != "json" {
 		t.Fatalf("expected json format, got %q", d.Format)
@@ -189,7 +199,7 @@ func TestBucketTraefik_SlowestEndpointsExcludesStreaming(t *testing.T) {
 func TestBucketTraefik_GranularityChoice(t *testing.T) {
 	// 24h range should bucket by hour, not minute.
 	now := time.Date(2026, 5, 7, 12, 0, 0, 0, time.UTC)
-	d := BucketTraefik(nil, now.Add(-24*time.Hour), now, models.Range24h, fakeGeo{})
+	d := BucketTraefik(nil, now.Add(-24*time.Hour), now, models.Range24h, fakeGeo{}, testSystemStats())
 	if d.Range != models.Range24h {
 		t.Fatalf("range echoed wrong: %s", d.Range)
 	}

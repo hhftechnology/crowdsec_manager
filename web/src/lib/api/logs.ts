@@ -1,7 +1,17 @@
 import { apiClient } from './client'
 import type { ApiResponse, LogStats, StructuredLogEntry } from './types'
 
+export interface LogProcessingState {
+  enabled: boolean
+}
+
 export const logsAPI = {
+  getProcessing: () =>
+    apiClient.get<ApiResponse<LogProcessingState>>('/logs/processing'),
+
+  updateProcessing: (data: LogProcessingState) =>
+    apiClient.put<ApiResponse<LogProcessingState>>('/logs/processing', data),
+
   getCrowdSec: (tail: string = '100') =>
     apiClient.get<ApiResponse<{ logs: string }>>('/logs/crowdsec', { params: { tail } }),
 

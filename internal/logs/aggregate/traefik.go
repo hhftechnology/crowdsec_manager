@@ -7,6 +7,7 @@ package aggregate
 import (
 	"bufio"
 	"encoding/json"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -36,12 +37,12 @@ type noGeo struct{}
 func (noGeo) Lookup(string) (Location, bool) { return Location{}, false }
 
 const (
-	maxTopIPs            = 20
-	maxTopHosts          = 10
-	maxTopRouters        = 10
-	maxSlowestEndpoints  = 10
-	maxTLSVersions       = 5
-	maxRecentErrors      = 50
+	maxTopIPs           = 20
+	maxTopHosts         = 10
+	maxTopRouters       = 10
+	maxSlowestEndpoints = 10
+	maxTLSVersions      = 5
+	maxRecentErrors     = 50
 )
 
 // BucketTraefikRaw is a convenience wrapper used by tests and callers
@@ -49,7 +50,7 @@ const (
 // the first non-empty line to detect Traefik's JSON access log format
 // and, if found, walks every line as JSON in addition to the usual
 // CLF parsing.
-func BucketTraefikRaw(rawLogs string, since, now time.Time, rng models.DashboardRange, geo GeoLookup) models.TraefikDashboard {
+func BucketTraefikRaw(rawLogs string, since, now time.Time, rng models.DashboardRange, geo GeoLookup, systemStats *models.SystemStats) models.TraefikDashboard {
 	scanner := bufio.NewScanner(strings.NewReader(rawLogs))
 	jsonRows := make([]traefikJSON, 0, 1000) // Initial capacity hint
 	hasJSON := false
@@ -71,18 +72,18 @@ func BucketTraefikRaw(rawLogs string, since, now time.Time, rng models.Dashboard
 	}
 
 	if hasJSON {
-		return aggregateTraefikJSON(jsonRows, since, now, rng, geo)
+		return aggregateTraefikJSON(jsonRows, since, now, rng, geo, systemStats)
 	}
 
 	parser := docker.NewLogParser()
 	entries := parser.Parse(rawLogs, "traefik")
 
-	return BucketTraefik(entries, since, now, rng, geo)
+	return BucketTraefik(entries, since, now, rng, geo, systemStats)
 }
 
 // BucketTraefik aggregates parsed Traefik CLF entries into a dashboard
 // payload. JSON-only widgets are returned empty with Format="clf".
-func BucketTraefik(entries []docker.StructuredLogEntry, since, now time.Time, rng models.DashboardRange, geo GeoLookup) models.TraefikDashboard {
+func BucketTraefik(entries []docker.StructuredLogEntry, since, now time.Time, rng models.DashboardRange, geo GeoLookup, systemStats *models.SystemStats) models.TraefikDashboard {
 	if geo == nil {
 		geo = noGeo{}
 	}
@@ -194,7 +195,7 @@ func BucketTraefik(entries []docker.StructuredLogEntry, since, now time.Time, rn
 	out.Methods = topNameValues(methodCounts, 0)
 	out.TopIPs = topIPs(ipCounts, geo, maxTopIPs)
 	out.RecentErrors = sortedRecentErrors(errorRows, maxRecentErrors)
-	out.System = GetSystemStats()
+	out.System = systemStats
 
 	return out
 }
@@ -217,7 +218,7 @@ type routerAgg struct {
 	service  string
 }
 
-func aggregateTraefikJSON(rows []traefikJSON, since, now time.Time, rng models.DashboardRange, geo GeoLookup) models.TraefikDashboard {
+func aggregateTraefikJSON(rows []traefikJSON, since, now time.Time, rng models.DashboardRange, geo GeoLookup, systemStats *models.SystemStats) models.TraefikDashboard {
 	if geo == nil {
 		geo = noGeo{}
 	}
@@ -400,27 +401,11 @@ func aggregateTraefikJSON(rows []traefikJSON, since, now time.Time, rng models.D
 		avgMs := float64(totalDurationNs) / float64(totalRequests) / float64(time.Millisecond)
 		out.AvgDurationMs = &avgMs
 
-		sort.Float64s(durationsMs)
-		p95Idx := int(float64(len(durationsMs)) * 0.95)
-		p99Idx := int(float64(len(durationsMs)) * 0.99)
-
-		if p95Idx >= len(durationsMs) {
-			p95Idx = len(durationsMs) - 1
-		}
-		if p95Idx < 0 {
-			p95Idx = 0
-		}
-		if p99Idx >= len(durationsMs) {
-			p99Idx = len(durationsMs) - 1
-		}
-		if p99Idx < 0 {
-			p99Idx = 0
-		}
-
 		if len(durationsMs) > 0 {
-			p95Ms := durationsMs[p95Idx]
+			sort.Float64s(durationsMs)
+			p95Ms := percentile(durationsMs, 0.95)
 			out.P95ResponseTimeMs = &p95Ms
-			p99Ms := durationsMs[p99Idx]
+			p99Ms := percentile(durationsMs, 0.99)
 			out.P99ResponseTimeMs = &p99Ms
 		}
 	}
@@ -438,9 +423,33 @@ func aggregateTraefikJSON(rows []traefikJSON, since, now time.Time, rng models.D
 	out.SlowestEndpoints = topNameValues(endpointMaxMs, maxSlowestEndpoints)
 	out.TopIPs = topIPs(ipCounts, geo, maxTopIPs)
 	out.RecentErrors = sortedRecentErrors(errorRows, maxRecentErrors)
-	out.System = GetSystemStats()
+	out.System = systemStats
 
 	return out
+}
+
+func percentile(sorted []float64, p float64) float64 {
+	n := len(sorted)
+	if n == 0 {
+		return 0
+	}
+	if n == 1 {
+		return sorted[0]
+	}
+	pos := p * float64(n-1)
+	lo := int(math.Floor(pos))
+	hi := int(math.Ceil(pos))
+	if lo < 0 {
+		lo = 0
+	}
+	if hi >= n {
+		hi = n - 1
+	}
+	if lo == hi {
+		return sorted[lo]
+	}
+	frac := pos - float64(lo)
+	return sorted[lo]*(1-frac) + sorted[hi]*frac
 }
 
 func sortedServiceDetails(stats map[string]*serviceAgg, limit int) []models.TraefikServiceDetail {
@@ -563,29 +572,51 @@ type traefikJSON struct {
 }
 
 func (r traefikJSON) getUA() string {
-	if r.UserAgent != "" { return r.UserAgent }
-	if r.Request_User_Agent != "" { return r.Request_User_Agent }
-	if r.User_Agent_Small != "" { return r.User_Agent_Small }
+	if r.UserAgent != "" {
+		return r.UserAgent
+	}
+	if r.Request_User_Agent != "" {
+		return r.Request_User_Agent
+	}
+	if r.User_Agent_Small != "" {
+		return r.User_Agent_Small
+	}
 	return r.UA
 }
 
 func (r traefikJSON) getIP() string {
-	if r.ClientHost != "" { return r.ClientHost }
-	if r.ClientAddr != "" { return r.ClientAddr }
-	if r.ClientIP != "" { return r.ClientIP }
-	if r.IP != "" { return r.IP }
+	if r.ClientHost != "" {
+		return r.ClientHost
+	}
+	if r.ClientAddr != "" {
+		return r.ClientAddr
+	}
+	if r.ClientIP != "" {
+		return r.ClientIP
+	}
+	if r.IP != "" {
+		return r.IP
+	}
 	return r.RemoteAddr
 }
 
 func (r traefikJSON) getHost() string {
 	h := r.RequestHost
-	if h == "" { h = r.Request_Host }
-	if h == "" { h = r.Host }
-	if h == "" { h = r.OriginHost }
-	
+	if h == "" {
+		h = r.Request_Host
+	}
+	if h == "" {
+		h = r.Host
+	}
+	if h == "" {
+		h = r.OriginHost
+	}
+
 	if h == "" {
 		addr := r.RequestAddr
-		if addr == "" { addr = r.Request_Addr }
+		if addr == "" {
+			addr = r.Request_Addr
+		}
 		if addr != "" {
 			if i := strings.LastIndexByte(addr, ':'); i > 0 {
 				return addr[:i]
@@ -597,35 +628,53 @@ func (r traefikJSON) getHost() string {
 }
 
 func (r traefikJSON) getMethod() string {
-	if r.RequestMethod != "" { return r.RequestMethod }
-	if r.Method != "" { return r.Method }
+	if r.RequestMethod != "" {
+		return r.RequestMethod
+	}
+	if r.Method != "" {
+		return r.Method
+	}
 	return r.Request_Method
 }
 
 func (r traefikJSON) getPath() string {
-	if r.RequestPath != "" { return r.RequestPath }
-	if r.Path != "" { return r.Path }
+	if r.RequestPath != "" {
+		return r.RequestPath
+	}
+	if r.Path != "" {
+		return r.Path
+	}
 	return r.Request_Path
 }
 
 func (r traefikJSON) getStatus() int {
-	if r.DownstreamStatus != 0 { return r.DownstreamStatus }
-	if r.Status != 0 { return r.Status }
+	if r.DownstreamStatus != 0 {
+		return r.DownstreamStatus
+	}
+	if r.Status != 0 {
+		return r.Status
+	}
 	return r.Downstream_Status
 }
 
 func (r traefikJSON) getDuration() int64 {
-	if r.Duration != 0 { return r.Duration }
+	if r.Duration != 0 {
+		return r.Duration
+	}
 	return r.Duration_Small
 }
 
 func (r traefikJSON) getRouter() string {
-	if r.RouterName != "" { return r.RouterName }
+	if r.RouterName != "" {
+		return r.RouterName
+	}
 	return r.Router
 }
 
 func (r traefikJSON) getService() string {
-	if r.ServiceName != "" { return r.ServiceName }
+	if r.ServiceName != "" {
+		return r.ServiceName
+	}
 	return r.Service
 }
 
@@ -635,9 +684,13 @@ func (r traefikJSON) populated() bool {
 
 func (r traefikJSON) startTime() time.Time {
 	utc := r.StartUTC
-	if utc == "" { utc = r.Time }
-	if utc == "" { utc = r.T }
-	
+	if utc == "" {
+		utc = r.Time
+	}
+	if utc == "" {
+		utc = r.T
+	}
+
 	if utc != "" {
 		if t, err := time.Parse(time.RFC3339Nano, utc); err == nil {
 			return t

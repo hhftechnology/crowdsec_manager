@@ -28,6 +28,7 @@ import (
 	"crowdsec-manager/internal/geoip"
 	"crowdsec-manager/internal/history"
 	"crowdsec-manager/internal/logger"
+	"crowdsec-manager/internal/logs/aggregate"
 	"crowdsec-manager/internal/messaging"
 )
 
@@ -75,6 +76,8 @@ func main() {
 	geoResolver, geoErr := geoip.Open(cfg.GeoIPDBPath)
 	geoip.LogStartupStatus(cfg.GeoIPDBPath, geoErr)
 	defer geoResolver.Close()
+
+	aggregate.PrimeSystemStats()
 
 	dataDir := cfg.ConfigDir
 

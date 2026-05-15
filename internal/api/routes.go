@@ -97,13 +97,15 @@ func RegisterLogRoutes(router *gin.RouterGroup, dockerClient *docker.Client, db 
 	}
 	logs := router.Group("/logs")
 	{
-		logs.GET("/crowdsec", handlers.GetCrowdSecLogs(dockerClient, cfg))
+		logs.GET("/processing", handlers.GetLogProcessing(db))
+		logs.PUT("/processing", handlers.UpdateLogProcessing(db, c))
+		logs.GET("/crowdsec", handlers.GetCrowdSecLogs(dockerClient, db, cfg))
 		logs.GET("/traefik", handlers.GetTraefikLogs(dockerClient, db, cfg))
-		logs.GET("/traefik/advanced", handlers.AnalyzeTraefikLogsAdvanced(dockerClient, cfg))
+		logs.GET("/traefik/advanced", handlers.AnalyzeTraefikLogsAdvanced(dockerClient, db, cfg))
 		logs.GET("/:service/dashboard", handlers.AnalyzeServiceDashboard(dockerClient, db, cfg, geo, c))
-		logs.GET("/:service", handlers.GetServiceLogs(dockerClient))
-		logs.GET("/stream/:service", handlers.StreamLogs(dockerClient))
-		logs.GET("/structured/:service", handlers.GetStructuredLogs(dockerClient, cfg))
+		logs.GET("/:service", handlers.GetServiceLogs(dockerClient, db))
+		logs.GET("/stream/:service", handlers.StreamLogs(dockerClient, db))
+		logs.GET("/structured/:service", handlers.GetStructuredLogs(dockerClient, db, cfg))
 	}
 }
 

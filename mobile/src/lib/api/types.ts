@@ -159,6 +159,10 @@ export interface StructuredLogEntry {
   message: string;
 }
 
+export interface LogProcessingState {
+  enabled: boolean;
+}
+
 export interface LogStats {
   total_lines: number;
   top_ips: Array<{ ip: string; count: number }>;

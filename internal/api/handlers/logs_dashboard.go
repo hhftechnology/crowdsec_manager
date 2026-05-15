@@ -61,7 +61,9 @@ func rangeDuration(rng models.DashboardRange) time.Duration {
 	case models.Range7d:
 		return 7 * 24 * time.Hour
 	case models.RangeAll:
-		return 3650 * 24 * time.Hour // effectively "all" limit
+		// Use a 10-year cap as a practical "all time" ceiling to bound
+		// storage, memory, and retention costs without pretending history is infinite.
+		return 3650 * 24 * time.Hour
 	default:
 		return time.Hour
 	}
@@ -128,6 +130,10 @@ func analyzeServiceDashboardWithReader(input serviceDashboardHandlerInput) gin.H
 			return
 		}
 
+		if !requireLogProcessingEnabled(c, input.Database) {
+			return
+		}
+
 		tail := rangeTailMap[rng]
 		cacheKey := serviceDashboardCacheKey(c, service)
 		if input.Cache != nil {
@@ -142,6 +148,7 @@ func analyzeServiceDashboardWithReader(input serviceDashboardHandlerInput) gin.H
 
 		switch service {
 		case "traefik":
+			systemStats := aggregate.GetSystemStats()
 			rawLogs, err := readTraefikLogs(traefikLogReadInput{
 				Reader:   input.Reader,
 				Database: input.Database,
@@ -156,7 +163,7 @@ func analyzeServiceDashboardWithReader(input serviceDashboardHandlerInput) gin.H
 				})
 				return
 			}
-			data := aggregate.BucketTraefikRaw(rawLogs, since, now, rng, adapter)
+			data := aggregate.BucketTraefikRaw(rawLogs, since, now, rng, adapter, systemStats)
 			if input.Cache != nil {
 				input.Cache.Set(cacheKey, data, serviceDashboardCacheTTL)
 			}

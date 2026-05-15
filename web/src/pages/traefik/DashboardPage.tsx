@@ -1,7 +1,6 @@
 import { useState, useMemo, useCallback, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Link } from 'react-router-dom'
 import { 
   ResponsiveContainer, 
   RadialBarChart, 
@@ -18,7 +17,6 @@ import {
   AlertTriangle,
   Clock,
   Users,
-  Download,
   TrendingUp,
   Zap,
   Server,
@@ -46,8 +44,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { PageHeader } from '@/components/common'
-import { LogFilterPanel, type LogFilters } from '@/components/logs/LogFilterPanel'
-import { LogViewer } from '@/components/logs/LogViewer'
+import { LogProcessingToggle, useLogProcessingControl } from '@/components/logs/LogProcessingToggle'
 import { useSearch } from '@/contexts/SearchContext'
 import { useMountEffect } from '@/hooks/useMountEffect'
 import { RangeSelector } from '@/features/logs/dashboard'
@@ -183,7 +180,7 @@ function TraefikLogDetail({ log, open, onOpenChange }: { log: any, open: boolean
 
           <Section title="Response Detail">
             <Field label="Status Code" value={log.status} />
-            <Field label="Duration" value={formatDuration(log.Duration || log.duration)} />
+            <Field label="Duration" value={formatDuration(log.Duration ?? log.duration)} />
             <Field label="Content Size" value={log.DownstreamContentSize ? formatBytes(log.DownstreamContentSize) : undefined} />
             <Field label="Content Type" value={log["downstream_Content-Type"]} />
           </Section>
@@ -336,39 +333,48 @@ function getResourceColor(percentage: number): string {
 
 export default function TraefikDashboardPage() {
   const [dashboardRange, setDashboardRange] = useState<DashboardRange>('1h')
-  const { query, setQuery } = useSearch()
+  const { query } = useSearch()
   
   const [isLiveView, setIsLiveView] = useState(false)
 
-  // Dashboard Metrics
-  const { data: dashboardData, isLoading: dashboardLoading, isFetching: dashboardFetching, refetch: refetchDashboard } = useQuery({
-    queryKey: ['logs-dashboard', 'traefik', dashboardRange],
-    queryFn: async () => (await dashboardAPI.getTraefik(dashboardRange)).data.data,
-    refetchInterval: () => isLiveView ? 5_000 : false,
-    staleTime: isLiveView ? 3_000 : Infinity,
-    gcTime: isLiveView ? 60_000 : 5 * 60_000,
-  })
-
   // Logs Config
-  const [tailLines, setTailLines] = useState('100')
+  const tailLines = '100'
   const [isStreaming, setIsStreaming] = useState(false)
   const [streamLogs, setStreamLogs] = useState<string[]>([])
   const wsRef = useRef<WebSocket | null>(null)
+
+  const stopStream = useCallback(() => {
+    if (wsRef.current) { wsRef.current.close(); wsRef.current = null }
+    setIsStreaming(false)
+  }, [])
+
+  const logProcessing = useLogProcessingControl({ onDisabled: stopStream })
+  const logProcessingEnabled = logProcessing.enabled
+
+  // Dashboard Metrics
+  const { data: dashboardData, isLoading: dashboardLoading } = useQuery({
+    queryKey: ['logs-dashboard', 'traefik', dashboardRange],
+    queryFn: async () => (await dashboardAPI.getTraefik(dashboardRange)).data.data,
+    enabled: logProcessingEnabled,
+    refetchInterval: () => logProcessingEnabled && isLiveView ? 5_000 : false,
+    staleTime: isLiveView ? 3_000 : Infinity,
+    gcTime: isLiveView ? 60_000 : 5 * 60_000,
+  })
   
-  const { data: traefikLogs, isLoading: logsLoading, isFetching: logsFetching, refetch: refetchLogs } = useQuery({
+  const { data: traefikLogs } = useQuery({
     queryKey: ['logs-traefik', tailLines],
     queryFn: async () => (await api.logs.getTraefik(tailLines)).data.data ?? null,
-    enabled: !isStreaming,
+    enabled: logProcessingEnabled && !isStreaming,
   })
 
-  useMountEffect(() => {
-    return () => {
-      if (wsRef.current) { wsRef.current.close(); wsRef.current = null }
-    }
-  })
+  useMountEffect(() => stopStream)
 
   // ... (Implementing logic for Logs tab ...)
   const startWebSocket = useCallback(() => {
+    if (!logProcessingEnabled) {
+      toast.info('Log processing is disabled')
+      return
+    }
     const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}${api.logs.getStreamUrl('traefik')}`
     try {
       const ws = new WebSocket(wsUrl)
@@ -392,22 +398,25 @@ export default function TraefikDashboardPage() {
       toast.error(getErrorMessage(error, 'Failed to connect to stream', ErrorContexts.LogsStreamConnect))
       setIsStreaming(false)
     }
-  }, [])
+  }, [logProcessingEnabled])
 
   const handleToggleStream = useCallback(() => {
     if (isStreaming) {
-      if (wsRef.current) { wsRef.current.close(); wsRef.current = null }
-      setIsStreaming(false)
+      stopStream()
       // Note: We don't clear streamLogs here so the user can still see them, 
       // but they will be replaced by fetched logs when next refreshing.
     } else {
+      if (!logProcessingEnabled) {
+        toast.info('Log processing is disabled')
+        return
+      }
       setStreamLogs([])
       startWebSocket()
       setIsStreaming(true)
     }
-  }, [isStreaming, startWebSocket])
+  }, [isStreaming, logProcessingEnabled, startWebSocket, stopStream])
 
-  const rawLogs = isStreaming ? streamLogs.join('\n') : traefikLogs?.logs || ''
+  const rawLogs = logProcessingEnabled ? (isStreaming ? streamLogs.join('\n') : traefikLogs?.logs || '') : ''
   
   const [levelFilter, setLevelFilter] = useState('all')
   const [selectedLog, setSelectedLog] = useState<any>(null)
@@ -466,7 +475,8 @@ export default function TraefikDashboardPage() {
   }
 
   // Data processing for charts
-  const d = dashboardData
+  const d = logProcessingEnabled ? dashboardData : undefined
+  const slowestEndpoints = d?.slowest_endpoints ?? []
   
   const uaMetrics = useMemo(() => {
     const browserMap: Record<string, number> = {}
@@ -519,6 +529,7 @@ export default function TraefikDashboardPage() {
       '3xx': b.c3xx,
       '4xx': b.c4xx,
       '5xx': b.c5xx,
+      value: b.total,
     }
   }), [d?.series, dashboardRange])
 
@@ -555,6 +566,16 @@ export default function TraefikDashboardPage() {
         breadcrumbs="Getting started / Traefik"
       />
 
+      <LogProcessingToggle control={logProcessing} />
+
+      {!logProcessingEnabled && (
+        <Card>
+          <CardContent className="py-6 text-sm text-muted-foreground">
+            Log processing is disabled. Enable it to read Traefik logs, dashboard metrics, and live streams.
+          </CardContent>
+        </Card>
+      )}
+
       <Tabs defaultValue="overview" className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3 bg-card p-2 rounded-lg border">
           <TabsList className="bg-transparent flex-wrap h-auto justify-start">
@@ -579,7 +600,7 @@ export default function TraefikDashboardPage() {
           </TabsList>
           
           <div className="flex items-center gap-2">
-            <Button variant={isLiveView ? "default" : "outline"} size="sm" onClick={() => setIsLiveView(!isLiveView)} className="h-9 gap-2">
+            <Button variant={isLiveView ? "default" : "outline"} size="sm" onClick={() => setIsLiveView(!isLiveView)} disabled={!logProcessingEnabled} className="h-9 gap-2">
               <Activity className={cn("h-4 w-4", isLiveView && "animate-pulse")} />
               {isLiveView ? "Live" : "Static"}
             </Button>
@@ -859,7 +880,7 @@ export default function TraefikDashboardPage() {
                               ) : '—'}
                             </td>
                             <td className="px-4 py-2 text-[11px] font-mono text-muted-foreground text-right">
-                              {parsed.duration ? `${(Number(parsed.duration) / 1000000).toFixed(1)}ms` : '—'}
+                              {parsed.duration != null ? formatDuration(Number(parsed.duration)) : '—'}
                             </td>
                             <td className="px-4 py-2 text-[11px] font-mono text-muted-foreground truncate max-w-[150px]" title={String(parsed.service || '')}>
                               {parsed.service || '—'}
@@ -941,7 +962,7 @@ export default function TraefikDashboardPage() {
                 </ScrollArea>
                 {(d?.top_paths?.length || 0) > 15 && (
                   <p className="text-[10px] text-muted-foreground text-center pt-2 italic">
-                    Showing top 15 of {d.top_paths.length} routes
+                    Showing top 15 of {d?.top_paths?.length ?? 0} routes
                   </p>
                 )}
               </CardContent>
@@ -1001,7 +1022,7 @@ export default function TraefikDashboardPage() {
                 </ScrollArea>
                 {(d?.top_services?.length || 0) > 15 && (
                   <p className="text-[10px] text-muted-foreground text-center pt-2 italic">
-                    Showing top 15 of {d.top_services.length} services
+                    Showing top 15 of {d?.top_services?.length ?? 0} services
                   </p>
                 )}
               </CardContent>
@@ -1374,7 +1395,7 @@ export default function TraefikDashboardPage() {
               <div className="grid gap-6 lg:grid-cols-2 min-w-0">
                 <div className="min-w-0">
                   <ChartCard title="Slowest Endpoints" description="Max latency per path (ms)">
-                    {d.slowest_endpoints.length ? <BarDistribution data={d.slowest_endpoints} layout="horizontal" height={280} color="hsl(var(--chart-3))" /> : <div className="py-12 text-center text-muted-foreground">No data</div>}
+                    {slowestEndpoints.length ? <BarDistribution data={slowestEndpoints} layout="horizontal" height={280} color="hsl(var(--chart-3))" /> : <div className="py-12 text-center text-muted-foreground">No data</div>}
                   </ChartCard>
                 </div>
                 <div className="min-w-0">
@@ -1391,7 +1412,7 @@ export default function TraefikDashboardPage() {
                             <td className="px-3 py-1.5"><Badge variant={getStatusVariant(e.status)} className="px-1.5 py-0 text-[10px] font-bold">{e.status}</Badge></td>
                             <td className="px-3 py-1.5 font-mono text-xs">{e.ip}</td>
                             <td className="px-3 py-1.5">
-                              <Badge variant="outline" className={cn("px-1.5 py-0 text-[10px] font-bold border", getMethodStyles(e.method))}>
+                              <Badge variant="outline" className={cn("px-1.5 py-0 text-[10px] font-bold border", getMethodStyles(e.method ?? ''))}>
                                 {e.method ?? '—'}
                               </Badge>
                             </td>
@@ -1442,7 +1463,7 @@ export default function TraefikDashboardPage() {
                               {new Date(error.t).toLocaleTimeString()}
                             </span>
                           </div>
-                          <p className="text-xs font-mono text-foreground truncate">{error.path || error.msg || 'Unknown error'}</p>
+                          <p className="text-xs font-mono text-foreground truncate">{error.path || 'Unknown error'}</p>
                         </div>
                         <Badge variant="outline" className="text-[9px] opacity-70">{error.method}</Badge>
                       </div>
@@ -1485,7 +1506,7 @@ export default function TraefikDashboardPage() {
                       className={cn("px-2 py-1 rounded-[4px] transition-all", levelFilter === 'success' ? "bg-success text-success-foreground shadow-sm font-bold" : "text-muted-foreground")}
                     >Success</button>
                   </div>
-                  <Button variant={isStreaming ? "default" : "outline"} size="sm" className="h-8 text-xs" onClick={handleToggleStream}>
+                  <Button variant={isStreaming ? "default" : "outline"} size="sm" className="h-8 text-xs" onClick={handleToggleStream} disabled={!logProcessingEnabled && !isStreaming}>
                     {isStreaming ? 'Stop' : 'Stream'}
                   </Button>
                 </div>
@@ -1546,7 +1567,7 @@ export default function TraefikDashboardPage() {
                               </Badge>
                             </td>
                             <td className="px-4 py-2.5 text-[11px] text-muted-foreground tabular-nums">
-                              {formatDuration(log.Duration || log.duration)}
+                              {formatDuration(log.Duration ?? log.duration)}
                             </td>
                             <td className="px-4 py-2.5 text-[11px] text-muted-foreground truncate max-w-[120px]" title={log.service}>
                               {log.service || '—'}

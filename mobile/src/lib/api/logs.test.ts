@@ -56,6 +56,34 @@ describe('logs API dashboard endpoints', () => {
     expect(url).toContain('range=1h')
   })
 
+  it('gets and updates log processing state', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({ success: true, data: { enabled: false } }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    )
+
+    const state = await api.logs.processing()
+
+    expect(state.enabled).toBe(false)
+    expect(fetchSpy.mock.calls[0][0] as string).toContain('/api/logs/processing')
+
+    fetchSpy.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ success: true, data: { enabled: true } }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    )
+
+    const updated = await api.logs.updateProcessing(true)
+
+    expect(updated.enabled).toBe(true)
+    expect(fetchSpy.mock.calls[1][0] as string).toContain('/api/logs/processing')
+    expect(fetchSpy.mock.calls[1][1]?.method).toBe('PUT')
+    expect(fetchSpy.mock.calls[1][1]?.body).toBe(JSON.stringify({ enabled: true }))
+  })
+
   it('hits the CrowdSec dashboard endpoint', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(

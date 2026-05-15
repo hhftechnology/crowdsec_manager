@@ -78,6 +78,7 @@ export { allowlistAPI } from './allowlist'
 export { scenariosAPI } from './scenarios'
 export { captchaAPI } from './captcha'
 export { logsAPI, structuredLogsAPI } from './logs'
+export type { LogProcessingState } from './logs'
 export { dashboardAPI, DASHBOARD_RANGES } from './dashboard'
 export type {
   DashboardRange,

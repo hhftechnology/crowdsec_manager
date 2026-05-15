@@ -40,8 +40,12 @@ export function parseTraefikLog(line: string) {
   try {
     if (line.trim().startsWith('{')) {
       const d = JSON.parse(line)
+      const rawDuration = d.Duration ?? d.duration
+      const durationNumber = rawDuration == null || rawDuration === '' ? NaN : Number(rawDuration)
+      const durationMs = Number.isFinite(durationNumber) ? durationNumber / 1_000_000 : undefined
       return {
         ...d,
+        Duration: durationMs,
         t: d.StartLocal || d.StartUTC || d.time || d.t,
         ip: d.ClientHost || d.ClientAddr || d.client_ip || d.ip,
         method: d.RequestMethod || d.method,
@@ -49,7 +53,7 @@ export function parseTraefikLog(line: string) {
         host: d.RequestHost || d.request_Host || d.host,
         ua: d.UserAgent || d["request_User-Agent"] || d.user_agent || d.ua,
         status: d.DownstreamStatus || d.status,
-        duration: d.Duration || d.duration,
+        duration: durationMs,
         service: d.ServiceName || d.service,
         msg: d.msg || d.message || line
       }

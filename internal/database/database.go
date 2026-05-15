@@ -29,6 +29,7 @@ type Settings struct {
 	DiscordWebhookToken  string
 	GeoapifyKey          string
 	CrowdSecCTIKey       string
+	LogProcessingEnabled bool
 }
 
 // New creates a new SQLite database connection and initializes schema
@@ -78,7 +79,8 @@ func (d *Database) initSchema() error {
 		discord_webhook_id TEXT NOT NULL DEFAULT '',
 		discord_webhook_token TEXT NOT NULL DEFAULT '',
 		geoapify_key TEXT NOT NULL DEFAULT '',
-		cti_key TEXT NOT NULL DEFAULT ''
+		cti_key TEXT NOT NULL DEFAULT '',
+		log_processing_enabled INTEGER NOT NULL DEFAULT 1
 	);
 
 	CREATE TABLE IF NOT EXISTS profile_history (
@@ -153,6 +155,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_feature_configs_feature ON feature_configs
 		"ALTER TABLE settings ADD COLUMN geoapify_key TEXT NOT NULL DEFAULT ''",
 		"ALTER TABLE settings ADD COLUMN cti_key TEXT NOT NULL DEFAULT ''",
 		"ALTER TABLE settings ADD COLUMN enroll_disable_context INTEGER NOT NULL DEFAULT 0",
+		"ALTER TABLE settings ADD COLUMN log_processing_enabled INTEGER NOT NULL DEFAULT 1",
 	}
 
 	for _, query := range migrations {
@@ -161,8 +164,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_feature_configs_feature ON feature_configs
 
 	// Insert default settings row if database is empty
 	insertDefaults := `
-	INSERT OR IGNORE INTO settings (id, traefik_dynamic_config, traefik_static_config, traefik_access_log, traefik_error_log, crowdsec_acquis_file, enroll_disable_context, discord_webhook_id, discord_webhook_token, geoapify_key, cti_key)
-	VALUES (1, '/etc/traefik/dynamic_config.yml', '/etc/traefik/traefik_config.yml', '/var/log/traefik/access.log', '/var/log/traefik/traefik.log', '/etc/crowdsec/acquis.yaml', 0, '', '', '', '');
+	INSERT OR IGNORE INTO settings (id, traefik_dynamic_config, traefik_static_config, traefik_access_log, traefik_error_log, crowdsec_acquis_file, enroll_disable_context, discord_webhook_id, discord_webhook_token, geoapify_key, cti_key, log_processing_enabled)
+	VALUES (1, '/etc/traefik/dynamic_config.yml', '/etc/traefik/traefik_config.yml', '/var/log/traefik/access.log', '/var/log/traefik/traefik.log', '/etc/crowdsec/acquis.yaml', 0, '', '', '', '', 1);
 	`
 	_, err := d.db.Exec(insertDefaults)
 	return err
@@ -174,12 +177,13 @@ func (d *Database) GetSettings() (*Settings, error) {
 	settings := &Settings{}
 	err := d.db.QueryRow(`
 		SELECT id, traefik_dynamic_config, traefik_static_config, traefik_access_log, traefik_error_log, crowdsec_acquis_file,
-		enroll_disable_context, discord_webhook_id, discord_webhook_token, geoapify_key, cti_key
+		enroll_disable_context, discord_webhook_id, discord_webhook_token, geoapify_key, cti_key, log_processing_enabled
 		FROM settings
 		WHERE id = 1
 	`).Scan(&settings.ID, &settings.TraefikDynamicConfig, &settings.TraefikStaticConfig,
 		&settings.TraefikAccessLog, &settings.TraefikErrorLog, &settings.CrowdSecAcquisFile,
-		&settings.EnrollDisableContext, &settings.DiscordWebhookID, &settings.DiscordWebhookToken, &settings.GeoapifyKey, &settings.CrowdSecCTIKey)
+		&settings.EnrollDisableContext, &settings.DiscordWebhookID, &settings.DiscordWebhookToken, &settings.GeoapifyKey, &settings.CrowdSecCTIKey,
+		&settings.LogProcessingEnabled)
 
 	if err == sql.ErrNoRows {
 		// Return sensible defaults if no settings row exists
@@ -191,6 +195,7 @@ func (d *Database) GetSettings() (*Settings, error) {
 			TraefikErrorLog:      "/var/log/traefik/traefik.log",
 			CrowdSecAcquisFile:   "/etc/crowdsec/acquis.yaml",
 			EnrollDisableContext: false,
+			LogProcessingEnabled: true,
 		}, nil
 	}
 
@@ -210,12 +215,14 @@ func (d *Database) UpdateSettings(settings *Settings) error {
 			discord_webhook_id = ?,
 			discord_webhook_token = ?,
 			geoapify_key = ?,
-			cti_key = ?
+			cti_key = ?,
+			log_processing_enabled = ?
 		WHERE id = 1
 	`, settings.TraefikDynamicConfig, settings.TraefikStaticConfig,
 		settings.TraefikAccessLog, settings.TraefikErrorLog, settings.CrowdSecAcquisFile,
 		settings.EnrollDisableContext,
-		settings.DiscordWebhookID, settings.DiscordWebhookToken, settings.GeoapifyKey, settings.CrowdSecCTIKey)
+		settings.DiscordWebhookID, settings.DiscordWebhookToken, settings.GeoapifyKey, settings.CrowdSecCTIKey,
+		settings.LogProcessingEnabled)
 	return err
 }
 

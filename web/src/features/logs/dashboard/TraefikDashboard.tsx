@@ -32,6 +32,11 @@ export function TraefikDashboard({ data, isLoading }: TraefikDashboardProps) {
   const avgDuration = data?.avg_duration_ms ?? null
   const errorRate = data?.error_rate ?? 0
   const format = data?.format ?? 'clf'
+  const slowestEndpoints = data?.slowest_endpoints ?? []
+  const topRouters = (data?.top_routers ?? []).map((router) => ({
+    name: router.name,
+    value: router.requests,
+  }))
 
   const seriesData = (data?.series ?? []).map((b) => ({
     date: b.t.slice(11, 16),
@@ -157,15 +162,15 @@ export function TraefikDashboard({ data, isLoading }: TraefikDashboardProps) {
             )}
           </ChartCard>
           <ChartCard title="Top Routers">
-            {data && data.top_routers.length > 0 ? (
-              <BarDistribution data={data.top_routers} layout="horizontal" height={240} />
+            {topRouters.length > 0 ? (
+              <BarDistribution data={topRouters} layout="horizontal" height={240} />
             ) : (
               <EmptyState message="No router data." />
             )}
           </ChartCard>
           <ChartCard title="Slowest Endpoints" description="Max duration per path (ms)">
-            {data && data.slowest_endpoints.length > 0 ? (
-              <BarDistribution data={data.slowest_endpoints} layout="horizontal" height={240} color="hsl(var(--chart-3))" />
+            {slowestEndpoints.length > 0 ? (
+              <BarDistribution data={slowestEndpoints} layout="horizontal" height={240} color="hsl(var(--chart-3))" />
             ) : (
               <EmptyState message="No latency data." />
             )}
