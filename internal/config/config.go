@@ -81,6 +81,11 @@ type Config struct {
 	NatsToken   string
 	NatsEnabled bool
 
+	// Diagnostics and memory controls
+	EnableProfiling      bool
+	ProfilingAllowRemote bool
+	CacheMaxEntries      int
+
 	// Timeouts
 	ShutdownTimeout time.Duration
 	ReadTimeout     time.Duration
@@ -138,6 +143,9 @@ func Load() (*Config, error) {
 		NatsURL:               getEnv("NATS_URL", ""),
 		NatsToken:             getEnv("NATS_TOKEN", ""),
 		NatsEnabled:           getEnvAsBool("NATS_ENABLED", false),
+		EnableProfiling:       getEnvAsBool("ENABLE_PROFILING", false),
+		ProfilingAllowRemote:  getEnvAsBool("PROFILING_ALLOW_REMOTE", false),
+		CacheMaxEntries:       getEnvAsInt("CACHE_MAX_ENTRIES", 512),
 		ShutdownTimeout:       time.Duration(getEnvAsInt("SHUTDOWN_TIMEOUT", 30)) * time.Second,
 		ReadTimeout:           time.Duration(getEnvAsInt("READ_TIMEOUT", 15)) * time.Second,
 		WriteTimeout:          time.Duration(getEnvAsInt("WRITE_TIMEOUT", 15)) * time.Second,

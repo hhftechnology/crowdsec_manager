@@ -18,6 +18,9 @@ import { LogViewer } from '@/components/logs/LogViewer'
 import { TraefikDashboard, CrowdSecDashboard, RangeSelector } from '@/features/logs/dashboard'
 import { useMountEffect } from '@/hooks/useMountEffect'
 
+const DASHBOARD_REFRESH_MS = 30_000
+const MAX_STREAM_LOG_LINES = 1_000
+
 export default function Logs() {
   const [selectedService, setSelectedService] = useState<'crowdsec' | 'traefik'>('crowdsec')
   const [tailLines, setTailLines] = useState('100')
@@ -66,16 +69,16 @@ export default function Logs() {
     queryKey: ['logs-dashboard', 'traefik', dashboardRange],
     queryFn: async () => (await dashboardAPI.getTraefik(dashboardRange)).data.data,
     enabled: logProcessingEnabled && selectedService === 'traefik',
-    refetchInterval: logProcessingEnabled ? 10_000 : false,
-    staleTime: 8_000,
+    refetchInterval: logProcessingEnabled ? DASHBOARD_REFRESH_MS : false,
+    staleTime: DASHBOARD_REFRESH_MS,
   })
 
   const { data: crowdsecDashboard, isLoading: crowdsecDashboardLoading, refetch: refetchCrowdSecDashboard } = useQuery({
     queryKey: ['logs-dashboard', 'crowdsec', dashboardRange],
     queryFn: async () => (await dashboardAPI.getCrowdSec(dashboardRange)).data.data,
     enabled: logProcessingEnabled && selectedService === 'crowdsec',
-    refetchInterval: logProcessingEnabled ? 10_000 : false,
-    staleTime: 8_000,
+    refetchInterval: logProcessingEnabled ? DASHBOARD_REFRESH_MS : false,
+    staleTime: DASHBOARD_REFRESH_MS,
   })
 
   // Close WebSocket on unmount
@@ -100,7 +103,7 @@ export default function Logs() {
           const lastFewLines = prev.slice(-5)
           const hasNewContent = lines.some(line => !lastFewLines.includes(line))
           if (!hasNewContent && prev.length > 0) return prev
-          return [...prev, ...lines]
+          return [...prev, ...lines].slice(-MAX_STREAM_LOG_LINES)
         })
       }
       ws.onerror = (event) => { toast.error(getErrorMessage(event, 'WebSocket error occurred', ErrorContexts.LogsStreamWebsocketError)); setIsStreaming(false) }
