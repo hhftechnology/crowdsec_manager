@@ -23,6 +23,8 @@ func TestParseDashboardRange(t *testing.T) {
 		{"1h", true, models.Range1h},
 		{"6h", true, models.Range6h},
 		{"24h", true, models.Range24h},
+		{"7d", true, models.Range7d},
+		{"all", true, models.RangeAll},
 		{"", false, ""},
 		{"7m", false, ""},
 		{"forever", false, ""},
@@ -48,13 +50,19 @@ func TestRangeDuration(t *testing.T) {
 	if rangeDuration(models.Range24h) != 24*time.Hour {
 		t.Fatal("24h should be 24 hours")
 	}
+	if rangeDuration(models.Range7d) != 7*24*time.Hour {
+		t.Fatal("7d should be 7 days")
+	}
+	if rangeDuration(models.RangeAll) != 3650*24*time.Hour {
+		t.Fatal("all should be 3650 days")
+	}
 	if rangeDuration("") != time.Hour {
 		t.Fatal("default should be 1h")
 	}
 }
 
 func TestRangeTailMap_AllPresetsCovered(t *testing.T) {
-	for _, r := range []models.DashboardRange{models.Range5m, models.Range1h, models.Range6h, models.Range24h} {
+	for _, r := range []models.DashboardRange{models.Range5m, models.Range1h, models.Range6h, models.Range24h, models.Range7d, models.RangeAll} {
 		if rangeTailMap[r] == "" {
 			t.Fatalf("range %s missing from rangeTailMap", r)
 		}

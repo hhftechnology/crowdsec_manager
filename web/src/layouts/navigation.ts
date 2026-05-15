@@ -36,6 +36,12 @@ export const navigation = [
     ]
   },
   {
+    title: "Traefik",
+    items: [
+      { name: 'Dashboard', href: '/traefik', icon: LayoutDashboard },
+    ]
+  },
+  {
     title: "Activity",
     items: [
       { name: 'Alerts', href: '/alerts', icon: AlertTriangle },
