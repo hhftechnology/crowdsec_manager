@@ -94,14 +94,14 @@ export default function ThreatMap({
 
   return (
     <div ref={containerRef} className="relative group overflow-hidden rounded-lg border bg-card" style={{ height }}>
-      <div className="absolute right-3 top-3 z-10 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-        <Button size="icon" variant="secondary" className="h-8 w-8 shadow-sm" onClick={handleZoomIn} title="Zoom In">
+      <div className="absolute right-3 top-3 z-10 flex flex-col gap-2 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+        <Button size="icon" variant="secondary" className="h-8 w-8 shadow-sm" onClick={handleZoomIn} title="Zoom In" aria-label="Zoom in">
           <Plus className="h-4 w-4" />
         </Button>
-        <Button size="icon" variant="secondary" className="h-8 w-8 shadow-sm" onClick={handleZoomOut} title="Zoom Out">
+        <Button size="icon" variant="secondary" className="h-8 w-8 shadow-sm" onClick={handleZoomOut} title="Zoom Out" aria-label="Zoom out">
           <Minus className="h-4 w-4" />
         </Button>
-        <Button size="icon" variant="secondary" className="h-8 w-8 shadow-sm" onClick={handleReset} title="Reset View">
+        <Button size="icon" variant="secondary" className="h-8 w-8 shadow-sm" onClick={handleReset} title="Reset View" aria-label="Reset view">
           <Maximize className="h-4 w-4" />
         </Button>
       </div>

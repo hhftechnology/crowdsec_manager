@@ -10,11 +10,26 @@ vi.mock('@/components/charts', async () => {
   const React = await import('react')
   return {
     AreaTimeline: () => React.createElement('div', { 'data-testid': 'area-timeline' }),
-    BarDistribution: () => React.createElement('div', { 'data-testid': 'bar-distribution' }),
-    PieBreakdown: () => React.createElement('div', { 'data-testid': 'pie-breakdown' }),
-    ThreatMap: () => React.createElement('div', { 'data-testid': 'threat-map' }),
-    StatCard: ({ title, value }: { title: string; value: string | number }) =>
-      React.createElement('div', { 'data-testid': 'stat-card', 'data-title': title }, String(value)),
+    BarDistribution: ({ data }: { data: Array<{ name: string; value: number }> }) =>
+      React.createElement(
+        'div',
+        { 'data-testid': 'bar-distribution' },
+        data.map((item) => React.createElement('span', { key: item.name }, `${item.name}:${item.value}`)),
+      ),
+    PieBreakdown: ({ data }: { data: Array<{ name: string; value: number }> }) =>
+      React.createElement(
+        'div',
+        { 'data-testid': 'pie-breakdown' },
+        data.map((item) => React.createElement('span', { key: item.name }, `${item.name}:${item.value}`)),
+      ),
+    ThreatMap: ({ data }: { data: Array<{ label?: string; value: number }> }) =>
+      React.createElement(
+        'div',
+        { 'data-testid': 'threat-map' },
+        data.map((item) => React.createElement('span', { key: item.label }, `${item.label}:${item.value}`)),
+      ),
+    StatCard: ({ title, value, description }: { title: string; value: string | number; description?: React.ReactNode }) =>
+      React.createElement('div', { 'data-testid': 'stat-card', 'data-title': title }, String(value), description),
     ChartCard: ({ title, children }: { title: string; children: React.ReactNode }) =>
       React.createElement('div', { 'data-testid': 'chart-card', 'data-title': title }, children),
   }
@@ -46,7 +61,7 @@ const sample: TraefikDashboardData = {
 }
 
 describe('TraefikDashboard', () => {
-  it('renders four KPI tiles with formatted values', () => {
+  it('renders KPI tiles with formatted values', () => {
     render(<TraefikDashboard data={sample} />)
     const cards = screen.getAllByTestId('stat-card')
     const titles = cards.map((c) => c.getAttribute('data-title'))
@@ -54,15 +69,24 @@ describe('TraefikDashboard', () => {
     expect(titles).toContain('Unique IPs')
     expect(titles).toContain('Avg Duration')
     expect(titles).toContain('Error Rate')
+    expect(screen.getByText(/20\.0 ms/)).toBeTruthy()
+    expect(screen.getByText(/30\.0 ms/)).toBeTruthy()
+    expect(screen.getByText('5.0%')).toBeTruthy()
   })
 
-  it('shows JSON-only widgets when format is json', () => {
+  it('shows dashboard collections when format is json', () => {
     render(<TraefikDashboard data={sample} />)
     const titles = screen.getAllByTestId('chart-card').map((c) => c.getAttribute('data-title'))
     expect(titles).toContain('Top Hosts')
     expect(titles).toContain('Top Routers')
     expect(titles).toContain('Slowest Endpoints')
     expect(titles).toContain('TLS Versions')
+    expect(screen.getByText('2xx Success')).toBeTruthy()
+    expect(screen.getByText('95')).toBeTruthy()
+    expect(screen.getByText('GET:90')).toBeTruthy()
+    expect(screen.getAllByText(/1\.2\.3\.4/).length).toBeGreaterThan(0)
+    expect(screen.getByText('example.com:50')).toBeTruthy()
+    expect(screen.getByText('router-a:30')).toBeTruthy()
   })
 
   it('hides JSON-only widgets and shows hint in CLF mode', () => {

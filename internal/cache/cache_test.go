@@ -25,9 +25,8 @@ func TestTTLCacheEvictsOldestWhenFull(t *testing.T) {
 	t.Cleanup(ttlCache.Stop)
 
 	ttlCache.Set("first", "a", time.Minute)
-	time.Sleep(time.Millisecond)
-	ttlCache.Set("second", "b", 2*time.Minute)
-	ttlCache.Set("third", "c", 3*time.Minute)
+	ttlCache.Set("second", "b", time.Minute)
+	ttlCache.Set("third", "c", time.Minute)
 
 	if _, ok := ttlCache.Get("first"); ok {
 		t.Fatalf("expected oldest entry to be evicted")

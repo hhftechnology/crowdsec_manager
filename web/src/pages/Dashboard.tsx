@@ -36,6 +36,7 @@ type Granularity = 'hour' | 'day'
 
 const FAST_REFRESH_MS = 30_000
 const SLOW_REFRESH_MS = 60_000
+const AUTO_REFRESH_LABEL = `${FAST_REFRESH_MS / 1000}-${SLOW_REFRESH_MS / 1000}s`
 
 interface ActivityBucket {
   date: string
@@ -666,10 +667,10 @@ export default function Dashboard() {
         <RefreshCw className="h-3 w-3" />
         {lastUpdatedAt ? (
           <span>
-            Last updated: {new Date(lastUpdatedAt).toLocaleTimeString()} — Auto-refreshing every 15-30s
+            Last updated: {new Date(lastUpdatedAt).toLocaleTimeString()} — Auto-refreshing every {AUTO_REFRESH_LABEL}
           </span>
         ) : (
-          <span>Auto-refreshing every 15-30s</span>
+          <span>Auto-refreshing every {AUTO_REFRESH_LABEL}</span>
         )}
       </div>
     </div>

@@ -24,7 +24,7 @@ interface AreaTimelineProps {
   /** Fill area with a gradient. Defaults to true. */
   gradientFill?: boolean
   /** Optional formatter for X-axis ticks. */
-  tickFormatter?: (value: string) => string
+  tickFormatter?: (value: string | number) => string
 }
 
 interface ChartTooltipPayload {

@@ -30,7 +30,7 @@ import {
 import api from '@/lib/api'
 import { dashboardAPI, type DashboardRange } from '@/lib/api/dashboard'
 import { ErrorContexts, getErrorMessage } from '@/lib/api/errors'
-import { cn, getMethodStyles, getStatusVariant, parseTraefikLog, groupStatusCodes } from '@/lib/utils'
+import { cn, getMethodStyles, getStatusVariant, parseTraefikLog, groupStatusCodes, parseUserAgent } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
@@ -63,58 +63,6 @@ function formatDuration(ms: number | null | undefined): string {
   if (value < 1) return `${(value * 1000).toFixed(0)} µs`
   if (value < 1000) return `${value.toFixed(1)} ms`
   return `${(value / 1000).toFixed(2)} s`
-}
-
-function parseUserAgent(ua: string) {
-  if (!ua) return { browser: 'Unknown', os: 'Unknown', cpu: 'Unknown', device: 'Unknown' };
-
-  let browser = 'Unknown';
-  let os = 'Unknown';
-  let cpu = 'Unknown';
-  let device = 'Unknown';
-
-  // Browser
-  if (ua.includes('Firefox/')) browser = 'Firefox ' + ua.split('Firefox/')[1].split(' ')[0];
-  else if (ua.includes('Edg/')) browser = 'Edge ' + ua.split('Edg/')[1].split(' ')[0];
-  else if (ua.includes('Chrome/')) browser = 'Chrome ' + ua.split('Chrome/')[1].split(' ')[0];
-  else if (ua.includes('Safari/') && !ua.includes('Chrome')) browser = 'Safari ' + ua.split('Safari/')[1].split(' ')[0];
-
-  // OS
-  if (ua.includes('Android')) {
-    os = 'Android ' + (ua.match(/Android ([\d.]+)/)?.[1] || '');
-  } else if (ua.includes('iPhone') || ua.includes('iPad')) {
-    os = 'iOS ' + (ua.match(/OS ([\d_]+)/)?.[1]?.replace(/_/g, '.') || '');
-    device = ua.includes('iPhone') ? 'iPhone' : 'iPad';
-  } else if (ua.includes('Windows NT')) {
-    const ver = ua.match(/Windows NT ([\d.]+)/)?.[1];
-    os = ver === '10.0' ? 'Windows 10/11' : ver === '6.3' ? 'Windows 8.1' : ver === '6.2' ? 'Windows 8' : ver === '6.1' ? 'Windows 7' : 'Windows';
-  } else if (ua.includes('Mac OS X')) {
-    os = 'macOS ' + (ua.match(/Mac OS X ([\d_]+)/)?.[1]?.replace(/_/g, '.') || '');
-  } else if (ua.includes('Linux')) {
-    os = 'Linux';
-  }
-
-  // CPU
-  if (ua.includes('arm_64') || ua.includes('aarch64') || ua.includes('arm64')) cpu = 'ARM 64-bit';
-  else if (ua.includes('x86_64') || ua.includes('amd64')) cpu = 'x86 64-bit';
-  else if (ua.includes('i386') || ua.includes('i686')) cpu = 'x86 32-bit';
-
-  // Device (Model specific)
-  const deviceMatch = ua.match(/\(([^)]+)\)/);
-  if (deviceMatch && device === 'Unknown') {
-    const parts = deviceMatch[1].split(';');
-    // Take the last part or part that looks like a model
-    for (const part of parts) {
-      const p = part.trim();
-      if (p.includes('Android') || p.includes('Linux') || p.includes('Windows') || p.includes('Macintosh')) continue;
-      if (p.length > 2) {
-        device = p;
-        break;
-      }
-    }
-  }
-
-  return { browser, os, cpu, device };
 }
 
 function TraefikLogDetail({ log, open, onOpenChange }: { log: any, open: boolean, onOpenChange: (open: boolean) => void }) {
@@ -533,17 +481,18 @@ export default function TraefikDashboardPage() {
     }
   }), [d?.series, dashboardRange])
 
-  const seriesTickFormatter = useCallback((val: string) => {
-    if (!val) return val
-    if (val.includes(' ')) {
+  const seriesTickFormatter = useCallback((val: string | number) => {
+    const label = String(val)
+    if (!label) return label
+    if (label.includes(' ')) {
       // For MM/DD HH:mm, show only Date if it's a long range, otherwise show Time
-      const parts = val.split(' ')
+      const parts = label.split(' ')
       if (dashboardRange === '7d' || dashboardRange === 'all') {
         return parts[0] // MM/DD
       }
       return parts[1] // HH:mm
     }
-    return val
+    return label
   }, [dashboardRange])
 
   const mapPoints = useMemo(() => (d?.top_ips ?? [])

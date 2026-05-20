@@ -164,6 +164,22 @@ func TestUpdateLogProcessing_DisableInvalidatesDashboardCache(t *testing.T) {
 	}
 }
 
+func TestUpdateLogProcessing_RejectsMissingEnabled(t *testing.T) {
+	db := newDashboardTestDB(t)
+
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.PUT("/logs/processing", UpdateLogProcessing(db))
+
+	req := httptest.NewRequest(http.MethodPut, "/logs/processing", bytes.NewBufferString(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d — body: %s", w.Code, w.Body.String())
+	}
+}
+
 func TestAnalyzeServiceDashboard_LogProcessingDisabledSkipsReads(t *testing.T) {
 	db := newDashboardTestDB(t)
 	settings, err := db.GetSettings()

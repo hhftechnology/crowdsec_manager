@@ -1,3 +1,5 @@
+//go:build linux
+
 package aggregate
 
 import (
@@ -6,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -53,8 +56,8 @@ func GetSystemStats() *models.SystemStats {
 
 func refreshSystemStats() {
 	defer func() {
-		if recover() != nil {
-			// Keep the cache refresh path non-fatal; the next call can retry.
+		if e := recover(); e != nil {
+			fmt.Printf("system stats refresh panic: %v\n%s", e, debug.Stack())
 		}
 		systemStatsMutex.Lock()
 		systemStatsUpdateInFlight = false
@@ -112,8 +115,8 @@ func getCPUStats() models.CPUStats {
 
 func updateCPUUsage() {
 	defer func() {
-		if recover() != nil {
-			// Keep background refresh failures from crashing the process.
+		if e := recover(); e != nil {
+			fmt.Printf("cpu usage refresh panic: %v\n%s", e, debug.Stack())
 		}
 		cpuMutex.Lock()
 		cpuUpdateInFlight = false

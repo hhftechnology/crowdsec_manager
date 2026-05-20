@@ -41,6 +41,15 @@ func TestDiagnosticsEnabledRejectsRemoteByDefault(t *testing.T) {
 	}
 }
 
+func TestDiagnosticsEnabledAllowsRemote(t *testing.T) {
+	router := newDiagnosticsTestRouter(&config.Config{EnableProfiling: true, ProfilingAllowRemote: true})
+	recorder := performDiagnosticsRequest(router, "198.51.100.10:1234")
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected remote diagnostics to return 200 when allowed, got %d", recorder.Code)
+	}
+}
+
 func newDiagnosticsTestRouter(cfg *config.Config) *gin.Engine {
 	router := gin.New()
 	RegisterRoutes(router.Group("/api"), cfg)

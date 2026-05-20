@@ -30,6 +30,8 @@ export function TraefikDashboard({ data, isLoading }: TraefikDashboardProps) {
   const totalRequests = data?.total_requests ?? 0
   const uniqueIPs = data?.unique_ips ?? 0
   const avgDuration = data?.avg_duration_ms ?? null
+  const p95ResponseTime = data?.p95_response_time_ms ?? null
+  const p99ResponseTime = data?.p99_response_time_ms ?? null
   const errorRate = data?.error_rate ?? 0
   const format = data?.format ?? 'clf'
   const slowestEndpoints = data?.slowest_endpoints ?? []
@@ -78,7 +80,11 @@ export function TraefikDashboard({ data, isLoading }: TraefikDashboardProps) {
         <StatCard
           title="Avg Duration"
           value={isLoading ? '—' : formatDuration(avgDuration)}
-          description={avgDuration == null ? 'Requires Traefik JSON access log' : undefined}
+          description={
+            avgDuration == null
+              ? 'Requires Traefik JSON access log'
+              : `P95 ${formatDuration(p95ResponseTime)} / P99 ${formatDuration(p99ResponseTime)}`
+          }
           icon={<Clock className="h-4 w-4" />}
           loading={isLoading}
         />

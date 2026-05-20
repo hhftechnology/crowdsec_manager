@@ -134,8 +134,7 @@ func TestBucketTraefik_JSONFormatPopulatesExtras(t *testing.T) {
 		`{"ClientHost":"5.6.7.8","DownstreamStatus":500,"RequestMethod":"POST","RequestHost":"api.example.com","RouterName":"router-b@docker","RequestPath":"/y","Duration":40000000,"StartUTC":"2026-05-07T11:55:00Z","TLSVersion":"1.2"}`,
 	}, "\n")
 	now := time.Date(2026, 5, 7, 12, 0, 0, 0, time.UTC)
-	d := BucketTraefik(nil, now.Add(-time.Hour), now, models.Range1h, fakeGeo{}, testSystemStats())
-	d = BucketTraefikRaw(logs, now.Add(-time.Hour), now, models.Range1h, fakeGeo{}, testSystemStats())
+	d := BucketTraefikRaw(logs, now.Add(-time.Hour), now, models.Range1h, fakeGeo{}, testSystemStats())
 
 	if d.Format != "json" {
 		t.Fatalf("expected json format when JSON lines present, got %q", d.Format)

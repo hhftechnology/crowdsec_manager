@@ -36,7 +36,11 @@ export default function Logs() {
   const prevStreamLengthRef = useRef<number>(0)
 
   const stopStream = useCallback(() => {
-    if (wsRef.current) { wsRef.current.close(); wsRef.current = null }
+    const socket = wsRef.current
+    if (socket) {
+      if (wsRef.current === socket) wsRef.current = null
+      socket.close()
+    }
     setStreamLogs([])
     prevStreamLengthRef.current = 0
     setIsStreaming(false)
@@ -87,14 +91,21 @@ export default function Logs() {
   const startWebSocket = useCallback((service: 'crowdsec' | 'traefik') => {
     if (!logProcessingEnabled) {
       toast.info('Log processing is disabled')
-      return
+      return false
     }
     const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}${api.logs.getStreamUrl(service)}`
     try {
-      const ws = new WebSocket(wsUrl)
-      wsRef.current = ws
-      ws.onopen = () => { toast.success('Log stream connected'); setStreamLogs([]); prevStreamLengthRef.current = 0 }
-      ws.onmessage = (event: MessageEvent) => {
+      const socket = new WebSocket(wsUrl)
+      wsRef.current = socket
+      const isCurrentSocket = () => wsRef.current === socket
+      socket.onopen = () => {
+        if (!isCurrentSocket()) return
+        toast.success('Log stream connected')
+        setStreamLogs([])
+        prevStreamLengthRef.current = 0
+      }
+      socket.onmessage = (event: MessageEvent) => {
+        if (!isCurrentSocket()) return
         const message = (event.data as string)?.trim()
         if (!message) return
         const lines = message.split('\n').filter(line => line.trim().length > 0)
@@ -106,11 +117,22 @@ export default function Logs() {
           return [...prev, ...lines].slice(-MAX_STREAM_LOG_LINES)
         })
       }
-      ws.onerror = (event) => { toast.error(getErrorMessage(event, 'WebSocket error occurred', ErrorContexts.LogsStreamWebsocketError)); setIsStreaming(false) }
-      ws.onclose = () => { toast.info('Log stream disconnected'); setIsStreaming(false) }
+      socket.onerror = (event) => {
+        if (!isCurrentSocket()) return
+        toast.error(getErrorMessage(event, 'WebSocket error occurred', ErrorContexts.LogsStreamWebsocketError))
+        setIsStreaming(false)
+      }
+      socket.onclose = () => {
+        if (!isCurrentSocket()) return
+        wsRef.current = null
+        toast.info('Log stream disconnected')
+        setIsStreaming(false)
+      }
+      return true
     } catch (error) {
       toast.error(getErrorMessage(error, 'Failed to connect to log stream', ErrorContexts.LogsStreamConnect))
       setIsStreaming(false)
+      return false
     }
   }, [logProcessingEnabled])
 
@@ -122,8 +144,9 @@ export default function Logs() {
         toast.info('Log processing is disabled')
         return
       }
-      startWebSocket(selectedService)
-      setIsStreaming(true)
+      if (startWebSocket(selectedService)) {
+        setIsStreaming(true)
+      }
     }
   }, [isStreaming, logProcessingEnabled, selectedService, startWebSocket, stopStream])
 
@@ -134,7 +157,8 @@ export default function Logs() {
     if (newService !== selectedService) {
       setSelectedService(newService)
       if (isStreaming) {
-        if (wsRef.current) { wsRef.current.close(); wsRef.current = null }
+        const socket = wsRef.current
+        if (socket) { wsRef.current = null; socket.close() }
         startWebSocket(newService)
       }
     }

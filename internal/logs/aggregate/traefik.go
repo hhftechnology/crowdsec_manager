@@ -7,7 +7,10 @@ package aggregate
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
+	"io"
 	"math"
+	"net"
 	"sort"
 	"strconv"
 	"strings"
@@ -51,23 +54,28 @@ const (
 // and, if found, walks every line as JSON in addition to the usual
 // CLF parsing.
 func BucketTraefikRaw(rawLogs string, since, now time.Time, rng models.DashboardRange, geo GeoLookup, systemStats *models.SystemStats) models.TraefikDashboard {
-	scanner := bufio.NewScanner(strings.NewReader(rawLogs))
+	reader := bufio.NewReader(strings.NewReader(rawLogs))
 	jsonRows := make([]traefikJSON, 0, 1000) // Initial capacity hint
 	hasJSON := false
 
-	for scanner.Scan() {
-		line := scanner.Text()
-		line = strings.TrimSpace(line)
-		if line == "" || line[0] != '{' {
-			continue
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil && !errors.Is(err, io.EOF) {
+			break
 		}
-		var row traefikJSON
-		if err := json.Unmarshal([]byte(line), &row); err == nil && row.populated() {
-			hasJSON = true
-			ts := row.startTime()
-			if !ts.IsZero() && (since.IsZero() || !ts.Before(since)) {
-				jsonRows = append(jsonRows, row)
+		line = strings.TrimSpace(line)
+		if line != "" && line[0] == '{' {
+			var row traefikJSON
+			if err := json.Unmarshal([]byte(line), &row); err == nil && row.populated() {
+				hasJSON = true
+				ts := row.startTime()
+				if !ts.IsZero() && (since.IsZero() || !ts.Before(since)) {
+					jsonRows = append(jsonRows, row)
+				}
 			}
+		}
+		if errors.Is(err, io.EOF) {
+			break
 		}
 	}
 
@@ -331,7 +339,9 @@ func aggregateTraefikJSON(rows []traefikJSON, since, now time.Time, rng models.D
 			p.totalDur += duration
 		}
 		if ua != "" {
-			uaCounts[ua]++
+			if cleaned := cleanUserAgent(ua); cleaned != "" {
+				uaCounts[cleaned]++
+			}
 		}
 
 		addr := row.RequestAddr
@@ -589,7 +599,7 @@ func (r traefikJSON) getIP() string {
 		return r.ClientHost
 	}
 	if r.ClientAddr != "" {
-		return r.ClientAddr
+		return stripPort(r.ClientAddr)
 	}
 	if r.ClientIP != "" {
 		return r.ClientIP
@@ -597,7 +607,23 @@ func (r traefikJSON) getIP() string {
 	if r.IP != "" {
 		return r.IP
 	}
-	return r.RemoteAddr
+	return stripPort(r.RemoteAddr)
+}
+
+func stripPort(hostPort string) string {
+	if hostPort == "" {
+		return ""
+	}
+	host, _, err := net.SplitHostPort(hostPort)
+	if err == nil {
+		return strings.Trim(host, "[]")
+	}
+	if strings.HasPrefix(hostPort, "[") {
+		if end := strings.IndexByte(hostPort, ']'); end > 0 {
+			return hostPort[1:end]
+		}
+	}
+	return hostPort
 }
 
 func (r traefikJSON) getHost() string {

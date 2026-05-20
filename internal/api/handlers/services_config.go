@@ -115,11 +115,19 @@ func UpdateSettings(db *database.Database) gin.HandlerFunc {
 
 		logger.Info("Updating settings")
 
-		if current, err := db.GetSettings(); err == nil && current != nil {
+		current, err := db.GetSettings()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to get current settings: %v", err),
+			})
+			return
+		}
+		if current != nil {
 			req.LogProcessingEnabled = current.LogProcessingEnabled
 		}
 
-		err := db.UpdateSettings(&req)
+		err = db.UpdateSettings(&req)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, models.Response{
 				Success: false,

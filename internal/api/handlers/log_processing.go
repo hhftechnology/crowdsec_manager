@@ -12,7 +12,7 @@ import (
 )
 
 type logProcessingRequest struct {
-	Enabled bool `json:"enabled"`
+	Enabled *bool `json:"enabled"`
 }
 
 // GetLogProcessing returns whether Traefik/CrowdSec log processing is enabled.
@@ -35,6 +35,11 @@ func UpdateLogProcessing(db *database.Database, ttlCache ...*cache.TTLCache) gin
 			c.JSON(http.StatusBadRequest, models.Response{Success: false, Error: "Invalid request: " + err.Error()})
 			return
 		}
+		if req.Enabled == nil {
+			c.JSON(http.StatusBadRequest, models.Response{Success: false, Error: "Invalid request: enabled is required"})
+			return
+		}
+		enabled := *req.Enabled
 
 		settings, err := db.GetSettings()
 		if err != nil {
@@ -42,17 +47,17 @@ func UpdateLogProcessing(db *database.Database, ttlCache ...*cache.TTLCache) gin
 			return
 		}
 
-		settings.LogProcessingEnabled = req.Enabled
+		settings.LogProcessingEnabled = enabled
 		if err := db.UpdateSettings(settings); err != nil {
 			c.JSON(http.StatusInternalServerError, models.Response{Success: false, Error: fmt.Sprintf("failed to update log processing setting: %v", err)})
 			return
 		}
 
-		if !req.Enabled {
+		if !enabled {
 			invalidateServiceDashboardCache(ttlCache...)
 		}
 
-		c.JSON(http.StatusOK, models.Response{Success: true, Message: "Log processing setting updated", Data: gin.H{"enabled": req.Enabled}})
+		c.JSON(http.StatusOK, models.Response{Success: true, Message: "Log processing setting updated", Data: gin.H{"enabled": enabled}})
 	}
 }
 
