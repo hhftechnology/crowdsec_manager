@@ -99,7 +99,7 @@ Native iOS and Android app. Supports **Pangolin** (token-based remote access) an
 - Version: `2.4.0`
 - Pangolin image: `hhftechnology/crowdsec-manager:latest` — full stack with Traefik, Pangolin, Gerbil
 - Independent image: `hhftechnology/crowdsec-manager:independent` — CrowdSec only, no Traefik
-- Image size (linux/amd64): <!-- IMAGE_SIZE_START -->45MB<!-- IMAGE_SIZE_END -->
+- Image size (linux/amd64): <!-- IMAGE_SIZE_START -->44MB<!-- IMAGE_SIZE_END -->
 
 ## Quick Start
 
