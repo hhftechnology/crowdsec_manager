@@ -33,6 +33,8 @@ const HubCategory = lazy(() => import('./pages/HubCategory'))
 const Metrics = lazy(() => import('./pages/Metrics'))
 const History = lazy(() => import('./pages/History'))
 
+const TraefikDashboardPage = lazy(() => import('./pages/traefik/DashboardPage'))
+
 function App() {
   return (
     <>
@@ -67,6 +69,7 @@ function App() {
                 <Route path="/hub/:category" element={<HubCategory />} />
                 <Route path="/metrics" element={<Metrics />} />
                 <Route path="/history" element={<History />} />
+                <Route path="/traefik" element={<TraefikDashboardPage />} />
               </Routes>
             </Suspense>
           </Layout>

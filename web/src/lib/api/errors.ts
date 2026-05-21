@@ -60,7 +60,7 @@ const ERROR_RULES: ErrorRule[] = [
   {
     contexts: [ErrorContexts.ProfilesSave],
     patterns: [/status code 403/i, /\b403\b/i, /forbidden/i],
-    message: 'Profile save was blocked before it reached CrowdSec Manager. Check Traefik/CrowdSec AppSec logs for a bouncer or WAF block.',
+    message: 'Profile save was blocked before it reached CrowdSec Manager. Check your reverse proxy or WAF logs (e.g., Traefik/CrowdSec AppSec) for a bouncer or WAF block.',
   },
   {
     contexts: [

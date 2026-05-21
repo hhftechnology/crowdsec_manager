@@ -1,31 +1,31 @@
-import type { CapacitorConfig } from '@capacitor/cli';
+import type { CapacitorConfig } from "@capacitor/cli";
 
 const config: CapacitorConfig = {
-  appId: 'com.crowdsec.manager.mobile',
-  appName: 'CrowdSec Manager',
-  webDir: 'dist',
+  appId: "com.crowdsec.manager.mobile",
+  appName: "CrowdSec Manager",
+  webDir: "dist",
   server: {
     cleartext: true,
-    androidScheme: 'http',
-    iosScheme: 'http',
-    hostname: 'localhost',
+    androidScheme: "http",
+    iosScheme: "http",
+    hostname: "localhost",
   },
   plugins: {
     CapacitorHttp: {
       enabled: true,
     },
     SplashScreen: {
-      launchAutoHide: false,
-      backgroundColor: '#faf9f5',
+      launchAutoHide: true,
+      backgroundColor: "#faf9f5",
       splashFullScreen: true,
-      androidSplashResourceName: 'splash',
-      androidScaleType: 'CENTER_CROP',
+      androidSplashResourceName: "splash",
+      androidScaleType: "CENTER_CROP",
     },
     StatusBar: {
-      style: 'LIGHT',
+      style: "LIGHT",
     },
     Keyboard: {
-      resize: 'body',
+      resize: "body",
       resizeOnFullScreen: true,
     },
   },

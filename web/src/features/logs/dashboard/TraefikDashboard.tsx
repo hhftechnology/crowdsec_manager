@@ -2,7 +2,9 @@ import { Activity, AlertTriangle, Clock, Users } from 'lucide-react'
 import { AreaTimeline, BarDistribution, ChartCard, PieBreakdown, StatCard, ThreatMap } from '@/components/charts'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { cn, getMethodStyles, getStatusVariant, groupStatusCodes } from '@/lib/utils'
 import type { TraefikDashboard as TraefikDashboardData } from '@/lib/api/dashboard'
+import { useMemo } from 'react'
 
 interface TraefikDashboardProps {
   data: TraefikDashboardData | undefined
@@ -28,8 +30,15 @@ export function TraefikDashboard({ data, isLoading }: TraefikDashboardProps) {
   const totalRequests = data?.total_requests ?? 0
   const uniqueIPs = data?.unique_ips ?? 0
   const avgDuration = data?.avg_duration_ms ?? null
+  const p95ResponseTime = data?.p95_response_time_ms ?? null
+  const p99ResponseTime = data?.p99_response_time_ms ?? null
   const errorRate = data?.error_rate ?? 0
   const format = data?.format ?? 'clf'
+  const slowestEndpoints = data?.slowest_endpoints ?? []
+  const topRouters = (data?.top_routers ?? []).map((router) => ({
+    name: router.name,
+    value: router.requests,
+  }))
 
   const seriesData = (data?.series ?? []).map((b) => ({
     date: b.t.slice(11, 16),
@@ -51,6 +60,8 @@ export function TraefikDashboard({ data, isLoading }: TraefikDashboardProps) {
       country: ip.country,
     }))
 
+  const groupedStatusCodes = useMemo(() => groupStatusCodes(data?.status_codes || []), [data?.status_codes])
+
   return (
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -69,7 +80,11 @@ export function TraefikDashboard({ data, isLoading }: TraefikDashboardProps) {
         <StatCard
           title="Avg Duration"
           value={isLoading ? '—' : formatDuration(avgDuration)}
-          description={avgDuration == null ? 'Requires Traefik JSON access log' : undefined}
+          description={
+            avgDuration == null
+              ? 'Requires Traefik JSON access log'
+              : `P95 ${formatDuration(p95ResponseTime)} / P99 ${formatDuration(p99ResponseTime)}`
+          }
           icon={<Clock className="h-4 w-4" />}
           loading={isLoading}
         />
@@ -95,8 +110,32 @@ export function TraefikDashboard({ data, isLoading }: TraefikDashboardProps) {
 
       <div className="grid gap-3 lg:grid-cols-2">
         <ChartCard title="Status Codes" description="Distribution of HTTP response codes">
-          {data?.status_codes && data.status_codes.length > 0 ? (
-            <PieBreakdown data={data.status_codes} height={240} />
+          {groupedStatusCodes.length > 0 ? (
+            <div className="flex items-center gap-6">
+              <div className="h-48 w-48 shrink-0">
+                <PieBreakdown data={groupedStatusCodes} height={192} innerRadius={55} outerRadius={75} showLegend={false} />
+              </div>
+              <div className="flex-1 space-y-2">
+                {[
+                  { label: '2xx Success', name: '2xx', color: 'bg-[hsl(var(--success))]' },
+                  { label: '3xx Redirect', name: '3xx', color: 'bg-[hsl(var(--info))]' },
+                  { label: '4xx Client Error', name: '4xx', color: 'bg-[hsl(var(--warning))]' },
+                  { label: '5xx Server Error', name: '5xx', color: 'bg-[hsl(var(--destructive))]' },
+                ].map((item) => {
+                  const val = groupedStatusCodes.find(x => x.name === item.name)?.value || 0;
+                  const tot = totalRequests || 1;
+                  const pct = totalRequests ? ((val / tot) * 100).toFixed(1) : '0.0';
+                  return (
+                    <div key={item.label} className="flex items-center gap-3 text-sm">
+                      <div className={`w-2.5 h-2.5 rounded-full ${item.color} shrink-0`} />
+                      <span className="text-muted-foreground flex-1 truncate">{item.label}</span>
+                      <span className="font-semibold tabular-nums">{formatNumber(val)}</span>
+                      <span className="text-muted-foreground tabular-nums w-10 text-right">{pct}%</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           ) : (
             <EmptyState message="No status codes recorded." />
           )}
@@ -129,15 +168,15 @@ export function TraefikDashboard({ data, isLoading }: TraefikDashboardProps) {
             )}
           </ChartCard>
           <ChartCard title="Top Routers">
-            {data && data.top_routers.length > 0 ? (
-              <BarDistribution data={data.top_routers} layout="horizontal" height={240} />
+            {topRouters.length > 0 ? (
+              <BarDistribution data={topRouters} layout="horizontal" height={240} />
             ) : (
               <EmptyState message="No router data." />
             )}
           </ChartCard>
           <ChartCard title="Slowest Endpoints" description="Max duration per path (ms)">
-            {data && data.slowest_endpoints.length > 0 ? (
-              <BarDistribution data={data.slowest_endpoints} layout="horizontal" height={240} color="hsl(var(--chart-3))" />
+            {slowestEndpoints.length > 0 ? (
+              <BarDistribution data={slowestEndpoints} layout="horizontal" height={240} color="hsl(var(--chart-3))" />
             ) : (
               <EmptyState message="No latency data." />
             )}
@@ -204,18 +243,37 @@ function RecentErrorsFeed({ rows }: { rows: TraefikDashboardData['recent_errors'
     return <EmptyState message="No errors in this window — nice!" />
   }
   return (
-    <ul className="max-h-80 divide-y overflow-y-auto rounded-md border">
-      {rows.slice(0, 50).map((row, idx) => (
-        <li key={`${row.t}-${idx}`} className="grid grid-cols-12 gap-2 px-3 py-2 text-sm">
-          <span className="col-span-3 font-mono text-xs text-muted-foreground">{row.t.slice(11, 19)}</span>
-          <span className="col-span-2 font-mono">{row.ip}</span>
-          <span className="col-span-1 font-mono">{row.method ?? '—'}</span>
-          <span className="col-span-5 truncate font-mono text-muted-foreground">{row.path ?? '—'}</span>
-          <span className="col-span-1 text-right">
-            <Badge variant={row.status >= 500 ? 'destructive' : 'secondary'}>{row.status}</Badge>
-          </span>
-        </li>
-      ))}
-    </ul>
+    <div className="max-h-80 overflow-y-auto rounded-md border">
+      <table className="w-full text-sm">
+        <thead className="bg-muted/50 text-xs text-muted-foreground sticky top-0 backdrop-blur">
+          <tr>
+            <th className="px-3 py-2 text-left font-medium">Time</th>
+            <th className="px-3 py-2 text-left font-medium">Status</th>
+            <th className="px-3 py-2 text-left font-medium">Method</th>
+            <th className="px-3 py-2 text-left font-medium">IP</th>
+            <th className="px-3 py-2 text-left font-medium">Path</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.slice(0, 50).map((row, idx) => (
+            <tr key={`${row.t}-${idx}`} className="border-t hover:bg-muted/30 transition-colors">
+              <td className="px-3 py-2 font-mono text-[11px] text-muted-foreground">{row.t.slice(11, 19)}</td>
+              <td className="px-3 py-2">
+                <Badge variant={getStatusVariant(row.status)} className="px-1.5 py-0 text-[10px] font-bold">
+                  {row.status}
+                </Badge>
+              </td>
+              <td className="px-3 py-2">
+                <Badge variant="outline" className={cn("px-1.5 py-0 text-[10px] font-bold border", getMethodStyles(row.method || ''))}>
+                  {row.method || '—'}
+                </Badge>
+              </td>
+              <td className="px-3 py-2 font-mono text-[11px] text-muted-foreground">{row.ip}</td>
+              <td className="px-3 py-2 font-mono text-[11px] truncate max-w-[200px]" title={row.path || ''}>{row.path || '—'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   )
 }

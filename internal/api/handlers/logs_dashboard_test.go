@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bytes"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -8,6 +9,7 @@ import (
 
 	"crowdsec-manager/internal/cache"
 	"crowdsec-manager/internal/config"
+	"crowdsec-manager/internal/database"
 	"crowdsec-manager/internal/models"
 
 	"github.com/gin-gonic/gin"
@@ -23,6 +25,8 @@ func TestParseDashboardRange(t *testing.T) {
 		{"1h", true, models.Range1h},
 		{"6h", true, models.Range6h},
 		{"24h", true, models.Range24h},
+		{"7d", true, models.Range7d},
+		{"all", true, models.RangeAll},
 		{"", false, ""},
 		{"7m", false, ""},
 		{"forever", false, ""},
@@ -48,13 +52,19 @@ func TestRangeDuration(t *testing.T) {
 	if rangeDuration(models.Range24h) != 24*time.Hour {
 		t.Fatal("24h should be 24 hours")
 	}
+	if rangeDuration(models.Range7d) != 7*24*time.Hour {
+		t.Fatal("7d should be 7 days")
+	}
+	if rangeDuration(models.RangeAll) != 3650*24*time.Hour {
+		t.Fatal("all should be 3650 days")
+	}
 	if rangeDuration("") != time.Hour {
 		t.Fatal("default should be 1h")
 	}
 }
 
 func TestRangeTailMap_AllPresetsCovered(t *testing.T) {
-	for _, r := range []models.DashboardRange{models.Range5m, models.Range1h, models.Range6h, models.Range24h} {
+	for _, r := range []models.DashboardRange{models.Range5m, models.Range1h, models.Range6h, models.Range24h, models.Range7d, models.RangeAll} {
 		if rangeTailMap[r] == "" {
 			t.Fatalf("range %s missing from rangeTailMap", r)
 		}
@@ -118,6 +128,79 @@ func TestAnalyzeServiceDashboard_ChangedServiceMissesCache(t *testing.T) {
 	}
 }
 
+func TestUpdateLogProcessing_DisableInvalidatesDashboardCache(t *testing.T) {
+	db := newDashboardTestDB(t)
+	ttlCache := cache.New()
+	ttlCache.Set(serviceDashboardCachePrefix+"traefik:test", "stale", time.Hour)
+
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.GET("/logs/processing", GetLogProcessing(db))
+	r.PUT("/logs/processing", UpdateLogProcessing(db, ttlCache))
+
+	req := httptest.NewRequest(http.MethodPut, "/logs/processing", bytes.NewBufferString(`{"enabled":false}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d — body: %s", w.Code, w.Body.String())
+	}
+	settings, err := db.GetSettings()
+	if err != nil {
+		t.Fatalf("get settings: %v", err)
+	}
+	if settings.LogProcessingEnabled {
+		t.Fatal("expected log processing to be disabled")
+	}
+	if _, ok := ttlCache.Get(serviceDashboardCachePrefix + "traefik:test"); ok {
+		t.Fatal("expected dashboard cache to be invalidated")
+	}
+
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/logs/processing", nil)
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 from get, got %d — body: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestUpdateLogProcessing_RejectsMissingEnabled(t *testing.T) {
+	db := newDashboardTestDB(t)
+
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.PUT("/logs/processing", UpdateLogProcessing(db))
+
+	req := httptest.NewRequest(http.MethodPut, "/logs/processing", bytes.NewBufferString(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d — body: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestAnalyzeServiceDashboard_LogProcessingDisabledSkipsReads(t *testing.T) {
+	db := newDashboardTestDB(t)
+	settings, err := db.GetSettings()
+	if err != nil {
+		t.Fatalf("get settings: %v", err)
+	}
+	settings.LogProcessingEnabled = false
+	if err := db.UpdateSettings(settings); err != nil {
+		t.Fatalf("update settings: %v", err)
+	}
+
+	reader := &fakeDashboardReader{}
+	w := runDashboardRequest(t, dashboardRequestInput{Reader: reader, Database: db, Service: "traefik", RawQuery: "range=1h"})
+	if w.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d — body: %s", w.Code, w.Body.String())
+	}
+	if reader.execCalls != 0 || reader.logCalls != 0 {
+		t.Fatalf("disabled log processing must skip Docker reads; exec=%d logs=%d", reader.execCalls, reader.logCalls)
+	}
+}
+
 type fakeDashboardReader struct {
 	execCalls int
 	logCalls  int
@@ -139,6 +222,7 @@ func (f *fakeDashboardReader) GetContainerLogs(containerName string, tail string
 
 type dashboardRequestInput struct {
 	Reader   *fakeDashboardReader
+	Database *database.Database
 	Cache    *cache.TTLCache
 	Service  string
 	RawQuery string
@@ -155,9 +239,10 @@ func runDashboardRequest(t *testing.T, input dashboardRequestInput) *httptest.Re
 	}
 	r := gin.New()
 	r.GET("/logs/:service/dashboard", analyzeServiceDashboardWithReader(serviceDashboardHandlerInput{
-		Reader: input.Reader,
-		Config: cfg,
-		Cache:  input.Cache,
+		Reader:   input.Reader,
+		Database: input.Database,
+		Config:   cfg,
+		Cache:    input.Cache,
 	}))
 
 	target := "/logs/" + input.Service + "/dashboard"
@@ -171,4 +256,14 @@ func runDashboardRequest(t *testing.T, input dashboardRequestInput) *httptest.Re
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	return w
+}
+
+func newDashboardTestDB(t *testing.T) *database.Database {
+	t.Helper()
+	db, err := database.New(t.TempDir() + "/settings.db")
+	if err != nil {
+		t.Fatalf("create test database: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	return db
 }

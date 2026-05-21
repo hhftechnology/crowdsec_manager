@@ -2,6 +2,7 @@ import { ApiClient } from './client';
 import type {
   CrowdSecDashboard,
   DashboardRange,
+  LogProcessingState,
   LogStats,
   StructuredLogsResponse,
   TraefikDashboard,
@@ -9,6 +10,12 @@ import type {
 
 export function createLogsApi(client: ApiClient) {
   return {
+    async processing() {
+      return (await client.get<LogProcessingState>('/api/logs/processing')).data;
+    },
+    async updateProcessing(enabled: boolean) {
+      return (await client.put<LogProcessingState>('/api/logs/processing', { body: { enabled } })).data;
+    },
     async crowdsec(tail = '200') {
       return (await client.get<{ logs: string }>('/api/logs/crowdsec', { params: { tail } })).data;
     },

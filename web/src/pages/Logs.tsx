@@ -13,9 +13,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { FileText, RefreshCw, Activity, Download, BarChart3 } from 'lucide-react'
 import { PageHeader, QueryError } from '@/components/common'
 import { LogFilterPanel, type LogFilters } from '@/components/logs/LogFilterPanel'
+import { LogProcessingToggle, useLogProcessingControl } from '@/components/logs/LogProcessingToggle'
 import { LogViewer } from '@/components/logs/LogViewer'
 import { TraefikDashboard, CrowdSecDashboard, RangeSelector } from '@/features/logs/dashboard'
 import { useMountEffect } from '@/hooks/useMountEffect'
+
+const DASHBOARD_REFRESH_MS = 30_000
+const MAX_STREAM_LOG_LINES = 1_000
 
 export default function Logs() {
   const [selectedService, setSelectedService] = useState<'crowdsec' | 'traefik'>('crowdsec')
@@ -31,13 +35,27 @@ export default function Logs() {
   const wsRef = useRef<WebSocket | null>(null)
   const prevStreamLengthRef = useRef<number>(0)
 
+  const stopStream = useCallback(() => {
+    const socket = wsRef.current
+    if (socket) {
+      if (wsRef.current === socket) wsRef.current = null
+      socket.close()
+    }
+    setStreamLogs([])
+    prevStreamLengthRef.current = 0
+    setIsStreaming(false)
+  }, [])
+
+  const logProcessing = useLogProcessingControl({ onDisabled: stopStream })
+  const logProcessingEnabled = logProcessing.enabled
+
   const { data: crowdsecLogs, isLoading: crowdsecLoading, isError: isCrowdsecError, error: crowdsecError, refetch: refetchCrowdSec } = useQuery({
     queryKey: ['logs-crowdsec', tailLines],
     queryFn: async () => {
       const response = await api.logs.getCrowdSec(tailLines)
       return response.data.data ?? null
     },
-    enabled: selectedService === 'crowdsec' && !isStreaming,
+    enabled: logProcessingEnabled && selectedService === 'crowdsec' && !isStreaming,
   })
 
   const { data: traefikLogs, isLoading: traefikLoading, refetch: refetchTraefik } = useQuery({
@@ -46,7 +64,7 @@ export default function Logs() {
       const response = await api.logs.getTraefik(tailLines)
       return response.data.data ?? null
     },
-    enabled: selectedService === 'traefik' && !isStreaming,
+    enabled: logProcessingEnabled && selectedService === 'traefik' && !isStreaming,
   })
 
   const [dashboardRange, setDashboardRange] = useState<DashboardRange>('1h')
@@ -54,36 +72,40 @@ export default function Logs() {
   const { data: traefikDashboard, isLoading: traefikDashboardLoading, refetch: refetchTraefikDashboard } = useQuery({
     queryKey: ['logs-dashboard', 'traefik', dashboardRange],
     queryFn: async () => (await dashboardAPI.getTraefik(dashboardRange)).data.data,
-    enabled: selectedService === 'traefik',
-    refetchInterval: 10_000,
-    staleTime: 8_000,
+    enabled: logProcessingEnabled && selectedService === 'traefik',
+    refetchInterval: logProcessingEnabled ? DASHBOARD_REFRESH_MS : false,
+    staleTime: DASHBOARD_REFRESH_MS,
   })
 
   const { data: crowdsecDashboard, isLoading: crowdsecDashboardLoading, refetch: refetchCrowdSecDashboard } = useQuery({
     queryKey: ['logs-dashboard', 'crowdsec', dashboardRange],
     queryFn: async () => (await dashboardAPI.getCrowdSec(dashboardRange)).data.data,
-    enabled: selectedService === 'crowdsec',
-    refetchInterval: 10_000,
-    staleTime: 8_000,
+    enabled: logProcessingEnabled && selectedService === 'crowdsec',
+    refetchInterval: logProcessingEnabled ? DASHBOARD_REFRESH_MS : false,
+    staleTime: DASHBOARD_REFRESH_MS,
   })
 
   // Close WebSocket on unmount
-  useMountEffect(() => {
-    return () => {
-      if (wsRef.current) {
-        wsRef.current.close()
-        wsRef.current = null
-      }
-    }
-  })
+  useMountEffect(() => stopStream)
 
   const startWebSocket = useCallback((service: 'crowdsec' | 'traefik') => {
+    if (!logProcessingEnabled) {
+      toast.info('Log processing is disabled')
+      return false
+    }
     const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}${api.logs.getStreamUrl(service)}`
     try {
-      const ws = new WebSocket(wsUrl)
-      wsRef.current = ws
-      ws.onopen = () => { toast.success('Log stream connected'); setStreamLogs([]); prevStreamLengthRef.current = 0 }
-      ws.onmessage = (event: MessageEvent) => {
+      const socket = new WebSocket(wsUrl)
+      wsRef.current = socket
+      const isCurrentSocket = () => wsRef.current === socket
+      socket.onopen = () => {
+        if (!isCurrentSocket()) return
+        toast.success('Log stream connected')
+        setStreamLogs([])
+        prevStreamLengthRef.current = 0
+      }
+      socket.onmessage = (event: MessageEvent) => {
+        if (!isCurrentSocket()) return
         const message = (event.data as string)?.trim()
         if (!message) return
         const lines = message.split('\n').filter(line => line.trim().length > 0)
@@ -92,28 +114,41 @@ export default function Logs() {
           const lastFewLines = prev.slice(-5)
           const hasNewContent = lines.some(line => !lastFewLines.includes(line))
           if (!hasNewContent && prev.length > 0) return prev
-          return [...prev, ...lines]
+          return [...prev, ...lines].slice(-MAX_STREAM_LOG_LINES)
         })
       }
-      ws.onerror = (event) => { toast.error(getErrorMessage(event, 'WebSocket error occurred', ErrorContexts.LogsStreamWebsocketError)); setIsStreaming(false) }
-      ws.onclose = () => { toast.info('Log stream disconnected'); setIsStreaming(false) }
+      socket.onerror = (event) => {
+        if (!isCurrentSocket()) return
+        toast.error(getErrorMessage(event, 'WebSocket error occurred', ErrorContexts.LogsStreamWebsocketError))
+        setIsStreaming(false)
+      }
+      socket.onclose = () => {
+        if (!isCurrentSocket()) return
+        wsRef.current = null
+        toast.info('Log stream disconnected')
+        setIsStreaming(false)
+      }
+      return true
     } catch (error) {
       toast.error(getErrorMessage(error, 'Failed to connect to log stream', ErrorContexts.LogsStreamConnect))
       setIsStreaming(false)
+      return false
     }
-  }, [])
+  }, [logProcessingEnabled])
 
   const handleToggleStream = useCallback(() => {
     if (isStreaming) {
-      if (wsRef.current) { wsRef.current.close(); wsRef.current = null }
-      setStreamLogs([])
-      prevStreamLengthRef.current = 0
-      setIsStreaming(false)
+      stopStream()
     } else {
-      startWebSocket(selectedService)
-      setIsStreaming(true)
+      if (!logProcessingEnabled) {
+        toast.info('Log processing is disabled')
+        return
+      }
+      if (startWebSocket(selectedService)) {
+        setIsStreaming(true)
+      }
     }
-  }, [isStreaming, selectedService, startWebSocket])
+  }, [isStreaming, logProcessingEnabled, selectedService, startWebSocket, stopStream])
 
   const handleFilterChange = useCallback((next: LogFilters) => {
     setFilters(next)
@@ -122,7 +157,8 @@ export default function Logs() {
     if (newService !== selectedService) {
       setSelectedService(newService)
       if (isStreaming) {
-        if (wsRef.current) { wsRef.current.close(); wsRef.current = null }
+        const socket = wsRef.current
+        if (socket) { wsRef.current = null; socket.close() }
         startWebSocket(newService)
       }
     }
@@ -186,6 +222,16 @@ export default function Logs() {
 
       {isCrowdsecError && <QueryError error={crowdsecError} onRetry={refetchCrowdSec} />}
 
+      <LogProcessingToggle control={logProcessing} />
+
+      {!logProcessingEnabled && (
+        <Card>
+          <CardContent className="py-6 text-sm text-muted-foreground">
+            Log processing is disabled. Enable it to read Traefik and CrowdSec logs, dashboards, structured entries, and live streams.
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -198,7 +244,7 @@ export default function Logs() {
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
                 <Label htmlFor="tail-lines">Lines:</Label>
-                <select id="tail-lines" className="h-9 rounded-md border border-input bg-background px-3 text-sm" value={tailLines} onChange={(e) => setTailLines(e.target.value)} disabled={isStreaming}>
+                <select id="tail-lines" className="h-9 rounded-md border border-input bg-background px-3 text-sm" value={tailLines} onChange={(e) => setTailLines(e.target.value)} disabled={isStreaming || !logProcessingEnabled}>
                   <option value="50">50</option>
                   <option value="100">100</option>
                   <option value="200">200</option>
@@ -213,17 +259,17 @@ export default function Logs() {
                     variant={tailLines === preset ? 'default' : 'outline'}
                     size="sm"
                     onClick={() => setTailLines(preset)}
-                    disabled={isStreaming}
+                    disabled={isStreaming || !logProcessingEnabled}
                   >
                     {preset}
                   </Button>
                 ))}
               </div>
-              <Button variant="outline" size="sm" onClick={handleToggleStream}>
+              <Button variant="outline" size="sm" onClick={handleToggleStream} disabled={!logProcessingEnabled && !isStreaming}>
                 {isStreaming ? 'Pause Stream' : 'Start Stream'}
               </Button>
             </div>
-            <Button onClick={() => { selectedService === 'crowdsec' ? refetchCrowdSec() : refetchTraefik(); toast.success('Logs refreshed') }} disabled={isLoading || isStreaming} size="sm" variant="outline">
+            <Button onClick={() => { selectedService === 'crowdsec' ? refetchCrowdSec() : refetchTraefik(); toast.success('Logs refreshed') }} disabled={isLoading || isStreaming || !logProcessingEnabled} size="sm" variant="outline">
               <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />Refresh
             </Button>
           </div>
@@ -262,6 +308,7 @@ export default function Logs() {
                   onClick={() =>
                     selectedService === 'crowdsec' ? refetchCrowdSecDashboard() : refetchTraefikDashboard()
                   }
+                  disabled={!logProcessingEnabled}
                 >
                   <RefreshCw className="h-4 w-4" />Refresh
                 </Button>
@@ -280,7 +327,11 @@ export default function Logs() {
             </CardContent>
           </Card>
 
-          {selectedService === 'traefik' ? (
+          {!logProcessingEnabled ? (
+            <Card>
+              <CardContent className="py-12 text-center text-sm text-muted-foreground">Log processing is disabled.</CardContent>
+            </Card>
+          ) : selectedService === 'traefik' ? (
             <TraefikDashboard data={traefikDashboard ?? undefined} isLoading={traefikDashboardLoading} />
           ) : (
             <CrowdSecDashboard data={crowdsecDashboard ?? undefined} isLoading={crowdsecDashboardLoading} />
@@ -301,7 +352,7 @@ export default function Logs() {
                   <div className="text-xs text-muted-foreground">
                     Showing {filteredLines.length} of {totalLines} lines
                   </div>
-                  <Button variant="outline" size="sm" onClick={handleExport} disabled={!filteredLines.length}>
+                  <Button variant="outline" size="sm" onClick={handleExport} disabled={!filteredLines.length || !logProcessingEnabled}>
                     <Download className="h-4 w-4" />Export
                   </Button>
                 </div>
@@ -317,16 +368,16 @@ export default function Logs() {
               </div>
             </CardHeader>
             <CardContent>
-              {isLoading && !isStreaming ? (
+              {isLoading && !isStreaming && logProcessingEnabled ? (
                 <div className="h-96 bg-muted animate-pulse rounded" />
               ) : (
                 <LogViewer
-                  logs={filteredLines}
+                  logs={logProcessingEnabled ? filteredLines : []}
                   autoScroll
                   emptyMessage={
                     isStreaming
                       ? `Stream connected — waiting for new ${selectedService} log lines. If nothing appears, the container may not be writing to stdout for this service.`
-                      : 'No logs to display'
+                      : logProcessingEnabled ? 'No logs to display' : 'Log processing is disabled'
                   }
                 />
               )}

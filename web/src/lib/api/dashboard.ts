@@ -4,9 +4,9 @@
 import { apiClient } from './client'
 import type { ApiResponse } from './types'
 
-export type DashboardRange = '5m' | '1h' | '6h' | '24h'
+export type DashboardRange = '5m' | '1h' | '6h' | '24h' | '7d' | 'all'
 
-export const DASHBOARD_RANGES: DashboardRange[] = ['5m', '1h', '6h', '24h']
+export const DASHBOARD_RANGES: DashboardRange[] = ['5m', '1h', '6h', '24h', '7d', 'all']
 
 export interface NameValue {
   name: string
@@ -39,6 +39,27 @@ export interface TraefikRecentError {
   duration_ms?: number
 }
 
+export interface TraefikServiceDetail {
+  name: string
+  requests: number
+  avg_duration_ms: number
+  error_rate: number
+}
+
+export interface TraefikPathDetail {
+  path: string
+  method: string
+  count: number
+  avg_duration_ms: number
+}
+
+export interface TraefikRouterDetail {
+  name: string
+  requests: number
+  avg_duration_ms: number
+  service?: string
+}
+
 export interface TraefikDashboard {
   range: DashboardRange
   format: 'json' | 'clf'
@@ -46,16 +67,49 @@ export interface TraefikDashboard {
   total_requests: number
   unique_ips: number
   avg_duration_ms: number | null
+  p95_response_time_ms: number | null
+  p99_response_time_ms: number | null
   error_rate: number
   series: TraefikBucket[]
   status_codes: NameValue[]
   methods: NameValue[]
   top_ips: IPStat[]
   top_hosts: NameValue[]
-  top_routers: NameValue[]
+  top_routers: TraefikRouterDetail[]
+  top_paths: TraefikPathDetail[]
+  top_services: TraefikServiceDetail[]
+  top_addresses: NameValue[]
+  user_agents: NameValue[]
   slowest_endpoints: NameValue[]
   tls_versions: NameValue[]
   recent_errors: TraefikRecentError[]
+  system?: SystemStats
+}
+
+export interface SystemStats {
+  cpu: CPUStats
+  memory: MemoryStats
+  disk: DiskStats
+}
+
+export interface CPUStats {
+  usage_percent: number
+  cores: number
+  model: string
+}
+
+export interface MemoryStats {
+  total: number
+  used: number
+  available: number
+  used_percent: number
+}
+
+export interface DiskStats {
+  total: number
+  used: number
+  free: number
+  used_percent: number
 }
 
 export interface CrowdSecBucket {

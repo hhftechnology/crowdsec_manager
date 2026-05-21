@@ -92,6 +92,7 @@ Full variable set from `internal/config/config.go` on the `main` branch.
 |---|---|---|
 | `DECISION_LIST_LIMIT` | `200` | Max decisions returned per request |
 | `ALERT_LIST_LIMIT` | `200` | Max alerts returned per request |
+| `CACHE_MAX_ENTRIES` | `512` | Max entries retained in the shared in-memory TTL cache |
 
 ### Messaging (optional)
 
@@ -100,6 +101,13 @@ Full variable set from `internal/config/config.go` on the `main` branch.
 | `NATS_URL` | _(empty)_ | NATS JetStream URL |
 | `NATS_TOKEN` | _(empty)_ | NATS authentication token |
 | `NATS_ENABLED` | `false` | Enable NATS messaging |
+
+### Diagnostics
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `ENABLE_PROFILING` | `false` | Enable `/api/debug/runtime` and `/api/debug/pprof/*` diagnostics |
+| `PROFILING_ALLOW_REMOTE` | `false` | Allow diagnostics from non-loopback clients when profiling is enabled |
 
 ### Timeouts
 
@@ -160,6 +168,7 @@ The Independent variant strips all Traefik, Pangolin, Gerbil, backup, and captch
 |---|---|---|
 | `DECISION_LIST_LIMIT` | `200` | Max decisions returned per request |
 | `ALERT_LIST_LIMIT` | `200` | Max alerts returned per request |
+| `CACHE_MAX_ENTRIES` | `512` | Max entries retained in the shared in-memory TTL cache |
 
 ### Messaging (optional)
 
@@ -168,6 +177,13 @@ The Independent variant strips all Traefik, Pangolin, Gerbil, backup, and captch
 | `NATS_URL` | _(empty)_ | NATS JetStream URL |
 | `NATS_TOKEN` | _(empty)_ | NATS authentication token |
 | `NATS_ENABLED` | `false` | Enable NATS messaging |
+
+### Diagnostics
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `ENABLE_PROFILING` | `false` | Enable `/api/debug/runtime` and `/api/debug/pprof/*` diagnostics |
+| `PROFILING_ALLOW_REMOTE` | `false` | Allow diagnostics from non-loopback clients when profiling is enabled |
 
 ### Timeouts
 

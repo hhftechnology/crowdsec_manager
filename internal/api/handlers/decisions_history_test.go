@@ -54,6 +54,65 @@ func TestIsDecisionActive_Active(t *testing.T) {
 	}
 }
 
+func TestIsDecisionActive_ToleratesCrowdSecSourceShapes(t *testing.T) {
+	tests := []struct {
+		name       string
+		output     string
+		scope      string
+		value      string
+		wantID     int64
+		wantActive bool
+	}{
+		{
+			name:       `nested alert source object`,
+			output:     `[{"id":6180,"created_at":"2026-05-20T09:21:00Z","source":{"scope":"Ip","value":"80.94.95.211"},"decisions":[{"id":4908778,"origin":"crowdsec","type":"captcha","scope":"Ip","value":"80.94.95.211","duration":"4h","scenario":"crowdsecurity/http-admin-interface-probing"}]}]`,
+			scope:      `Ip`,
+			value:      `80.94.95.211`,
+			wantID:     4908778,
+			wantActive: true,
+		},
+		{
+			name:       `flat decision source object`,
+			output:     `[{"id":4908813,"source":{"scope":"Ip","value":"20.12.237.107"},"origin":"cscli","type":"ban","scope":"Ip","value":"20.12.237.107","duration":"1h","scenario":"manual ban"}]`,
+			scope:      `Ip`,
+			value:      `20.12.237.107`,
+			wantID:     4908813,
+			wantActive: true,
+		},
+		{
+			name:       `alert source object without decision`,
+			output:     `[{"capacity":10,"created_at":"2026-05-20T06:47:08Z","decisions":[],"events_count":11,"id":6167,"kind":"crowdsec","scenario":"crowdsecurity/http-probing","source":{"as_name":"SS-Net","as_number":"204428","cn":"RO","ip":"80.94.95.211","latitude":45.9968,"longitude":24.997,"range":"80.94.95.0/24","scope":"Ip","value":"80.94.95.211"},"start_at":"2026-05-20T06:47:06Z","stop_at":"2026-05-20T06:47:07Z","uuid":"a84817fe-76d2-4a2a-b3e8-b23a7d39f5cd"}]`,
+			scope:      `Ip`,
+			value:      `80.94.95.211`,
+			wantActive: false,
+		},
+		{
+			name:       `parsed non matching decision`,
+			output:     `[{"id":4908813,"source":{"scope":"Ip","value":"20.12.237.107"},"origin":"cscli","type":"ban","scope":"Ip","value":"20.12.237.107","duration":"1h"}]`,
+			scope:      `Ip`,
+			value:      `198.51.100.10`,
+			wantActive: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fake := &fakeDockerClient{stubOut: tt.output, stubErr: nil}
+			cfg := &config.Config{CrowdsecContainerName: `crowdsec`}
+
+			id, active, err := IsDecisionActive(fake, cfg, tt.scope, tt.value)
+			if err != nil {
+				t.Fatalf(`unexpected error: %v`, err)
+			}
+			if active != tt.wantActive {
+				t.Fatalf(`active = %v, want %v`, active, tt.wantActive)
+			}
+			if id != tt.wantID {
+				t.Fatalf(`id = %d, want %d`, id, tt.wantID)
+			}
+		})
+	}
+}
+
 func TestIsDecisionActive_Empty(t *testing.T) {
 	// cscli returns null or empty array when no matching decision
 	for _, out := range []string{"null", "[]", ""} {

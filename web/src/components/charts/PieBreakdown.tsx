@@ -10,7 +10,7 @@ import type { PieLabelRenderProps } from 'recharts'
 import { CHART_COLORS } from '@/lib/chart-utils'
 
 interface PieBreakdownProps {
-  data: { name: string; value: number }[]
+  data: { name: string; value: number; fill?: string }[]
   /** Chart height in pixels. Defaults to 300. */
   height?: number
   /** Inner radius for donut hole. Defaults to 60. */
@@ -104,10 +104,10 @@ export default function PieBreakdown({
           label={showLabels ? renderLabel : undefined}
           labelLine={false}
         >
-          {data.map((_entry, index) => (
+          {data.map((entry, index) => (
             <Cell
               key={`cell-${index}`}
-              fill={CHART_COLORS[index % CHART_COLORS.length]}
+              fill={entry.fill || CHART_COLORS[index % CHART_COLORS.length]}
             />
           ))}
         </Pie>

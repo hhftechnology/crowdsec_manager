@@ -1,6 +1,5 @@
-@import 'tailwindcss';
-@import 'fumadocs-ui/css/neutral.css';
-@import 'fumadocs-ui/css/preset.css';
+@import "tailwindcss";
+@import "fumadocs-ui/style.css";
 
 :root {
   --background: 35 30% 97%;

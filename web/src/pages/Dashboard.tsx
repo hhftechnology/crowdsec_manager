@@ -34,6 +34,10 @@ import {
 
 type Granularity = 'hour' | 'day'
 
+const FAST_REFRESH_MS = 30_000
+const SLOW_REFRESH_MS = 60_000
+const AUTO_REFRESH_LABEL = `${FAST_REFRESH_MS / 1000}-${SLOW_REFRESH_MS / 1000}s`
+
 interface ActivityBucket {
   date: string
   alerts: number
@@ -127,7 +131,7 @@ export default function Dashboard() {
       const response = await api.health.checkStack()
       return response.data.data ?? null
     },
-    refetchInterval: 15000,
+    refetchInterval: FAST_REFRESH_MS,
   })
 
   const { data: decisionsSummary, isLoading: decisionsLoading, dataUpdatedAt: decisionsUpdatedAt } = useQuery({
@@ -136,7 +140,7 @@ export default function Dashboard() {
       const response = await api.crowdsec.getDecisionsSummary()
       return response.data.data
     },
-    refetchInterval: 30000,
+    refetchInterval: SLOW_REFRESH_MS,
   })
 
   const { data: decisionsData } = useQuery({
@@ -145,7 +149,7 @@ export default function Dashboard() {
       const response = await api.crowdsec.getDecisions()
       return response.data.data
     },
-    refetchInterval: 60000,
+    refetchInterval: SLOW_REFRESH_MS,
   })
 
   const { data: decisionHistoryAnalysis, dataUpdatedAt: decisionHistoryUpdatedAt } = useQuery<DecisionHistoryAnalysisResponse | null>({
@@ -154,8 +158,8 @@ export default function Dashboard() {
       const response = await api.crowdsec.getDecisionHistoryAnalysis({ since: '7d' })
       return response.data.data ?? null
     },
-    refetchInterval: 30000,
-    staleTime: 30000,
+    refetchInterval: SLOW_REFRESH_MS,
+    staleTime: FAST_REFRESH_MS,
     placeholderData: (previousData) => previousData,
   })
 
@@ -165,8 +169,8 @@ export default function Dashboard() {
       const response = await api.crowdsec.getRepeatedOffenders()
       return response.data.data
     },
-    refetchInterval: 60000,
-    staleTime: 30000,
+    refetchInterval: SLOW_REFRESH_MS,
+    staleTime: FAST_REFRESH_MS,
     placeholderData: (previousData) => previousData,
   })
 
@@ -176,7 +180,7 @@ export default function Dashboard() {
       const response = await api.crowdsec.getBouncers()
       return response.data.data
     },
-    refetchInterval: 30000,
+    refetchInterval: SLOW_REFRESH_MS,
   })
 
   const { data: alertsData, isLoading: alertsLoading, dataUpdatedAt: alertsUpdatedAt } = useQuery({
@@ -185,8 +189,8 @@ export default function Dashboard() {
       const response = await api.crowdsec.getAlertsAnalysis({ since: '7d' })
       return response.data.data
     },
-    refetchInterval: 30000,
-    staleTime: 30000,
+    refetchInterval: SLOW_REFRESH_MS,
+    staleTime: FAST_REFRESH_MS,
     placeholderData: (previousData) => previousData,
   })
 
@@ -199,7 +203,7 @@ export default function Dashboard() {
       const response = await api.crowdsec.getHistoryActivity(params)
       return response.data.data ?? null
     },
-    refetchInterval: 30000,
+    refetchInterval: SLOW_REFRESH_MS,
   })
 
   const { data: activity7dData, isLoading: activity7dLoading, dataUpdatedAt: activity7dUpdatedAt } = useQuery({
@@ -208,7 +212,7 @@ export default function Dashboard() {
       const response = await api.crowdsec.getHistoryActivity({ window: '7d', bucket: 'day' })
       return response.data.data ?? null
     },
-    refetchInterval: 30000,
+    refetchInterval: SLOW_REFRESH_MS,
   })
 
   const lastUpdated = useMemo(() => {
@@ -663,10 +667,10 @@ export default function Dashboard() {
         <RefreshCw className="h-3 w-3" />
         {lastUpdatedAt ? (
           <span>
-            Last updated: {new Date(lastUpdatedAt).toLocaleTimeString()} — Auto-refreshing every 15-30s
+            Last updated: {new Date(lastUpdatedAt).toLocaleTimeString()} — Auto-refreshing every {AUTO_REFRESH_LABEL}
           </span>
         ) : (
-          <span>Auto-refreshing every 15-30s</span>
+          <span>Auto-refreshing every {AUTO_REFRESH_LABEL}</span>
         )}
       </div>
     </div>

@@ -22,9 +22,12 @@ import (
 // =============================================================================
 
 // GetCrowdSecLogs retrieves CrowdSec logs
-func GetCrowdSecLogs(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
+func GetCrowdSecLogs(dockerClient *docker.Client, db *database.Database, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		dockerClient = resolveDockerClient(c, dockerClient)
+		if !requireLogProcessingEnabled(c, db) {
+			return
+		}
 		tail := c.DefaultQuery("tail", "100")
 		logger.Info("Getting CrowdSec logs", "tail", tail)
 
@@ -48,6 +51,9 @@ func GetCrowdSecLogs(dockerClient *docker.Client, cfg *config.Config) gin.Handle
 func GetTraefikLogs(dockerClient *docker.Client, db *database.Database, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		dockerClient = resolveDockerClient(c, dockerClient)
+		if !requireLogProcessingEnabled(c, db) {
+			return
+		}
 		tail := c.DefaultQuery("tail", "100")
 		logType := c.DefaultQuery("type", "access") // access or error
 		logger.Info("Getting Traefik logs", "tail", tail, "type", logType)
@@ -83,9 +89,12 @@ func GetTraefikLogs(dockerClient *docker.Client, db *database.Database, cfg *con
 }
 
 // AnalyzeTraefikLogsAdvanced performs advanced analysis of Traefik logs
-func AnalyzeTraefikLogsAdvanced(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
+func AnalyzeTraefikLogsAdvanced(dockerClient *docker.Client, db *database.Database, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		dockerClient = resolveDockerClient(c, dockerClient)
+		if !requireLogProcessingEnabled(c, db) {
+			return
+		}
 		tail := c.DefaultQuery("tail", "1000")
 		logger.Info("Analyzing Traefik logs", "tail", tail)
 
@@ -109,9 +118,12 @@ func AnalyzeTraefikLogsAdvanced(dockerClient *docker.Client, cfg *config.Config)
 }
 
 // GetServiceLogs gets logs for any service
-func GetServiceLogs(dockerClient *docker.Client) gin.HandlerFunc {
+func GetServiceLogs(dockerClient *docker.Client, db *database.Database) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		dockerClient = resolveDockerClient(c, dockerClient)
+		if !requireLogProcessingEnabled(c, db) {
+			return
+		}
 		service := c.Param("service")
 		tail := c.DefaultQuery("tail", "100")
 		logger.Info("Getting service logs", "service", service, "tail", tail)
@@ -133,7 +145,7 @@ func GetServiceLogs(dockerClient *docker.Client) gin.HandlerFunc {
 }
 
 // StreamLogs streams logs via WebSocket using Docker's native Follow mode
-func StreamLogs(dockerClient *docker.Client) gin.HandlerFunc {
+func StreamLogs(dockerClient *docker.Client, db *database.Database) gin.HandlerFunc {
 	var upgrader = websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool {
 			return true
@@ -144,6 +156,9 @@ func StreamLogs(dockerClient *docker.Client) gin.HandlerFunc {
 
 	return func(c *gin.Context) {
 		dockerClient = resolveDockerClient(c, dockerClient)
+		if !requireLogProcessingEnabled(c, db) {
+			return
+		}
 		service := c.Param("service")
 		logger.Info("Streaming logs", "service", service)
 
@@ -163,6 +178,8 @@ func StreamLogs(dockerClient *docker.Client) gin.HandlerFunc {
 
 		pingTicker := time.NewTicker(30 * time.Second)
 		defer pingTicker.Stop()
+		processingTicker := time.NewTicker(5 * time.Second)
+		defer processingTicker.Stop()
 
 		done := make(chan struct{})
 
@@ -221,6 +238,16 @@ func StreamLogs(dockerClient *docker.Client) gin.HandlerFunc {
 			select {
 			case <-done:
 				return
+			case <-processingTicker.C:
+				enabled, err := logProcessingEnabled(db)
+				if err != nil {
+					ws.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("Error checking log processing setting: %v", err)))
+					return
+				}
+				if !enabled {
+					ws.WriteMessage(websocket.TextMessage, []byte("Log processing disabled; closing stream"))
+					return
+				}
 			case <-pingTicker.C:
 				if err := ws.WriteControl(websocket.PingMessage, []byte{}, time.Now().Add(10*time.Second)); err != nil {
 					logger.Debug("WebSocket ping error", "error", err)
@@ -248,9 +275,12 @@ func StreamLogs(dockerClient *docker.Client) gin.HandlerFunc {
 }
 
 // GetStructuredLogs returns parsed, structured log entries for a container
-func GetStructuredLogs(dockerClient *docker.Client, cfg *config.Config) gin.HandlerFunc {
+func GetStructuredLogs(dockerClient *docker.Client, db *database.Database, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		dockerClient = resolveDockerClient(c, dockerClient)
+		if !requireLogProcessingEnabled(c, db) {
+			return
+		}
 		service := c.Param("service")
 		tail := c.DefaultQuery("tail", "200")
 		level := c.DefaultQuery("level", "")

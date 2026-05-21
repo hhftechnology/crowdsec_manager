@@ -24,10 +24,12 @@ import (
 	"crowdsec-manager/internal/configvalidator"
 	"crowdsec-manager/internal/cron"
 	"crowdsec-manager/internal/database"
+	"crowdsec-manager/internal/diagnostics"
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/geoip"
 	"crowdsec-manager/internal/history"
 	"crowdsec-manager/internal/logger"
+	"crowdsec-manager/internal/logs/aggregate"
 	"crowdsec-manager/internal/messaging"
 )
 
@@ -75,6 +77,8 @@ func main() {
 	geoResolver, geoErr := geoip.Open(cfg.GeoIPDBPath)
 	geoip.LogStartupStatus(cfg.GeoIPDBPath, geoErr)
 	defer geoResolver.Close()
+
+	aggregate.PrimeSystemStats()
 
 	dataDir := cfg.ConfigDir
 
@@ -157,9 +161,11 @@ func main() {
 
 	// Add Docker host selector middleware for multi-host support
 	apiGroup.Use(middleware.DockerHostSelector(multiHost))
+	diagnostics.RegisterRoutes(apiGroup, cfg)
 
 	{
-		ttlCache := cache.New()
+		ttlCache := cache.New(cache.Options{MaxEntries: cfg.CacheMaxEntries})
+		defer ttlCache.Stop()
 
 		api.RegisterHealthRoutes(apiGroup, dockerClient, db, cfg)
 		api.RegisterIPRoutes(apiGroup, dockerClient, cfg)

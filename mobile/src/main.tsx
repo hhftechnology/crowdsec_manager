@@ -8,15 +8,16 @@ import "./index.css";
 
 createRoot(document.getElementById("root")!).render(<App />);
 
-// Hide native splash screen after React has rendered
-SplashScreen.hide();
-
-// Configure native plugins. Edge-to-edge layout is handled natively
-// (Android: WindowCompat.setDecorFitsSystemWindows in MainActivity + transparent
-// status/nav bars in styles.xml; iOS: default WKWebView behavior). The
-// deprecated setOverlaysWebView / setBackgroundColor APIs (Android 15 SDK 35
-// removed Window.setStatusBarColor) are intentionally not called.
+// Hide the native splash after the first React paint so the login screen is
+// visible only once the app is ready.
 if (Capacitor.isNativePlatform()) {
+  void requestAnimationFrame(() => {
+    void SplashScreen.hide({ fadeOutDuration: 250 }).catch(() => {
+      // Ignore failures when running in a web preview mode or if the plugin
+      // is not yet available.
+    });
+  });
+
   StatusBar.setStyle({ style: Style.Light });
 
   Keyboard.setResizeMode({ mode: KeyboardResize.Body });

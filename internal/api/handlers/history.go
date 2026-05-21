@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -476,8 +475,8 @@ func IsDecisionActive(executor cscliExecutor, cfg *config.Config, scope, value s
 		return 0, false, nil
 	}
 
-	var decisions []models.Decision
-	if err := json.Unmarshal([]byte(trimmed), &decisions); err != nil {
+	decisions, err := ParseDecisionsFromOutput(trimmed)
+	if err != nil {
 		return 0, false, fmt.Errorf("parse decisions list: %w", err)
 	}
 

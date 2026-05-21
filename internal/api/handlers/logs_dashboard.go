@@ -44,6 +44,8 @@ var rangeTailMap = map[models.DashboardRange]string{
 	models.Range1h:  "10000",
 	models.Range6h:  "30000",
 	models.Range24h: "60000",
+	models.Range7d:  "200000",
+	models.RangeAll: "500000",
 }
 
 func rangeDuration(rng models.DashboardRange) time.Duration {
@@ -56,6 +58,12 @@ func rangeDuration(rng models.DashboardRange) time.Duration {
 		return 6 * time.Hour
 	case models.Range24h:
 		return 24 * time.Hour
+	case models.Range7d:
+		return 7 * 24 * time.Hour
+	case models.RangeAll:
+		// Use a 10-year cap as a practical "all time" ceiling to bound
+		// storage, memory, and retention costs without pretending history is infinite.
+		return 3650 * 24 * time.Hour
 	default:
 		return time.Hour
 	}
@@ -109,7 +117,7 @@ func analyzeServiceDashboardWithReader(input serviceDashboardHandlerInput) gin.H
 		if !ok {
 			c.JSON(http.StatusBadRequest, models.Response{
 				Success: false,
-				Error:   fmt.Sprintf("invalid range %q (allowed: 5m,1h,6h,24h)", rngRaw),
+				Error:   fmt.Sprintf("invalid range %q (allowed: 5m,1h,6h,24h,7d,all)", rngRaw),
 			})
 			return
 		}
@@ -119,6 +127,10 @@ func analyzeServiceDashboardWithReader(input serviceDashboardHandlerInput) gin.H
 				Success: false,
 				Error:   fmt.Sprintf("unsupported service %q (expected traefik or crowdsec)", service),
 			})
+			return
+		}
+
+		if !requireLogProcessingEnabled(c, input.Database) {
 			return
 		}
 
@@ -136,6 +148,7 @@ func analyzeServiceDashboardWithReader(input serviceDashboardHandlerInput) gin.H
 
 		switch service {
 		case "traefik":
+			systemStats := aggregate.GetSystemStats()
 			rawLogs, err := readTraefikLogs(traefikLogReadInput{
 				Reader:   input.Reader,
 				Database: input.Database,
@@ -150,7 +163,7 @@ func analyzeServiceDashboardWithReader(input serviceDashboardHandlerInput) gin.H
 				})
 				return
 			}
-			data := aggregate.BucketTraefikRaw(rawLogs, since, now, rng, adapter)
+			data := aggregate.BucketTraefikRaw(rawLogs, since, now, rng, adapter, systemStats)
 			if input.Cache != nil {
 				input.Cache.Set(cacheKey, data, serviceDashboardCacheTTL)
 			}

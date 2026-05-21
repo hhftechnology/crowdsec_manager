@@ -11,6 +11,8 @@ import { CheckCircle2, XCircle, Play, Square, RotateCw, Power, Key } from 'lucid
 import EnrollDialog from '@/components/EnrollDialog'
 import { PageHeader, QueryError } from '@/components/common'
 
+const SERVICES_REFRESH_MS = 30_000
+
 export default function Services() {
   const queryClient = useQueryClient()
 
@@ -20,7 +22,7 @@ export default function Services() {
       const response = await api.services.verify()
       return response.data.data || []
     },
-    refetchInterval: 10000, // Refresh every 10 seconds
+    refetchInterval: SERVICES_REFRESH_MS
   })
 
   const lastUpdatedLabel = useMemo(() => {
