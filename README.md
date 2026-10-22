@@ -1,3 +1,5 @@
+[![Discuss on the HHF forum](https://img.shields.io/badge/discuss-forum.hhf.technology-E65100?logo=discourse&logoColor=white)](https://forum.hhf.technology/c/pangolin-newt-tools/crowdsec_manager)
+
 <div align="center">
   <h1><a href="https://github.com/hhftechnology/crowdsec_manager">CrowdSec Manager</a></h1>
 
