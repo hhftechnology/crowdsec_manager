@@ -1,0 +1,37 @@
+name: Changelog
+
+on:
+  pull_request:
+    branches:
+      - dev-fix
+
+permissions:
+  contents: read
+
+jobs:
+  changelog:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout pull request head
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+
+      - name: Require an Unreleased changelog entry
+        if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip-changelog') }}
+        run: |
+          set -eu
+          python3 - << 'PY'
+          from pathlib import Path
+          text = Path("CHANGELOG.md").read_text()
+          start = text.find("## [Unreleased]")
+          if start < 0:
+              raise SystemExit("CHANGELOG.md has no ## [Unreleased] section.")
+          rest = text[start + len("## [Unreleased]"):]
+          nxt = rest.find("\n## ")
+          section = rest if nxt < 0 else rest[:nxt]
+          if "- " not in section:
+              raise SystemExit("CHANGELOG.md Unreleased section has no entry. Add one, or label the pull request skip-changelog.")
+          print("Unreleased changelog entry found.")
+          PY

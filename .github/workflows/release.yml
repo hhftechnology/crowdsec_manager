@@ -1,0 +1,52 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  draft:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout the tag
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 1
+
+      - name: Draft release notes from the changelog
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -eu
+          python3 - << 'PY'
+          import os
+          from pathlib import Path
+          tag = os.environ["TAG"]
+          version = tag[1:] if tag.startswith("v") else tag
+          text = Path("CHANGELOG.md").read_text()
+
+          def section(heading):
+              start = text.find(heading)
+              if start < 0:
+                  return ""
+              rest = text[start:]
+              nxt = rest.find("\n## ", 1)
+              return rest if nxt < 0 else rest[:nxt]
+
+          notes = section(f"## [{version}]")
+          if not notes.strip():
+              notes = section("## [Unreleased]")
+          if not notes.strip():
+              raise SystemExit("CHANGELOG.md has neither this version nor an Unreleased section.")
+          Path("/tmp/release-notes.md").write_text(notes.strip() + "\n")
+          print(f"Drafting {tag} from the changelog.")
+          PY
+          gh release create "$TAG" \
+            --draft \
+            --title "$TAG" \
+            --notes-file /tmp/release-notes.md
