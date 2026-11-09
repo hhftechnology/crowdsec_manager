@@ -27,9 +27,14 @@ This guide provides detailed usage instructions, examples, and best practices fo
    # Ensure network exists
    docker network create pangolin
    
+   # Generate the API token. The server refuses to start until this is set.
+   export API_TOKEN="$(openssl rand -hex 32)"
+
    # Start the container
    docker compose up -d
    ```
+
+   Open the UI and enter `API_TOKEN`. Requests without it, and browser calls from other origins (including the terminal), are rejected. `/health` does not use the token.
 
 2. **Verify Installation**
    ```bash

@@ -14,6 +14,7 @@ func TestLoad_DefaultsIncludeGeoIPDBPath(t *testing.T) {
 	t.Setenv("DATABASE_PATH", dir+"/settings.db")
 	t.Setenv("HISTORY_DATABASE_PATH", dir+"/history.db")
 	t.Setenv("COMPOSE_FILE", dir+"/no-such-compose.yml")
+	t.Setenv("API_TOKEN", "0123456789abcdef")
 
 	cfg, err := Load()
 	if err != nil {
@@ -32,6 +33,7 @@ func TestLoad_GeoIPDBPathFromEnv(t *testing.T) {
 	t.Setenv("DATABASE_PATH", dir+"/settings.db")
 	t.Setenv("HISTORY_DATABASE_PATH", dir+"/history.db")
 	t.Setenv("COMPOSE_FILE", dir+"/no-such-compose.yml")
+	t.Setenv("API_TOKEN", "0123456789abcdef")
 	t.Setenv("GEOIP_DB_PATH", "/custom/path.mmdb")
 
 	cfg, err := Load()
@@ -40,6 +42,41 @@ func TestLoad_GeoIPDBPathFromEnv(t *testing.T) {
 	}
 	if cfg.GeoIPDBPath != "/custom/path.mmdb" {
 		t.Fatalf("GeoIPDBPath not honoured: %q", cfg.GeoIPDBPath)
+	}
+}
+
+func TestLoad_RefusesToStartWithoutAPIToken(t *testing.T) {
+	t.Setenv("API_TOKEN", "")
+	if _, err := Load(); err == nil {
+		t.Fatal("Load succeeded without API_TOKEN")
+	}
+
+	t.Setenv("API_TOKEN", "short-secret")
+	if _, err := Load(); err == nil {
+		t.Fatal("Load succeeded with a short API_TOKEN")
+	}
+}
+
+func TestLoad_ParsesCORSAllowedOrigins(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("LOG_FILE", dir+"/test.log")
+	t.Setenv("BACKUP_DIR", dir+"/backups")
+	t.Setenv("CONFIG_DIR", dir+"/config")
+	t.Setenv("DATABASE_PATH", dir+"/settings.db")
+	t.Setenv("HISTORY_DATABASE_PATH", dir+"/history.db")
+	t.Setenv("COMPOSE_FILE", dir+"/no-such-compose.yml")
+	t.Setenv("API_TOKEN", "0123456789abcdef")
+	t.Setenv("CORS_ALLOWED_ORIGINS", " https://app.example/ , http://localhost:5173 ")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(cfg.CORSAllowedOrigins) != 2 {
+		t.Fatalf("origins: %#v", cfg.CORSAllowedOrigins)
+	}
+	if cfg.CORSAllowedOrigins[0] != "https://app.example" || cfg.CORSAllowedOrigins[1] != "http://localhost:5173" {
+		t.Fatalf("origins: %#v", cfg.CORSAllowedOrigins)
 	}
 }
 

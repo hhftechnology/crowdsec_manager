@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"crowdsec-manager/internal/api/middleware"
 	"crowdsec-manager/internal/docker"
 	"crowdsec-manager/internal/logger"
 	"crowdsec-manager/internal/models"
@@ -14,17 +15,30 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-var terminalUpgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool {
-		return true // Allow all origins (matches CORS AllowAllOrigins: true)
-	},
-	ReadBufferSize:  4096,
-	WriteBufferSize: 4096,
+func terminalUpgrader(allowedOrigins []string) websocket.Upgrader {
+	return websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool {
+			return middleware.OriginPermitted(r.Header.Get("Origin"), r.Host, allowedOrigins)
+		},
+		ReadBufferSize:  4096,
+		WriteBufferSize: 4096,
+	}
 }
 
-// TerminalSession upgrades to WebSocket and creates an interactive terminal session
-func TerminalSession(dockerClient *docker.Client) gin.HandlerFunc {
+// TerminalSession upgrades to WebSocket and creates an interactive terminal session.
+// allowedOrigins is the extra-origin list from CORS_ALLOWED_ORIGINS. Requests
+// whose Origin names some other host are rejected before a shell is started.
+func TerminalSession(dockerClient *docker.Client, allowedOrigins []string) gin.HandlerFunc {
+	upgrader := terminalUpgrader(allowedOrigins)
 	return func(c *gin.Context) {
+		if !middleware.OriginPermitted(c.GetHeader("Origin"), c.Request.Host, allowedOrigins) {
+			c.AbortWithStatusJSON(http.StatusForbidden, models.Response{
+				Success: false,
+				Error:   "origin not allowed",
+			})
+			return
+		}
+
 		dockerClient = resolveDockerClient(c, dockerClient)
 		containerName := c.Param("container")
 		if containerName == "" {
@@ -45,7 +59,7 @@ func TerminalSession(dockerClient *docker.Client) gin.HandlerFunc {
 			return
 		}
 
-		ws, err := terminalUpgrader.Upgrade(c.Writer, c.Request, nil)
+		ws, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 		if err != nil {
 			logger.Error("Terminal WebSocket upgrade failed", "error", err)
 			return

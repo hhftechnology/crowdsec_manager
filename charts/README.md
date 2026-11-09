@@ -156,6 +156,23 @@ helm install crowdsec-manager ./charts/crowdsec-manager \
   --set tailscaleSecret.existingSecret=crowdsec-manager-tailscale
 ```
 
+### API token (required)
+
+The server refuses to start without `API_TOKEN`. `/health` does not use it. `/api`, including the terminal WebSocket, does, and other browser origins are rejected unless `app.corsAllowedOrigins` lists them.
+
+```bash
+kubectl create secret generic crowdsec-manager-api \
+  --namespace crowdsec \
+  --from-literal=API_TOKEN="$(openssl rand -hex 32)"
+
+helm upgrade crowdsec-manager ./charts/crowdsec-manager \
+  --namespace crowdsec \
+  --reuse-values \
+  --set apiToken.existingSecret=crowdsec-manager-api
+```
+
+Upgrades from a chart that had no token stay down until this secret is set.
+
 ### NATS messaging (optional)
 
 ```bash

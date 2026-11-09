@@ -2,6 +2,7 @@ import { Suspense, lazy } from 'react'
 import { Routes, Route } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import Layout from './layouts/Layout'
+import { ApiSessionGate } from './components/auth/ApiSessionGate'
 import { ThemeProvider } from './contexts/ThemeContext'
 import { SearchProvider } from './contexts/SearchContext'
 
@@ -39,7 +40,8 @@ function App() {
   return (
     <>
       <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
-        <SearchProvider>
+        <ApiSessionGate>
+          <SearchProvider>
           <Layout>
             <Suspense fallback={<div className="flex items-center justify-center h-full w-full">Loading...</div>}>
               <Routes>
@@ -73,7 +75,8 @@ function App() {
               </Routes>
             </Suspense>
           </Layout>
-        </SearchProvider>
+          </SearchProvider>
+        </ApiSessionGate>
         <Toaster position="top-right" richColors />
       </ThemeProvider>
     </>

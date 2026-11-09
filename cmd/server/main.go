@@ -11,7 +11,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gin-contrib/cors"
 	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
 
@@ -123,18 +122,6 @@ func main() {
 	router.Use(gin.Recovery())
 	router.Use(logger.GinLogger())
 
-	// Configure CORS – allow all origins so the Capacitor mobile app
-	// (which runs from capacitor://localhost or https://localhost) can
-	// reach the API alongside browser-based frontends.
-	router.Use(cors.New(cors.Config{
-		AllowAllOrigins:  true,
-		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "X-Docker-Host"},
-		ExposeHeaders:    []string{"Content-Length"},
-		AllowCredentials: false,
-		MaxAge:           12 * time.Hour,
-	}))
-
 	// Compress API responses. Large alert/decision payloads (2-3 MB JSON) were
 	// being truncated by WriteTimeout for remote clients on slow links; gzip
 	// brings them down ~5-10x. SSE and WebSocket endpoints are excluded so
@@ -148,16 +135,15 @@ func main() {
 		}),
 	))
 
+	// Origin checks and API authentication. /health stays unauthenticated for
+	// the container probe, but a browser Origin from another host is rejected.
+	// The process has already refused to start if API_TOKEN is unset.
+	apiGroup := middleware.ProtectAPI(router, cfg.APIToken, cfg.CORSAllowedOrigins)
+
 	// Basic health check endpoint for container orchestration
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
-
-	// Register all API route groups under /api prefix
-	apiGroup := router.Group("/api")
-
-	// Add rate limiting middleware (100 requests per minute per IP)
-	apiGroup.Use(middleware.RateLimiter(100))
 
 	// Add Docker host selector middleware for multi-host support
 	apiGroup.Use(middleware.DockerHostSelector(multiHost))
@@ -181,7 +167,7 @@ func main() {
 		api.RegisterNotificationRoutes(apiGroup, dockerClient, db, cfg)
 		api.RegisterProfileRoutes(apiGroup, db, cfg, dockerClient)
 		api.RegisterHostRoutes(apiGroup, multiHost)
-		api.RegisterTerminalRoutes(apiGroup, dockerClient)
+		api.RegisterTerminalRoutes(apiGroup, dockerClient, cfg.CORSAllowedOrigins)
 
 		// Hub browser routes
 		api.RegisterHubRoutes(apiGroup, dockerClient, db, cfg)

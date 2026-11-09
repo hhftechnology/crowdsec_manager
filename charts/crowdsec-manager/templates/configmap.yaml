@@ -7,6 +7,7 @@ metadata:
     {{- include "crowdsec-manager.labels" . | nindent 4 }}
 data:
   PORT: {{ .Values.app.port | toString | quote }}
+  CORS_ALLOWED_ORIGINS: {{ .Values.app.corsAllowedOrigins | quote }}
   ENVIRONMENT: {{ .Values.app.environment | quote }}
   LOG_LEVEL: {{ .Values.app.logLevel | quote }}
   LOG_FILE: {{ .Values.app.logFile | quote }}

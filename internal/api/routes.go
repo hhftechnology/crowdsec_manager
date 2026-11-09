@@ -237,8 +237,8 @@ func RegisterHostRoutes(router *gin.RouterGroup, multiHost *docker.MultiHostClie
 }
 
 // RegisterTerminalRoutes configures WebSocket endpoint for interactive container terminals
-func RegisterTerminalRoutes(router *gin.RouterGroup, dockerClient *docker.Client) {
-	router.GET("/terminal/:container", handlers.TerminalSession(dockerClient))
+func RegisterTerminalRoutes(router *gin.RouterGroup, dockerClient *docker.Client, allowedOrigins []string) {
+	router.GET("/terminal/:container", handlers.TerminalSession(dockerClient, allowedOrigins))
 }
 
 // RegisterConfigValidationRoutes configures endpoints for config drift detection and recovery
