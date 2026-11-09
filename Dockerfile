@@ -38,11 +38,14 @@ COPY internal/ internal/
 # Build binary (CGO_ENABLED=1 required for go-sqlite3)
 RUN CGO_ENABLED=1 GOOS=linux go build -o crowdsec-manager ./cmd/server
 
-# Stage 3: Final runtime image
-FROM alpine:latest
+# Stage 3: Final runtime image.
+# Alpine 3.23 publishes brotli-libs 1.2.1-r0, which fixes CVE-2026-111497.
+# curl links that library. The version check fails the build if it changes.
+FROM alpine:3.23
 
 # Install runtime dependencies
-RUN apk --no-cache add ca-certificates tzdata curl
+RUN apk --no-cache add ca-certificates tzdata curl brotli-libs \
+ && test "$(apk info -e brotli-libs)" = "brotli-libs-1.2.1-r0"
 
 WORKDIR /app
 
