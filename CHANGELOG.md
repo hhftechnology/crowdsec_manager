@@ -20,3 +20,4 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ### Added
 
 - Pull requests into `dev-fix` must use a conventional commit title and change `CHANGELOG.md`.
+- Add the MIT `LICENSE` file named by the README.
