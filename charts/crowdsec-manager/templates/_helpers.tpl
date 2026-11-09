@@ -62,6 +62,14 @@ Tailscale Secret name — either the user's existing secret or the chart-managed
 {{/*
 NATS Secret name.
 */}}
+{{- define "crowdsec-manager.apiSecretName" -}}
+{{- if .Values.apiToken.existingSecret }}
+{{- .Values.apiToken.existingSecret }}
+{{- else }}
+{{- printf "%s-api" (include "crowdsec-manager.fullname" .) }}
+{{- end }}
+{{- end }}
+
 {{- define "crowdsec-manager.natsSecretName" -}}
 {{- if .Values.natsSecret.existingSecret }}
 {{- .Values.natsSecret.existingSecret }}

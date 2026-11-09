@@ -1,12 +1,14 @@
 package config
 
 import (
-	"crowdsec-manager/internal/compose"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
+
+	"crowdsec-manager/internal/compose"
 )
 
 // Config holds all application configuration loaded from environment variables with sensible defaults
@@ -16,6 +18,13 @@ type Config struct {
 	Environment string
 	LogLevel    string
 	LogFile     string
+
+	// APIToken is the shared secret required on every /api request.
+	// The process refuses to start when it is missing or too short.
+	APIToken string
+	// CORSAllowedOrigins lists extra browser origins, besides the request
+	// host, that may call the API. Empty means same-origin only.
+	CORSAllowedOrigins []string
 
 	// Docker configuration
 	DockerHost  string
@@ -100,6 +109,8 @@ func Load() (*Config, error) {
 		Environment:              getEnv("ENVIRONMENT", "development"),
 		LogLevel:                 getEnv("LOG_LEVEL", "info"),
 		LogFile:                  getEnv("LOG_FILE", "./logs/crowdsec-manager.log"),
+		APIToken:                 strings.TrimSpace(os.Getenv("API_TOKEN")),
+		CORSAllowedOrigins:       parseAllowedOrigins(os.Getenv("CORS_ALLOWED_ORIGINS")),
 		DockerHost:               getEnv("DOCKER_HOST", ""),
 		DockerHosts:              getEnv("DOCKER_HOSTS", ""),
 		ComposeFile:              getEnv("COMPOSE_FILE", "./docker-compose.yml"),
@@ -149,6 +160,10 @@ func Load() (*Config, error) {
 		ShutdownTimeout:       time.Duration(getEnvAsInt("SHUTDOWN_TIMEOUT", 30)) * time.Second,
 		ReadTimeout:           time.Duration(getEnvAsInt("READ_TIMEOUT", 15)) * time.Second,
 		WriteTimeout:          time.Duration(getEnvAsInt("WRITE_TIMEOUT", 15)) * time.Second,
+	}
+
+	if err := validateAPIToken(cfg.APIToken); err != nil {
+		return nil, err
 	}
 
 	// Build services list dynamically from compose file for accurate service discovery
@@ -240,6 +255,36 @@ func EffectiveLimit(configured, maxLimit int) int {
 		return maxLimit
 	}
 	return configured
+}
+
+const minAPITokenLength = 16
+
+func validateAPIToken(token string) error {
+	if len(token) < minAPITokenLength {
+		return fmt.Errorf("API_TOKEN must be set to a secret of at least %d characters; the server refuses to start without it", minAPITokenLength)
+	}
+	for _, r := range token {
+		if r < 0x21 || r > 0x7e || r == ';' || r == ',' {
+			return fmt.Errorf("API_TOKEN must be printable ASCII without spaces, commas, or semicolons")
+		}
+	}
+	return nil
+}
+
+func parseAllowedOrigins(raw string) []string {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	origins := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimRight(strings.TrimSpace(part), "/")
+		if part == "" {
+			continue
+		}
+		origins = append(origins, part)
+	}
+	return origins
 }
 
 // getEnv retrieves an environment variable or returns the default value if not set

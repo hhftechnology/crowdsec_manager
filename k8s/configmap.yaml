@@ -12,6 +12,9 @@ data:
   # ---------------------------------------------------------------------------
   PORT: "8080"
   ENVIRONMENT: "production"
+  # Extra browser origins. Empty keeps the API and the terminal same-origin only.
+  # API_TOKEN is not set here; it lives in the crowdsec-manager-api secret.
+  CORS_ALLOWED_ORIGINS: ""
   LOG_LEVEL: "info"
   LOG_FILE: "/app/logs/crowdsec-manager.log"
 

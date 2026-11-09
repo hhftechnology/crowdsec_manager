@@ -15,6 +15,9 @@ services:
       - "8080:8080"
       - "5173:5173"  # Vite dev server
     environment:
+      - API_TOKEN=${API_TOKEN}
+      # Browser on the Vite port is a different origin from the API.
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
       - PORT=8080
       - ENVIRONMENT=development
       - LOG_LEVEL=debug

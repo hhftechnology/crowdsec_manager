@@ -71,7 +71,19 @@ Alternatively edit `secret.yaml`, replace `tskey-auth-REPLACE_ME`, then:
 kubectl apply -f secret.yaml
 ```
 
-### 4. Configure the application
+### 4. Set the API token
+
+The server refuses to start without `API_TOKEN` (at least 16 characters). `/health` stays unauthenticated for probes. Every `/api` route, including the terminal WebSocket, requires the token, and browser calls from other origins are rejected unless `CORS_ALLOWED_ORIGINS` lists them.
+
+```bash
+kubectl create secret generic crowdsec-manager-api \
+  --namespace crowdsec \
+  --from-literal=API_TOKEN="$(openssl rand -hex 32)"
+```
+
+On upgrade from a release that had no token, the Pod stays down until this secret exists. Leave `CORS_ALLOWED_ORIGINS` empty in `configmap.yaml` for a same-origin UI.
+
+### 5. Configure the application
 
 Edit `configmap.yaml` and set values for your environment:
 
@@ -83,7 +95,7 @@ Edit `configmap.yaml` and set values for your environment:
 | `INCLUDE_PANGOLIN` / `INCLUDE_GERBIL` | Set `"false"` if not running Pangolin/Gerbil |
 | `NATS_ENABLED` | Set `"true"` and add `NATS_URL` if using NATS |
 
-### 5. Apply all manifests
+### 6. Apply all manifests
 
 ```bash
 kubectl apply -f namespace.yaml

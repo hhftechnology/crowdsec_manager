@@ -11,6 +11,8 @@ services:
     ports:
       - "8080:8080"
     environment:
+      - API_TOKEN=${API_TOKEN}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-}
       - PORT=8080
       - ENVIRONMENT=production
       - LOG_LEVEL=info

@@ -120,6 +120,12 @@ spec:
           envFrom:
             - configMapRef:
                 name: crowdsec-manager-env
+          env:
+            - name: API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: crowdsec-manager-api
+                  key: API_TOKEN
           # Run as root — matches the Dockerfile (no USER directive) and
           # is required to write to host-mounted volumes and the Docker socket.
           securityContext:

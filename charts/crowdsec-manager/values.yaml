@@ -44,6 +44,9 @@ affinity: {}
 app:
   port: 8080
   environment: production
+  # Extra browser origins for the API and the terminal WebSocket.
+  # Empty means same-origin only. Example: https://localhost,capacitor://localhost
+  corsAllowedOrigins: ""
   logLevel: info
 
   # Absolute paths inside the container (must match persistence mount paths)
@@ -145,6 +148,15 @@ tailscale:
 # =============================================================================
 # Secrets
 # =============================================================================
+
+# API token. The process refuses to start when this is missing or shorter
+# than 16 characters. Generate one with: openssl rand -hex 32
+# Do not commit a real token. Either set apiToken.value at install time, or
+# point apiToken.existingSecret at a secret you created yourself.
+apiToken:
+  existingSecret: ""
+  existingSecretKey: API_TOKEN
+  value: ""
 
 # Tailscale auth key.
 # Option A — let the chart manage the Secret (supply authKey at install time):

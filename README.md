@@ -101,6 +101,36 @@ Native iOS and Android app. Supports **Pangolin** (token-based remote access) an
 - Independent image: `hhftechnology/crowdsec-manager:independent` — CrowdSec only, no Traefik
 - Image size (linux/amd64): <!-- IMAGE_SIZE_START -->44MB<!-- IMAGE_SIZE_END -->
 
+## Authentication
+
+Every `/api` route, including the terminal WebSocket, requires `API_TOKEN`. The server **refuses to start** when that variable is missing, shorter than 16 characters, or contains spaces. `/health` stays open so the container healthcheck can run, and it does not accept a browser call from another origin.
+
+Generate a token and add it to the service environment:
+
+```bash
+openssl rand -hex 32
+```
+
+```yaml
+environment:
+  - API_TOKEN=paste-the-generated-token
+  # Optional. Empty means browsers may only call the API from the same host
+  # that served the page. List extra origins only for a separate frontend.
+  - CORS_ALLOWED_ORIGINS=
+```
+
+Restart the container after setting the token. Open the UI and enter the same value once; the browser keeps it in an HttpOnly cookie for this site. Scripts and the mobile app send `Authorization: Bearer <token>`.
+
+### Upgrade
+
+Existing installs have no token. After this upgrade the container exits on startup until `API_TOKEN` is set. That is intentional.
+
+1. Generate a token with `openssl rand -hex 32`.
+2. Set `API_TOKEN` on the crowdsec-manager service (compose `environment`, Kubernetes secret, or Helm `apiToken`). Do not commit the value.
+3. Leave `CORS_ALLOWED_ORIGINS` empty unless a browser on another origin must call the API. The terminal rejects any other origin even if the token is present. The Vite dev server is `http://localhost:5173`. A separate mobile WebView needs its own origins, for example `https://localhost,capacitor://localhost`.
+4. Recreate the container. `GET /health` returns 200 without a token. `GET /api/...` without a token returns 401. A request with `Origin` set to some other host returns 403.
+5. Sign in through the UI, or call `POST /api/session` with `{"token":"<API_TOKEN>"}` to receive the cookie.
+
 ## Quick Start
 
 ### Pangolin (full stack)
@@ -112,6 +142,7 @@ Native iOS and Android app. Supports **Pangolin** (token-based remote access) an
     container_name: crowdsec-manager
     restart: unless-stopped
     environment:
+      - API_TOKEN=${API_TOKEN}
       - PORT=8080
       - ENVIRONMENT=production
       - TRAEFIK_DYNAMIC_CONFIG=/etc/traefik/dynamic_config.yml
@@ -148,6 +179,7 @@ services:
     ports:
       - "8080:8080"
     environment:
+      - API_TOKEN=${API_TOKEN}
       - PORT=8080
       - ENVIRONMENT=production
       - CONFIG_DIR=/app/config

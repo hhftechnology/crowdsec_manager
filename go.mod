@@ -6,7 +6,6 @@ require (
 	github.com/buger/jsonparser v1.1.2
 	github.com/compose-spec/compose-go/v2 v2.9.1
 	github.com/docker/docker v28.5.3-0.20260325120914-0afb41ce194c+incompatible
-	github.com/gin-contrib/cors v1.7.2
 	github.com/gin-contrib/gzip v1.0.1
 	github.com/gin-gonic/gin v1.10.0
 	github.com/google/uuid v1.6.0

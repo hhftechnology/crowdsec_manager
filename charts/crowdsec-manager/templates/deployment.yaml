@@ -147,6 +147,11 @@ spec:
             - configMapRef:
                 name: {{ include "crowdsec-manager.fullname" . }}-env
           env:
+            - name: API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "crowdsec-manager.apiSecretName" . }}
+                  key: {{ .Values.apiToken.existingSecretKey | default "API_TOKEN" }}
             {{- if .Values.app.nats.enabled }}
             - name: NATS_TOKEN
               valueFrom:
